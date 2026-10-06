@@ -13,6 +13,16 @@ export const DATA_CLASSES = [
   "MEMBER_PII",
   "FINANCIAL",
   "APPLICANT",
+  /**
+   * Medical and disability evidence inside an application, and family-support
+   * case detail. Separated from APPLICANT because the Scholarships Chair
+   * already enforces exactly this split by hand: scorers read the transcript
+   * and the application, and do not see the disability documentation.
+   *
+   * Holding this always implies holding APPLICANT, asserted in
+   * `assertRoleTableValid`. The reverse is never true.
+   */
+  "APPLICANT_SENSITIVE",
   "PUBLIC_CONTENT",
   "AUDIT_LOG",
 ] as const;
@@ -63,6 +73,7 @@ export const ROLES = [
   "TREASURER",
   "FUNDRAISING_CHAIR",
   "SCHOLARSHIPS_CHAIR",
+  "SCHOLARSHIP_REVIEWER",
   "STORE_CHAIR",
   "MEMORIAL_CHAIR",
   "WEBMASTER",
@@ -159,10 +170,29 @@ export const ROLE_DEFINITIONS: Record<Role, RoleDefinition> = {
     note: "Donor and prospect records are a separate scope, not MEMBER_PII.",
   },
   SCHOLARSHIPS_CHAIR: {
-    grants: { MEMBER_PII: "AGGREGATE", FINANCIAL: "NONE", APPLICANT: "WRITE", PUBLIC_CONTENT: "WRITE" },
+    grants: {
+      MEMBER_PII: "AGGREGATE",
+      FINANCIAL: "NONE",
+      APPLICANT: "WRITE",
+      APPLICANT_SENSITIVE: "WRITE",
+      PUBLIC_CONTENT: "WRITE",
+    },
     note:
       "Sees eligibility flags, not the roster. Conflict blocking is enforced " +
       "separately: a reviewer related to an applicant cannot open the file at all.",
+  },
+  SCHOLARSHIP_REVIEWER: {
+    grants: {
+      MEMBER_PII: "NONE",
+      FINANCIAL: "NONE",
+      APPLICANT: "READ",
+      APPLICANT_SENSITIVE: "NONE",
+    },
+    entities: ["JSOF"],
+    note:
+      "One of the people who score applications. Reads the application and the " +
+      "transcript; never the disability documentation, which is what decides a " +
+      "Wounded Patriot award and is the chair's to verify. Not a board seat.",
   },
   STORE_CHAIR: {
     grants: { MEMBER_PII: "NONE", FINANCIAL: "AGGREGATE", PUBLIC_CONTENT: "WRITE" },
@@ -201,7 +231,12 @@ export const ROLE_DEFINITIONS: Record<Role, RoleDefinition> = {
     note: "Registrants are a separate scope. Event budget versus actual, not the ledger.",
   },
   FAMILY_SUPPORT_CHAIR: {
-    grants: { MEMBER_PII: "NONE", FINANCIAL: "NONE", APPLICANT: "WRITE" },
+    grants: {
+      MEMBER_PII: "NONE",
+      FINANCIAL: "NONE",
+      APPLICANT: "WRITE",
+      APPLICANT_SENSITIVE: "WRITE",
+    },
     note: "Exclusive holder of family-support case files. The most sensitive data in the system.",
   },
   FINANCE_REVIEW_OFFICER: {

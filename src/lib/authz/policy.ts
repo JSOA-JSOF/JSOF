@@ -13,6 +13,7 @@ import {
   type Entity,
   type Level,
   type Role,
+  levelRank,
   ROLE_DEFINITIONS,
   satisfies,
 } from "./model";
@@ -75,6 +76,20 @@ export function assertRoleTableValid(): void {
           "READ_ONLY_ROLE",
         );
       }
+    }
+    // Sensitive applicant evidence sits inside an application, so reaching it
+    // without reaching the application itself is incoherent. The reverse —
+    // reading the application without the medical evidence — is the whole
+    // point of the class and must stay possible.
+    const sensitive = def.grants.APPLICANT_SENSITIVE ?? "NONE";
+    const applicant = def.grants.APPLICANT ?? "NONE";
+    if (levelRank(sensitive) > levelRank(applicant)) {
+      throw new AuthzError(
+        `Role ${role} holds ${sensitive} on APPLICANT_SENSITIVE but only ` +
+          `${applicant} on APPLICANT. Sensitive evidence lives inside an ` +
+          `application; it cannot be reached without it.`,
+        "INVALID_ROLE_DEFINITION",
+      );
     }
     // An independent count is only independent if the counter cannot also move
     // the figure they are counting against.

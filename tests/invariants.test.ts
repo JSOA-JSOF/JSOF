@@ -6,7 +6,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ROLE_DEFINITIONS, type Entity, type Role } from "../src/lib/authz/model";
+import { LEVELS, ROLE_DEFINITIONS, type Entity, type Role } from "../src/lib/authz/model";
+
+const LEVEL_ORDER: readonly string[] = LEVELS;
 import {
   assertNoConflictingWrites,
   assertNotSelfApproval,
@@ -125,6 +127,45 @@ describe("invariant 3: the release gate", () => {
     expect(() =>
       assertReleasable(vpOps, { ...candidate, carriesIdentity: false }),
     ).toThrow(/Self-approval/);
+  });
+});
+
+describe("scorers read the application, not the medical evidence", () => {
+  it("a scholarship reviewer can read an application and never its sensitive evidence", () => {
+    const reviewer = subject("p-rev", [{ role: "SCHOLARSHIP_REVIEWER", entity: "JSOF" }]);
+    expect(
+      can({ subject: reviewer, dataClass: "APPLICANT", entity: "JSOF", required: "READ" }),
+    ).toBe(true);
+    expect(
+      can({
+        subject: reviewer,
+        dataClass: "APPLICANT_SENSITIVE",
+        entity: "JSOF",
+        required: "AGGREGATE",
+      }),
+    ).toBe(false);
+  });
+
+  it("the chair holds both, because verifying disability is their job", () => {
+    const chair = subject("p-chair", [{ role: "SCHOLARSHIPS_CHAIR", entity: "JSOF" }]);
+    expect(
+      can({ subject: chair, dataClass: "APPLICANT_SENSITIVE", entity: "JSOF", required: "WRITE" }),
+    ).toBe(true);
+  });
+
+  it("no role reaches sensitive evidence without reaching the application", () => {
+    for (const [role, def] of Object.entries(ROLE_DEFINITIONS)) {
+      const sensitive = def.grants.APPLICANT_SENSITIVE ?? "NONE";
+      const applicant = def.grants.APPLICANT ?? "NONE";
+      expect(
+        LEVEL_ORDER.indexOf(sensitive),
+        `${role} must not hold more on APPLICANT_SENSITIVE than on APPLICANT`,
+      ).toBeLessThanOrEqual(LEVEL_ORDER.indexOf(applicant));
+    }
+  });
+
+  it("the President's break-glass does not reach medical evidence", () => {
+    expect(ROLE_DEFINITIONS.PRESIDENT.grants.APPLICANT_SENSITIVE ?? "NONE").toBe("NONE");
   });
 });
 

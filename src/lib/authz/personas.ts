@@ -99,6 +99,14 @@ export const PERSONAS: Persona[] = [
     assignments: [{ role: "SCHOLARSHIPS_CHAIR", entity: "JSOF" }],
   },
   {
+    id: "scholarship-reviewer",
+    label: "Scholarship reviewer",
+    note:
+      "One of the four scorers. Reads the application and transcript; the " +
+      "disability documentation is withheld.",
+    assignments: [{ role: "SCHOLARSHIP_REVIEWER", entity: "JSOF" }],
+  },
+  {
     id: "memorial",
     label: "Memorial Chair",
     assignments: [{ role: "MEMORIAL_CHAIR", entity: "JSOA" }],
