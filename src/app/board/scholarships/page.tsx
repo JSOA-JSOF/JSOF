@@ -1,74 +1,78 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 
+import { KpiGrid } from "@/components/dashboard/Kpi";
+import dash from "@/components/dashboard/dashboard.module.css";
+import styles from "@/components/workspace/workspace.module.css";
 import { AuthzError } from "@/lib/authz/policy";
 import { getCurrentSubject } from "@/lib/authz/session";
-import { loadCycleOverview } from "@/lib/scholarships/board";
 import { ELIGIBILITY_RULE, eligibilityIsPlaceholder } from "@/lib/scholarships/eligibility";
+import { loadScholarshipsDashboard } from "@/lib/scholarships/kpis";
 import { scholarshipRepository } from "@/lib/scholarships/repository";
-import { WOUNDED_PATRIOT } from "@/lib/scholarships/scoring";
-import { formatCents } from "@/components/workspace/types";
-import styles from "@/components/workspace/workspace.module.css";
+import { WOUNDED_PATRIOT, formatCents } from "@/lib/scholarships/scoring";
 
 export const metadata = {
   title: "Scholarships",
   robots: { index: false, follow: false },
 };
 
-const AREAS = [
-  {
-    href: "/board/scholarships/review",
-    title: "Review",
-    blurb: "One application at a time, with your calibration against the committee.",
-  },
-  {
-    href: "/board/scholarships/verify",
-    title: "Verify",
-    blurb: "Wounded Patriot claims. Yours alone, and never automatic.",
-  },
-  {
-    href: "/board/scholarships/awards",
-    title: "Awards",
-    blurb: "Banding, and the exceptions a rule should not decide.",
-  },
-  {
-    href: "/board/scholarships/notify",
-    title: "Notify",
-    blurb: "The amount merged from the record, the sponsor copied in.",
-  },
-  {
-    href: "/board/scholarships/disbursement",
-    title: "Disbursement",
-    blurb: "Cheques to schools, grouped into one envelope each.",
-  },
-];
+/**
+ * The Scholarships Chair's dashboard.
+ *
+ * This route holds no policy and no arithmetic. Every figure comes from one
+ * authorized read, `loadScholarshipsDashboard`, which guards at APPLICANT WRITE
+ * because the tiles carry award amounts and a cost per dollar awarded. A
+ * subject without that grant is told the figures were withheld rather than
+ * shown zeroes.
+ *
+ * Both warnings stay above the figures. Eligibility is with counsel and the
+ * Wounded Patriot amount is unconfirmed; each one gates the cycle, so neither
+ * belongs in a footnote under the numbers.
+ */
 
-export default async function ScholarshipsHome() {
+/** Entity hue, set once here so nothing beneath this page names a colour. */
+const HUE: CSSProperties = {
+  ["--hue" as string]: "var(--jsof)",
+  ["--hueTint" as string]: "var(--jsof-tint)",
+};
+
+export default async function ScholarshipsDashboard() {
   const subject = await getCurrentSubject();
 
-  let overview: Awaited<ReturnType<typeof loadCycleOverview>> | null = null;
+  let dashboard: Awaited<ReturnType<typeof loadScholarshipsDashboard>> | null = null;
   let denial: string | null = null;
   try {
-    overview = await loadCycleOverview(scholarshipRepository(), subject);
+    dashboard = await loadScholarshipsDashboard(scholarshipRepository(), subject);
   } catch (error) {
     denial = error instanceof AuthzError ? error.message : String(error);
   }
 
+  const mostAwards = dashboard
+    ? Math.max(1, ...dashboard.distribution.rows.map((row) => row.awards))
+    : 1;
+
   return (
-    <div className={styles.shell}>
-      <div>
-        <h1 style={{ fontSize: "1.6rem", marginBottom: 6 }}>Scholarships</h1>
-        <p style={{ color: "var(--ink-2)", maxWidth: "70ch", margin: 0 }}>
-          The Foundation&rsquo;s cycle, end to end: scoring, the money, and the
-          notifications that currently get typed by hand.
-        </p>
+    <div className={styles.shell} style={HUE}>
+      <div className={dash.heading}>
+        <h1 className={dash.title}>Scholarships</h1>
+        {dashboard ? (
+          <span className={dash.asOf}>
+            {dashboard.cycleLabel.toUpperCase()} &middot; AS AT{" "}
+            {dashboard.asOf.slice(0, 10)}
+          </span>
+        ) : null}
       </div>
+      <p className={dash.lede}>
+        Whether the cycle is working, and what it is costing to run. Every
+        figure says what it was computed from. A figure this platform cannot
+        measure yet says so instead of showing a nought.
+      </p>
 
       {/* Two things are unresolved and both change what the cycle can do, so
-          they sit above the work rather than in a footnote. */}
+          they sit above the figures rather than in a footnote. */}
       {eligibilityIsPlaceholder() ? (
         <div className={styles.pause}>
-          <strong>Eligibility is with counsel.</strong>{" "}
-          {ELIGIBILITY_RULE.guidance}
+          <strong>Eligibility is with counsel.</strong> {ELIGIBILITY_RULE.guidance}
         </div>
       ) : null}
 
@@ -77,51 +81,118 @@ export default async function ScholarshipsHome() {
           <strong>The Wounded Patriot amount is a placeholder</strong> at{" "}
           {formatCents(WOUNDED_PATRIOT.amountCents)}. It is a flat award and the
           real figure has not been given, so nothing should be sent until you
-          confirm it.
+          confirm it. Every Wounded Patriot figure below carries it.
         </div>
       ) : null}
 
       {denial ? (
-        <p style={{ color: "var(--warn)", maxWidth: "70ch" }}>{denial}</p>
-      ) : overview ? (
         <div className={styles.card}>
-          <div className={styles.closingFigures}>
-            <span className={styles.closingFigure}>
-              <strong>{overview.applications}</strong>
-              <span>applications</span>
-            </span>
-            <span className={styles.closingFigure}>
-              <strong>{overview.unscored}</strong>
-              <span>not yet scored</span>
-            </span>
-            <span className={styles.closingFigure}>
-              <strong>{overview.partlyScored}</strong>
-              <span>short of a full committee</span>
-            </span>
-            <span className={styles.closingFigure}>
-              <strong>{overview.verificationsOutstanding}</strong>
-              <span>verifications outstanding</span>
-            </span>
-            <span className={styles.closingFigure}>
-              <strong>{overview.awards}</strong>
-              <span>awards</span>
-            </span>
-            <span className={styles.closingFigure}>
-              <strong>{overview.awardsAwaitingNotification}</strong>
-              <span>not yet notified</span>
-            </span>
-          </div>
+          <p style={{ color: "var(--warn)", maxWidth: "70ch", margin: 0 }}>{denial}</p>
+          <p style={{ color: "var(--mute)", maxWidth: "70ch", margin: 0, fontSize: ".9rem" }}>
+            The figures are withheld, not zero. This dashboard carries award
+            amounts and a cost per dollar awarded, so it is read at the chair&rsquo;s
+            level and not a reviewer&rsquo;s.
+          </p>
         </div>
-      ) : null}
+      ) : dashboard ? (
+        <>
+          <section>
+            <h2 className={dash.title} style={{ fontSize: "1.1rem", marginBottom: 10 }}>
+              This cycle
+            </h2>
+            <KpiGrid kpis={dashboard.thisCycle} />
+          </section>
 
-      <div style={{ display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))" }}>
-        {AREAS.map((area) => (
-          <Link key={area.href} href={area.href} className={styles.card} style={{ gap: 6 }}>
-            <strong style={{ fontSize: "1.05rem" }}>{area.title}</strong>
-            <span style={{ fontSize: ".88rem", color: "var(--mute)" }}>{area.blurb}</span>
-          </Link>
-        ))}
-      </div>
+          {/* A dashboard that only reports is a report. */}
+          <section>
+            <h2 className={dash.title} style={{ fontSize: "1.1rem", marginBottom: 0 }}>
+              What that leaves to do
+            </h2>
+            <div className={dash.actions}>
+              {dashboard.actions.map((action) => (
+                <Link
+                  key={action.key}
+                  href={action.href}
+                  className={`${dash.action} ${action.urgent ? dash.actionUrgent : ""}`}
+                >
+                  <span className={dash.actionLabel}>{action.label}</span>
+                  <span className={dash.actionNote}>{action.note}</span>
+                  <span className={dash.actionCount}>{action.count}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h2 className={dash.title} style={{ fontSize: "1.1rem", marginBottom: 6 }}>
+              Since inception
+            </h2>
+            <p
+              className={dash.lede}
+              style={{ fontSize: ".85rem", marginBottom: 12 }}
+            >
+              {dashboard.cumulativeBasis}
+            </p>
+            <KpiGrid kpis={dashboard.sinceInception} />
+          </section>
+
+          <section>
+            <h2 className={dash.title} style={{ fontSize: "1.1rem", marginBottom: 6 }}>
+              Where the awards went
+            </h2>
+            <p className={dash.lede} style={{ fontSize: ".85rem", marginBottom: 12 }}>
+              {dashboard.distribution.schoolsReached} schools in{" "}
+              {dashboard.distribution.statesCovered} states.{" "}
+              {dashboard.distribution.basis}
+            </p>
+
+            {dashboard.distribution.rows.length === 0 ? (
+              <p style={{ color: "var(--mute)", margin: 0 }}>
+                No standing award in the records on file can be joined to a
+                school, so there is nothing to rank.
+              </p>
+            ) : (
+              <div className={styles.bands}>
+                {dashboard.distribution.rows.map((row) => (
+                  <div
+                    key={`${row.schoolName}-${row.state}`}
+                    style={{
+                      display: "grid",
+                      // The bar and the total may shrink to nothing at 375px;
+                      // the school name and the count may not.
+                      gridTemplateColumns:
+                        "minmax(0,1fr) minmax(0,90px) minmax(72px,110px) 44px",
+                      gap: 14,
+                      alignItems: "center",
+                      padding: "9px 0",
+                      borderBottom: "1px solid var(--line-2)",
+                      fontSize: ".9rem",
+                    }}
+                  >
+                    <span style={{ minWidth: 0 }}>
+                      {row.schoolName}{" "}
+                      <span className={styles.bandRange}>{row.state}</span>
+                    </span>
+                    {/* Spread, shown rather than described. Width is the share
+                        of the most-awarded school, so the ranking is readable
+                        without a mapping library. */}
+                    <span
+                      className={styles.bandBar}
+                      style={{ width: `${Math.round((row.awards * 100) / mostAwards)}%` }}
+                      aria-hidden="true"
+                    />
+                    <span className={styles.bandAmount}>{formatCents(row.totalCents)}</span>
+                    <span className={styles.bandCount}>
+                      {row.awards}
+                      <span className={styles.srOnly}> awards</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }

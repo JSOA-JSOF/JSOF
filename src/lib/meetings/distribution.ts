@@ -28,12 +28,17 @@ import { bookRefForMeeting } from "./reference";
 export const REGULAR_NOTICE_HOURS = 7 * 24;
 export const SPECIAL_NOTICE_HOURS = 48;
 
+/**
+ * Shown to the board on the agenda and on the Secretary's dashboard, so it
+ * carries no instruction to a developer: the sentence naming this file used to
+ * reach a board-facing screen. When the bylaws settle the real period, change
+ * REGULAR_NOTICE_DAYS and SPECIAL_NOTICE_HOURS below.
+ */
 export const NOTICE_BASIS_NOTE =
   "Notice period is the platform's assumption, not a statutory figure. NC's " +
   "nonprofit statute supplies no board-notice period for this, and the 15-day " +
   "and 5-day figures in circulating templates come from a model act North " +
-  "Carolina did not adopt. Confirm against the bylaws and correct " +
-  "src/lib/meetings/distribution.ts.";
+  "Carolina did not adopt. Confirm it against the bylaws, which govern.";
 
 export function noticeRequiredHours(meeting: Pick<Meeting, "session">): number {
   return meeting.session > 1 ? SPECIAL_NOTICE_HOURS : REGULAR_NOTICE_HOURS;

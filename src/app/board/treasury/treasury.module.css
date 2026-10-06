@@ -711,3 +711,10 @@
   color: var(--mute);
   font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
 }
+
+/* Grid and flex items default to min-width:auto, so an intrinsically wide
+   table inside .stack pushes the whole page sideways instead of scrolling in
+   its own container. Found at 375px on this route. */
+.stack > * {
+  min-width: 0;
+}

@@ -1,20 +1,23 @@
 import Link from "next/link";
 
+import { KpiGrid } from "@/components/dashboard/Kpi";
 import { ENTITIES } from "@/lib/authz/model";
 import { agendaTotals } from "@/lib/meetings/agenda";
 import { canReadMinutes, readableEntities } from "@/lib/meetings/access";
 import {
   ENTITY_LONG_NAME,
+  NOTICE_BASIS_NOTE,
   formatMeetingDate,
   formatMeetingTime,
 } from "@/lib/meetings/distribution";
 import { getCurrentPersona, subjectFor } from "@/lib/authz/session";
+import { secretaryDashboard } from "@/lib/meetings/kpis";
 import { bookRefForMeeting } from "@/lib/meetings/reference";
 import { meetingsRepository } from "@/lib/meetings/repository";
 import { Refused, Shell, hueFor } from "./Shell";
 import styles from "./meetings.module.css";
 
-export const metadata = { title: "Meetings — Secretary" };
+export const metadata = { title: "Minute book and compliance — Secretary" };
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Agenda in draft",
@@ -24,12 +27,17 @@ const STATUS_LABEL: Record<string, string> = {
   MINUTES_ADOPTED: "Minutes adopted",
 };
 
-export default async function MeetingsIndex() {
+export default async function SecretaryDashboard() {
   const persona = await getCurrentPersona();
   const subject = subjectFor(persona);
   const visible = readableEntities(subject, ENTITIES);
   const repo = meetingsRepository();
   const pairs = repo.listSameDayPairs();
+
+  // One authorized read. It calls through access.ts per entity before it
+  // touches the repository, and withholds rather than zeroes what this role
+  // cannot see.
+  const dashboard = secretaryDashboard(subject);
 
   return (
     <Shell entity={null} meetingId={null} active="meetings" persona={persona}>
@@ -40,30 +48,94 @@ export default async function MeetingsIndex() {
         same people in the room. Separate minute books are the cheapest evidence
         that the separation is real, so every agenda, motion, vote and minute in
         here records which board was in session. A minute that does not name its
-        entity cannot be saved.
+        entity cannot be saved. These figures measure one thing: whether that
+        record is actually complete, because an incomplete minute book is only
+        ever discovered when somebody needs it.
+      </p>
+      <p className={styles.rowMeta}>
+        As of {dashboard.asOf} &middot; every figure per entity, none blended
       </p>
 
       {visible.length === 0 ? (
         <Refused
-          reason={`${persona.label} holds no board grant on member data for either entity, so no meeting in either book is readable. The meeting list itself names no person, but the book it opens onto does.`}
+          reason={`${persona.label} holds no board grant on member data for either entity, so neither meeting list nor either minute book is readable. Every figure on this page is withheld rather than shown as zero: the two are not the same answer.`}
         />
+      ) : null}
+
+      <h2 className={styles.sectionHead}>The record, as it stands</h2>
+      <KpiGrid kpis={dashboard.kpis} />
+
+      <div className={styles.quiet}>
+        <strong>The standard the notice figure is measured against.</strong>{" "}
+        {NOTICE_BASIS_NOTE}
+      </div>
+
+      {visible.length === 1 && (
+        <div className={styles.quiet}>
+          This role reaches {visible[0]} only. The other entity&apos;s figures are
+          withheld, not counted as zero, and its book is not listed below. That is
+          the boundary working rather than an error.
+        </div>
+      )}
+
+      {dashboard.minuteEntities.length === 0 && visible.length > 0 && (
+        <div className={styles.quiet}>
+          This role reads the meeting list and the compliance calendar but not the
+          minute book itself, which names who moved, who seconded and who recused.
+          The four figures that come out of the book are withheld above. Custody of
+          the book is a separate question again: writing in it requires the office
+          of Secretary for that entity, not merely access to it.
+        </div>
+      )}
+
+      <h2 className={styles.sectionHead}>What follows from this</h2>
+      {dashboard.actions.length === 0 ? (
+        <p className={styles.sectionNote}>
+          Nothing is outstanding within this role&apos;s reach. That is either the
+          record being complete or the record being out of view, and the figures
+          above say which.
+        </p>
       ) : (
+        <ul className={styles.list}>
+          {dashboard.actions.map((action) => (
+            <li key={action.key}>
+              <div className={styles.rowHead}>
+                <Link href={action.href} className={styles.rowTitle}>
+                  {action.label}
+                </Link>
+                <span
+                  className={
+                    action.urgent
+                      ? `${styles.chip} ${styles.chipWarn}`
+                      : styles.chip
+                  }
+                >
+                  {action.count} waiting
+                </span>
+              </div>
+              <p className={styles.rowNote}>{action.note}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {visible.length > 0 && (
         <>
-          {visible.length === 1 && (
-            <div className={styles.quiet}>
-              This role reaches {visible[0]} only. The other entity&apos;s book is
-              not listed, which is the boundary working rather than an error.
-            </div>
-          )}
+          <h2 className={styles.sectionHead}>Both books, meeting by meeting</h2>
+          <p className={styles.sectionNote}>
+            Listed by the evening the two boards sit, and never merged into one
+            list. Each panel is one entity&apos;s own meeting, with its own
+            reference series.
+          </p>
 
           {pairs.map((pair) => {
             const shown = pair.meetings.filter((m) => visible.includes(m.entity));
             if (shown.length === 0) return null;
             return (
               <section key={pair.date}>
-                <h2 className={styles.sectionHead}>
+                <h3 className={styles.sectionHead}>
                   {formatMeetingDate(`${pair.date}T12:00:00.000Z`)}
-                </h2>
+                </h3>
                 <p className={styles.sectionNote}>
                   {shown.length > 1
                     ? `${shown.length} separate meetings, one per entity, one after the other. Two books, two sets of references, nothing shared but the room.`
@@ -94,6 +166,11 @@ export default async function MeetingsIndex() {
                           <span className={styles.chip}>
                             {STATUS_LABEL[meeting.status] ?? meeting.status}
                           </span>
+                          {meeting.noticeSentAt === null && (
+                            <span className={`${styles.chip} ${styles.chipWarn}`}>
+                              Notice not sent
+                            </span>
+                          )}
                           {totals.overruns && (
                             <span className={`${styles.chip} ${styles.chipWarn}`}>
                               Overruns {totals.overrunMinutes} min
@@ -185,7 +262,6 @@ export default async function MeetingsIndex() {
 JSOF-2026-10-S2-min-2   second meeting of that entity in the month
 JSOA-2026-10            the whole book for that meeting`}
       </pre>
-
     </Shell>
   );
 }

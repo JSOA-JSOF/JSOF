@@ -1,15 +1,15 @@
 import Link from "next/link";
 
+import { KpiGrid } from "@/components/dashboard/Kpi";
+import dash from "@/components/dashboard/dashboard.module.css";
 import { AuthzError } from "@/lib/authz/policy";
-import { issueReceipt, readDonationRegister } from "@/lib/donations/actions";
 import { DEV_SWITCHER_PARAM } from "@/lib/donations/devSubject";
-import { resolveScreenViewer } from "@/lib/donations/screenSubject";
 import {
-  NC_131F_DISCLOSURE,
-  NC_131F_STATUTE_LABEL,
-} from "@/lib/donations/disclosure";
-import { formatCents } from "@/lib/donations/money";
-import { ReceiptError } from "@/lib/donations/receipts";
+  ENTITY_LABEL,
+  readDonationsDashboard,
+  type DonationsDashboard,
+} from "@/lib/donations/kpis";
+import { resolveScreenViewer } from "@/lib/donations/screenSubject";
 import Denied from "./Denied";
 import styles from "./donations.module.css";
 
@@ -19,15 +19,25 @@ export const metadata = {
 };
 
 /**
- * The gift register for one entity, with the receipt each gift would produce.
+ * The fundraising dashboard for one entity.
  *
- * `readDonationRegister` calls `authorize()` for FINANCIAL READ at row level
- * before it reads anything, so a role holding only AGGREGATE lands on the
- * refusal rather than on a redacted table. The preview receipt is rendered
- * with an explicit sequence so refreshing the page does not burn receipt
- * numbers.
+ * It is not the gift register and it is not a link menu. Every figure answers
+ * one question: did this dollar land in the right entity with a receipt the
+ * donor can rely on. There is deliberately no "total raised" headline. That
+ * number only goes up, and here it would hide the two things that can actually
+ * go wrong, which are a gift that cannot be receipted and a sponsorship whose
+ * benefits have broken the safe harbour.
+ *
+ * `readDonationsDashboard` is one authorized read that gates each figure on
+ * its own scope. The module splits the sponsor register across two data
+ * classes, FINANCIAL for the money and PUBLIC_CONTENT for the wording, and
+ * this screen honours that split rather than routing around it: the Fundraising
+ * Chair, who holds FINANCIAL at AGGREGATE, gets the wording tiles, the fund
+ * totals and the entity split, and the gift-by-gift money figures come back
+ * withheld rather than widened. A viewer with neither scope lands on the
+ * refusal and is told nothing about the size of what is behind it.
  */
-export default async function DonationsBoardPage({
+export default async function DonationsDashboardPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -38,13 +48,16 @@ export default async function DonationsBoardPage({
   const hue = entity === "JSOA" ? "var(--jsoa)" : "var(--jsof)";
   const hueTint = entity === "JSOA" ? "var(--jsoa-tint)" : "var(--jsof-tint)";
 
-  let register: ReturnType<typeof readDonationRegister> | null = null;
+  let board: DonationsDashboard | null = null;
   let denial: string | null = null;
   try {
-    register = readDonationRegister(subject, entity);
+    board = readDonationsDashboard(subject, entity);
   } catch (error) {
     denial = error instanceof AuthzError ? error.message : String(error);
   }
+
+  // The dev switcher travels on links, so a refusal stays reachable by URL.
+  const to = (href: string) => (href.startsWith("#") ? href : `${href}${qs}`);
 
   return (
     <div
@@ -59,15 +72,23 @@ export default async function DonationsBoardPage({
       </header>
 
       <div className={styles.body}>
-        <h1 className={styles.title}>Gifts</h1>
+        <div className={dash.heading}>
+          <h1 className={styles.title}>Fundraising</h1>
+          <span className={dash.asOf}>
+            {roleLabel} · {ENTITY_LABEL[entity]} · computed per request
+          </span>
+        </div>
         <p className={styles.lede}>
-          Every gift to {entity}, the funds it was split across, and the receipt
-          it produces. A gift that cannot produce a receipt says so, with the
-          reason.
+          Whether the money landed in the right entity with a receipt the donor
+          can rely on. Giving appears split by entity and is never summed across
+          them, because the two keep separate books, separate receipts and
+          separate donor records, and only one of them is the charitable entity.
         </p>
 
         <nav className={styles.nav}>
-          <span className={`${styles.navLink} ${styles.navLinkCurrent}`}>Gifts</span>
+          <span className={`${styles.navLink} ${styles.navLinkCurrent}`}>
+            Fundraising
+          </span>
           <Link href={`/board/donations/funds${qs}`} className={styles.navLink}>
             Funds
           </Link>
@@ -79,164 +100,190 @@ export default async function DonationsBoardPage({
           </Link>
         </nav>
 
-
         {denial && (
           <Denied
             roleLabel={roleLabel}
-            needs={`read access to ${entity} financial records at row level`}
+            needs={`financial or published-content read on ${entity}`}
             detail={denial}
           />
         )}
 
-        {register && (
+        {board && (
           <>
-            <h2 className={styles.sectionHead}>Register</h2>
-            <p className={styles.sectionNote}>
-              {register.length} {register.length === 1 ? "gift" : "gifts"} to{" "}
-              {entity}. This register is never summed with the other
-              entity&rsquo;s.
-            </p>
+            <KpiGrid kpis={board.kpis} />
 
-            {register.map(({ donation, receiptBlockedBecause }) => {
-              let preview: ReturnType<typeof issueReceipt> | null = null;
-              let receiptProblem: string | null = receiptBlockedBecause;
-              if (!receiptBlockedBecause) {
-                try {
-                  preview = issueReceipt(subject, entity, donation.id, undefined, {
-                    sequence: 0,
-                  });
-                } catch (error) {
-                  receiptProblem =
-                    error instanceof ReceiptError ? error.message : String(error);
-                }
-              }
+            {board.withheld.length > 0 && (
+              <div className={styles.flag}>
+                <span className={styles.flagHead}>
+                  Withheld from {roleLabel}
+                </span>
+                <ul className={styles.findingList}>
+                  {board.withheld.map((line, index) => (
+                    <li key={index}>{line}</li>
+                  ))}
+                </ul>
+                <p className={styles.sectionNote}>
+                  These figures are withheld, not zero. Nothing has been widened
+                  to fill the tiles, and the counts behind them are not reported
+                  either.
+                </p>
+              </div>
+            )}
 
-              return (
-                <div className={styles.card} key={donation.id}>
-                  <div className={styles.cardHead}>
-                    <span className={styles.cardTitle}>{donation.donorDisplayName}</span>
-                    <span className={styles.figure}>
-                      {formatCents(donation.amountCents)}
+            <h2 className={styles.sectionHead}>What needs doing</h2>
+            {board.actions.length === 0 ? (
+              <p className={styles.sectionNote}>
+                Nothing is waiting on this role in the figures it can see.
+              </p>
+            ) : (
+              <div className={dash.actions}>
+                {board.actions.map((action) => (
+                  <Link
+                    key={action.key}
+                    href={to(action.href)}
+                    className={`${dash.action} ${action.urgent ? dash.actionUrgent : ""}`}
+                  >
+                    <span className={dash.actionLabel}>{action.label}</span>
+                    <span className={dash.actionNote}>{action.note}</span>
+                    <span className={dash.actionCount}>
+                      {action.count} waiting
                     </span>
-                  </div>
-                  <p className={styles.cardMeta}>
-                    <span className="mono">{donation.id}</span> ·{" "}
-                    {donation.receivedAt.slice(0, 10)} ·{" "}
-                    <span className={styles.pill}>
-                      {donation.status.toLowerCase().replace(/_/g, " ")}
-                    </span>
-                  </p>
+                  </Link>
+                ))}
+              </div>
+            )}
 
-                  <div className={styles.tableWrap}>
-                    <table className={styles.table}>
-                      <thead>
-                        <tr>
-                          <th>Fund</th>
-                          <th className={styles.numeric}>Amount</th>
+            {/* Second tier. Rows, not tiles: the brief caps the grid, and
+                these are the detail behind three of the figures above. */}
+
+            {board.awaitingValuation && board.awaitingValuation.length > 0 && (
+              <section id="awaiting-valuation">
+                <h2 className={styles.sectionHead}>Gifts awaiting a valuation</h2>
+                <p className={styles.sectionNote}>
+                  Each of these carries benefits with no fair market value
+                  recorded, so no receipt can be issued and the donor cannot
+                  claim. Record what the donor received and only the excess over
+                  that value is deductible.
+                </p>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Gift</th>
+                        <th>Donor</th>
+                        <th>What they received</th>
+                        <th className={styles.numeric}>Paid</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {board.awaitingValuation.map((row) => (
+                        <tr key={row.donationId}>
+                          <td className="mono">{row.donationId}</td>
+                          <td>{row.donorDisplayName}</td>
+                          <td>{row.benefitDescription}</td>
+                          <td className={styles.numeric}>{row.amountFormatted}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {preview
-                          ? preview.receipt.allocations.map((line, index) => (
-                              <tr key={index}>
-                                <td>
-                                  {line.fundName}{" "}
-                                  <span className={styles.pill}>
-                                    {line.restriction.toLowerCase()}
-                                  </span>
-                                </td>
-                                <td className={styles.numeric}>
-                                  {formatCents(line.amountCents)}
-                                </td>
-                              </tr>
-                            ))
-                          : donation.allocations.map((allocation) => (
-                              <tr key={allocation.fundId}>
-                                <td className="mono">{allocation.fundId}</td>
-                                <td className={styles.numeric}>
-                                  {formatCents(allocation.amountCents)}
-                                </td>
-                              </tr>
-                            ))}
-                        <tr className={styles.rowTotal}>
-                          <td>Total</td>
-                          <td className={styles.numeric}>
-                            {formatCents(donation.amountCents)}
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+
+            {board.flaggedWording && board.flaggedWording.length > 0 && (
+              <section id="flagged-wording">
+                <h2 className={styles.sectionHead}>Wording the validator flagged</h2>
+                <p className={styles.sectionNote}>
+                  Warnings, not blocks. One qualitative or comparative adjective
+                  moves a whole placement out of qualified sponsorship and into
+                  taxable advertising, so a flagged string stays a risk until
+                  somebody rewrites it.
+                </p>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Sponsor</th>
+                        <th>Placement</th>
+                        <th>State</th>
+                        <th>Flagged for</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {board.flaggedWording.map((row) => (
+                        <tr key={row.placementId}>
+                          <td>{row.sponsorName}</td>
+                          <td>{row.placementLabel}</td>
+                          <td>
+                            <span
+                              className={`${styles.pill} ${
+                                row.publicationState === "APPROVED"
+                                  ? styles.pillWarn
+                                  : ""
+                              }`}
+                            >
+                              {row.publicationState.toLowerCase().replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td>
+                            {row.categories
+                              .map((category) =>
+                                category.toLowerCase().replace(/_/g, " "),
+                              )
+                              .join(", ")}
                           </td>
                         </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {donation.benefits.length > 0 && (
-                    <div className={styles.tableWrap}>
-                      <table className={styles.table}>
-                        <thead>
-                          <tr>
-                            <th>Benefit received</th>
-                            <th className={styles.numeric}>Qty</th>
-                            <th className={styles.numeric}>Unit value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {donation.benefits.map((benefit, index) => (
-                            <tr key={index}>
-                              <td>{benefit.description}</td>
-                              <td className={styles.numeric}>{benefit.quantity}</td>
-                              <td className={styles.numeric}>
-                                {donation.benefitFairMarketValueCents === null
-                                  ? "not valued"
-                                  : formatCents(benefit.unitFairMarketValueCents)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {receiptProblem ? (
-                    <div className={styles.flag}>
-                      <span className={styles.flagHead}>No receipt can be issued</span>
-                      {receiptProblem}
-                    </div>
-                  ) : (
-                    preview && (
-                      <details className={styles.details}>
-                        <summary className={styles.summary}>
-                          Receipt · {preview.receipt.templateId}
-                        </summary>
-                        <div className={styles.receipt}>
-                          <span className={styles.receiptMeta}>
-                            {preview.receipt.identity.legalName} ·{" "}
-                            {preview.receipt.identity.subsection} ·{" "}
-                            {preview.receipt.identity.einPlaceholder}
-                          </span>
-                          {preview.receipt.body.map((paragraph, index) => (
-                            <p className={styles.receiptPara} key={index}>
-                              {paragraph}
-                            </p>
-                          ))}
-                          <div className={styles.disclosure}>
-                            <span className={styles.disclosureStatute}>
-                              {NC_131F_STATUTE_LABEL} · minimum nine-point,
-                              conspicuous
-                            </span>
-                            {NC_131F_DISCLOSURE}
-                          </div>
-                        </div>
-                      </details>
-                    )
-                  )}
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              );
-            })}
+              </section>
+            )}
+
+            {board.restrictedFunds && board.restrictedFunds.length > 0 && (
+              <section id="restricted-funds">
+                <h2 className={styles.sectionHead}>Restricted funds, balance held</h2>
+                <p className={styles.sectionNote}>
+                  Summed from paid gift allocations, per fund, never across
+                  entities. What each fund has committed against its balance is
+                  not recorded in this module, which is why the tile above says
+                  it is not measured rather than showing a nought.
+                </p>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Fund</th>
+                        <th className={styles.numeric}>Gifts</th>
+                        <th className={styles.numeric}>Held</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {board.restrictedFunds.map((row) => (
+                        <tr key={row.fundId}>
+                          <td>
+                            <Link
+                              href={`/board/donations/funds${qs}`}
+                              className={styles.back}
+                            >
+                              {row.name}
+                            </Link>
+                          </td>
+                          <td className={styles.numeric}>{row.giftCount}</td>
+                          <td className={styles.numeric}>{row.balanceFormatted}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             <p className={styles.note}>
-              Receipt numbers on this screen are previews and are set to zero.
-              Issuing a receipt for real takes the next number in{" "}
-              {entity}&rsquo;s own sequence; the two entities never share a
-              numbering run, a template, or a donor record.
+              Receipts are rendered here only to be checked, at sequence zero,
+              so opening this page does not consume a receipt number out of
+              either entity&rsquo;s sequence. Every figure on this page is a sum
+              of integer cents.
             </p>
           </>
         )}

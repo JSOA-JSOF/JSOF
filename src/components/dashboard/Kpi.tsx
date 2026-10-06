@@ -9,6 +9,12 @@ import styles from "./dashboard.module.css";
  *    does not show zero. Zero is a measurement; "not yet measured" is the
  *    truth, and the difference matters when someone is deciding whether a
  *    number is bad or simply absent.
+ *
+ *    `withheld` is the sibling of that state and not the same one: the figure
+ *    exists and is simply not this reader's to see. Both carry `value: null`,
+ *    because neither is a number, and both must be distinguishable from zero —
+ *    but a reader should know whether a figure is missing from the world or
+ *    missing from their view, so they render differently.
  * 2. Every tile states what it was computed from, in one line. A figure whose
  *    provenance nobody can reconstruct gets argued about instead of acted on.
  * 3. Good is unremarkable. Only a problem takes colour. A wall of green ticks
@@ -16,7 +22,7 @@ import styles from "./dashboard.module.css";
  *    room for a fourth hue anyway.
  */
 
-export type KpiStatus = "good" | "watch" | "problem" | "unmeasured";
+export type KpiStatus = "good" | "watch" | "problem" | "unmeasured" | "withheld";
 
 export type Kpi = {
   key: string;
@@ -43,12 +49,13 @@ export function KpiGrid({ kpis }: { kpis: Kpi[] }) {
 
 export function KpiTile({ kpi }: { kpi: Kpi }) {
   const unmeasured = kpi.value === null;
+  const withheld = kpi.status === "withheld";
   const tone =
     kpi.status === "problem"
       ? styles.problem
       : kpi.status === "watch"
         ? styles.watch
-        : kpi.status === "unmeasured"
+        : kpi.status === "unmeasured" || kpi.status === "withheld"
           ? styles.unmeasured
           : "";
 
@@ -57,7 +64,9 @@ export function KpiTile({ kpi }: { kpi: Kpi }) {
       <span className={styles.label}>{kpi.label}</span>
 
       {unmeasured ? (
-        <span className={styles.notMeasured}>Not measured yet</span>
+        <span className={styles.notMeasured}>
+          {withheld ? "Withheld" : "Not measured yet"}
+        </span>
       ) : (
         <span className={styles.value}>{kpi.value}</span>
       )}

@@ -141,6 +141,19 @@
   background: var(--ground);
 }
 
+/* Second-tier rows share the action's layout but are not links. Without this
+   they inherit the hover and read as clickable, which is a promise the row
+   does not keep. */
+.row {
+  background: var(--panel);
+  padding: 12px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
 .actionLabel {
   font-weight: 600;
   font-size: 0.95rem;

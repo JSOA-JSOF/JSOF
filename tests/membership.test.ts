@@ -18,7 +18,11 @@
 import { describe, expect, it } from "vitest";
 
 import { AuthzError, type Subject } from "../src/lib/authz/policy";
-import { MEMBERSHIP_STATES, type MembershipState } from "../src/lib/membership/state";
+import {
+  INTAKE_MESSAGE,
+  MEMBERSHIP_STATES,
+  type MembershipState,
+} from "../src/lib/membership/state";
 import {
   decideChairException,
   loadApplicationQueue,
@@ -35,6 +39,13 @@ import {
   meetsThreshold,
   THRESHOLDS,
 } from "../src/lib/membership/composition";
+import {
+  loadMembershipDashboard,
+  medianOf,
+  requiredNumerator,
+  PROMISED_OUTCOME_DAYS,
+  type MembershipDashboard,
+} from "../src/lib/membership/kpis";
 import { personaById, subjectFor } from "../src/lib/authz/personas";
 import { BOARD_CONTACTS } from "../src/lib/membership/contacts";
 import {
@@ -873,5 +884,238 @@ describe("the intake collects no document and no national identifier", () => {
     for (const forbidden of ["ssn", "socialsecurity", "dd214", "document", "upload", "rank", "unit"]) {
       expect(keys.some((k) => k.includes(forbidden))).toBe(false);
     }
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * The VP Membership dashboard
+ *
+ * Written as requirements, like the rest of this file:
+ *
+ *   1. A wrong-role request to it fails, and the denial is logged.
+ *   2. A role holding AGGREGATE gets the three composition tests and gets
+ *      the four record-level figures withheld, not zeroed. The report is
+ *      readable at aggregate on purpose; the records behind it are not, and
+ *      the dashboard must not widen the grant to fill a tile.
+ *   3. No tile substitutes zero for a figure that cannot be computed.
+ *   4. Reading the dashboard mutates nothing.
+ * ------------------------------------------------------------------ */
+
+describe("the membership dashboard", () => {
+  function tile(dashboard: MembershipDashboard, key: string) {
+    const found = dashboard.kpis.find((k) => k.key === key);
+    expect(found, `no tile ${key}`).toBeDefined();
+    return found!;
+  }
+
+  it("refuses a role with no member data at all", async () => {
+    const store = repo();
+    await expect(loadMembershipDashboard(store, actor("member"))).rejects.toThrow(AuthzError);
+    await expect(loadMembershipDashboard(store, actor("webmaster"))).rejects.toThrow(AuthzError);
+    await expect(loadMembershipDashboard(store, actor("scholarships"))).rejects.toThrow(AuthzError);
+  });
+
+  it("refuses the right role without a second factor", async () => {
+    const store = repo();
+    await expect(
+      loadMembershipDashboard(store, withoutMfa("vp-membership")),
+    ).rejects.toThrow(AuthzError);
+  });
+
+  it("logs the denial, not only the read", async () => {
+    const store = repo();
+    await expect(loadMembershipDashboard(store, actor("member"))).rejects.toThrow(AuthzError);
+    const log = await loadMembershipAudit(store, actor("secretary"));
+    expect(log.map((e) => e.action)).toContain("READ_MEMBERSHIP_DASHBOARD:DENIED");
+  });
+
+  it("gives the roster's owner all seven tiles", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    expect(dashboard.kpis).toHaveLength(7);
+    expect(dashboard.scope).toEqual({ aggregate: true, records: true, decide: true });
+  });
+
+  it("reports the 90% war-veteran test as a problem at 33 of 40", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const war = tile(dashboard, "composition-war-veterans");
+    expect(war.status).toBe("problem");
+    // The fraction, not only a percentage: the denominator is the whole point
+    // of this test and a bare 82.5% hides it.
+    expect(war.value).toContain("33 of 40");
+    expect(war.target).toContain("36 of 40");
+  });
+
+  it("calls a test that passes with nothing to spare a watch, not a good", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    expect(tile(dashboard, "composition-armed-forces").status).toBe("good");
+    // 39 of 40 is exactly 97.5%. One more non-qualifying member ends the
+    // exemption, so this is not an unremarkable green.
+    const line = tile(dashboard, "composition-members-cadets-relatives");
+    expect(line.value).toContain("39 of 40");
+    expect(line.status).toBe("watch");
+  });
+
+  it("withholds the record-level figures from a role holding aggregate only", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-ops"));
+    expect(dashboard.scope.records).toBe(false);
+
+    // The three tests still compute. That is the point of the split.
+    for (const key of [
+      "composition-war-veterans",
+      "composition-armed-forces",
+      "composition-members-cadets-relatives",
+    ]) {
+      expect(tile(dashboard, key).value).not.toBeNull();
+    }
+
+    // The four behind them are withheld, with what it would take. Not zero.
+    for (const key of ["oldest-undecided", "vouch-expiry", "record-defects", "contactable"]) {
+      const withheld = tile(dashboard, key);
+      expect(withheld.value).toBeNull();
+      expect(withheld.status).toBe("unmeasured");
+      expect(withheld.needs).toMatch(/READ on member records/);
+    }
+
+    // And the same role is refused the roster itself, which is what makes the
+    // withholding honest rather than decorative.
+    await expect(loadRoster(store, actor("vp-ops"))).rejects.toThrow(AuthzError);
+  });
+
+  it("offers an aggregate-only role no link into work it cannot open", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-ops"));
+    const composition = dashboard.actions.find((a) => a.key === "composition")!;
+    expect(composition.href).toBe("/board/membership/composition");
+    for (const key of ["exceptions", "audit", "roster", "queue"]) {
+      const action = dashboard.actions.find((a) => a.key === key)!;
+      expect(action.href).toBeNull();
+      // The count is withheld rather than zero, for the same reason the tile
+      // is: a zero would read as "there is no work here".
+      expect(action.count).toBe("withheld");
+      expect(action.note).toMatch(/^Withheld\./);
+      expect(action.urgent).toBe(false);
+    }
+  });
+
+  it("degrades to read-only for a role that can read records but not write them", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("president"));
+    expect(dashboard.scope).toEqual({ aggregate: true, records: true, decide: false });
+    // Every figure computes; the actions say who may act.
+    expect(dashboard.kpis.filter((k) => k.value === null).map((k) => k.key)).toEqual([
+      "contactable",
+    ]);
+    const decide = dashboard.actions.find((a) => a.key === "exceptions")!;
+    expect(decide.href).toBe("/board/membership/exceptions");
+    expect(decide.note).toMatch(/Read-only for this role/);
+  });
+
+  it("measures the oldest undecided application against the four days promised", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const oldest = tile(dashboard, "oldest-undecided");
+    expect(oldest.target).toBe(`${PROMISED_OUTCOME_DAYS} days`);
+    expect(oldest.value).toBe("8 days");
+    expect(oldest.status).toBe("problem");
+    // The promise the tile is measured against is the one the applicant was
+    // actually given, not an invented service level.
+    expect(INTAKE_MESSAGE).toContain("four days");
+  });
+
+  it("rates vouch expiry against settled requests, not against open windows", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const vouch = tile(dashboard, "vouch-expiry");
+    // Three seeded requests: one window closed unanswered, two still open. An
+    // open window has not failed, so it is not in the denominator.
+    expect(vouch.value).toBe("1 of 1 settled");
+    expect(vouch.from).toContain("still inside the 72-hour window");
+    expect(vouch.from).toMatch(/too few to read as a rate/);
+  });
+
+  it("counts a self-contradicting record once, however many findings it carries", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const defects = tile(dashboard, "record-defects");
+    // One peacetime veteran who ticked the war-veteran box, and one veteran
+    // record with no dates at all which therefore also disagrees with its
+    // attestation. Two records, three findings.
+    expect(defects.value).toBe("2 of 40");
+    const report = await loadCompositionReport(store, actor("vp-membership"));
+    expect(report.attestationMismatches + report.missingServiceDates).toBe(3);
+  });
+
+  it("will not call an unverified address a verified one", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const contact = tile(dashboard, "contactable");
+    expect(contact.value).toBeNull();
+    expect(contact.needs).toMatch(/confirmed-at timestamp/);
+    // A count of addresses present is a different figure, and it belongs in
+    // the provenance line rather than in the value.
+    expect(contact.from).toContain("40 of 40");
+  });
+
+  it("has no raw member count anywhere on it", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    for (const kpi of dashboard.kpis) {
+      // Every figure on this screen is a fraction, an age or a rate. A bare
+      // count of members only goes up and changes no decision.
+      expect(kpi.label.toLowerCase()).not.toMatch(/^(total|members on the roster)/);
+      expect(kpi.value).not.toBe("40");
+    }
+  });
+
+  it("states what every tile was computed from", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    for (const kpi of dashboard.kpis) {
+      expect(kpi.from.length, kpi.key).toBeGreaterThan(30);
+      if (kpi.value === null) expect(kpi.needs, kpi.key).toBeTruthy();
+    }
+  });
+
+  it("mutates nothing, so the figures do not depend on who looked first", async () => {
+    const store = repo();
+    const before = (await store.listApplications()).map((a) => `${a.id}:${a.state}`);
+    await loadMembershipDashboard(store, actor("vp-membership"));
+    const after = (await store.listApplications()).map((a) => `${a.id}:${a.state}`);
+    expect(after).toEqual(before);
+
+    // The queue screen sweeps, and that is a write. After it runs, the
+    // dashboard's own count of what is with the chair is unchanged, because it
+    // was already counting a closed window as the chair's.
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    await loadApplicationQueue(store, actor("vp-membership"));
+    const swept = await loadMembershipDashboard(store, actor("vp-membership"));
+    const chairBefore = dashboard.actions.find((a) => a.key === "exceptions")!.count;
+    const chairAfter = swept.actions.find((a) => a.key === "exceptions")!.count;
+    expect(chairAfter).toBe(chairBefore);
+  });
+
+  it("medians honestly, including when there is nothing to median", async () => {
+    expect(medianOf([])).toBeNull();
+    expect(medianOf([4])).toBe(4);
+    expect(medianOf([1, 2, 3])).toBe(2);
+    expect(medianOf([1, 2, 3, 4])).toBe(3);
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const row = dashboard.rows.find((r) => r.key === "median-decision")!;
+    // One recorded decision. The row says so rather than presenting one
+    // observation as a median.
+    expect(row.detail).toMatch(/1 recorded chair decision/);
+  });
+
+  it("rounds its thresholds up, in integers", () => {
+    expect(requiredNumerator(THRESHOLDS.WAR_VETERANS, 40)).toBe(36);
+    expect(requiredNumerator(THRESHOLDS.MEMBERS_CADETS_RELATIVES, 40)).toBe(39);
+    expect(requiredNumerator(THRESHOLDS.ARMED_FORCES, 40)).toBe(30);
+    // 97.5% of 41 is 39.975. Forty records, not thirty-nine.
+    expect(requiredNumerator(THRESHOLDS.MEMBERS_CADETS_RELATIVES, 41)).toBe(40);
   });
 });

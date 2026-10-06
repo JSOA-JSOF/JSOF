@@ -5,7 +5,8 @@ import type { Persona } from "@/lib/authz/session";
 import styles from "./board.module.css";
 
 export const BOARD_TABS = [
-  { key: "queue", href: "/board/membership", label: "Application queue" },
+  { key: "overview", href: "/board/membership", label: "Overview" },
+  { key: "queue", href: "/board/membership/queue", label: "Application queue" },
   { key: "exceptions", href: "/board/membership/exceptions", label: "Chair exceptions" },
   { key: "roster", href: "/board/membership/roster", label: "Roster" },
   { key: "audit", href: "/board/membership/audit", label: "30-day audit" },

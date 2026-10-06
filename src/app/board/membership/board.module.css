@@ -475,3 +475,44 @@
 .logDenied {
   color: var(--warn);
 }
+
+/* Dashboard second tier ------------------------------------------ */
+
+/* Figures that are real but did not earn a tile. Plain rows on purpose: a
+   fourth styled box would compete with the seven above it. */
+.tier {
+  margin: 14px 0 0;
+  border-top: 1px solid var(--line-2);
+}
+
+.tierRow {
+  display: grid;
+  grid-template-columns: minmax(0, 20ch) minmax(0, 1fr);
+  gap: 4px 24px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.tierLabel {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.tierDetail {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  max-width: 72ch;
+}
+
+@media (max-width: 620px) {
+  .tierRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

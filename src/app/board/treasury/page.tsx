@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { KpiGrid } from "@/components/dashboard/Kpi";
 import { getCurrentSubject } from "@/lib/authz/session";
+import { treasuryDashboard } from "@/lib/treasury/kpis";
 import { treasurySubject, treasuryRepository } from "@/lib/treasury/repository";
 import { RESTRICTION_LABELS } from "@/lib/treasury/types";
 
@@ -15,26 +17,33 @@ import {
 import styles from "./treasury.module.css";
 
 export const metadata = {
-  title: "Position — Treasury — JSOA / JSOF",
+  title: "Dashboard — Treasury — JSOA / JSOF",
   robots: { index: false, follow: false },
 };
 
 /**
- * The two-column position statement.
+ * The Treasurer's dashboard, sitting above the two-column position statement.
  *
- * The Association and the Foundation are separate legal persons with separate
+ * The position statement is the point of this module and it has not moved. The
+ * Association and the Foundation are separate legal persons with separate
  * boards' worth of duty attached to them, separate returns, and separate
  * donors' restrictions. A combined figure is not a summary of this page; it is
  * a statement about an entity that does not exist.
  *
- * So there is no total row. `PositionStatement` has no field one could go in,
- * and `assertUnblended` in the repository refuses to return a view carrying a
- * money figure that names no entity. If someone adds a combined total later,
- * the repository throws before the page renders.
+ * So there is no total row anywhere on this screen. `PositionStatement` has no
+ * field one could go in, `RenewalCommitment` has none either, and
+ * `assertUnblended` in the repository and in `kpis.ts` refuses to return a view
+ * carrying a money figure that names no entity. The tiles obey the same rule
+ * the hard way: net assets and annual operating cost are each a pair of tiles,
+ * one per entity, and nothing on the dashboard adds across them.
+ *
+ * Figures the reader holds no scope for are withheld, never zero. Zero is a
+ * claim about the entity; withheld is a claim about the reader.
  */
-export default async function PositionStatementPage() {
+export default async function TreasuryDashboardPage() {
   const subject = treasurySubject(await getCurrentSubject());
   const repo = treasuryRepository();
+  const dashboard = treasuryDashboard(subject, repo);
   const statement = repo.positionStatement(subject);
   const visibleCount = statement.columns.filter((c) => c.visible).length;
 
@@ -42,12 +51,14 @@ export default async function PositionStatementPage() {
     <div>
       <TreasuryHeader
         current="/board/treasury"
-        title="Position, both entities"
+        title="Treasury, both entities"
         period={statement.period.label}
         lede={
-          "Two entities, two columns, never one figure. The Association and the " +
-          "Foundation file separately, hold separate restrictions and answer to " +
-          "separate donors, so nothing on this page adds across them."
+          "What the two treasuries look like this period, what is outstanding, and " +
+          "what needs deciding. Two entities, two columns, never one figure: the " +
+          "Association and the Foundation file separately, hold separate " +
+          "restrictions and answer to separate donors, so nothing on this screen " +
+          "adds across them."
         }
       />
 
@@ -58,6 +69,91 @@ export default async function PositionStatementPage() {
           scope; nothing on this screen is available on request.
         </p>
       ) : null}
+
+      <KpiGrid kpis={dashboard.kpis} />
+
+      <p className={styles.note}>
+        Every tile says what it was computed from. A figure the reader holds no
+        scope for reads <strong>Withheld</strong> rather than zero: the figure
+        exists, and it is not theirs to see. Figures measured to{" "}
+        {dashboard.asOf}.
+      </p>
+
+      <h2 className={styles.sectionHead}>What needs doing</h2>
+
+      {dashboard.actions.length === 0 ? (
+        <p className={styles.note}>
+          Nothing is outstanding in the scope you hold. That is a result of the
+          checks above, not an absence of them.
+        </p>
+      ) : (
+        <ul className={styles.rules}>
+          {dashboard.actions.map((action) => (
+            <li key={action.key} className={styles.rule}>
+              <span
+                className={`${styles.ruleState} ${
+                  action.urgent ? styles.ruleStateUnmet : styles.ruleStateMet
+                }`}
+              >
+                {action.count}
+              </span>
+              <span className={styles.ruleRequirement}>
+                <Link href={action.href}>{action.label}</Link>
+              </span>
+              <p className={styles.ruleWhy}>{action.note}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h2 className={styles.sectionHead}>
+        Renewals inside {dashboard.renewalWindowDays} days
+      </h2>
+      <p className={styles.note}>
+        The cash each entity commits for the following year if these lines renew,
+        per entity, as two figures. A renewal nobody decides on renews by default,
+        which is how a register stops being a decision and becomes a direct debit.
+      </p>
+
+      <div className={styles.panelPlain}>
+        <ul className={styles.figures}>
+          {dashboard.renewals.map((row) => (
+            <li key={`renewal-${row.entity}`} className={entityClass(row.entity)}>
+              <span className={styles.figureLabel}>
+                <EntityTag entity={row.entity} />{" "}
+                {row.visible ? (
+                  <>
+                    {row.lineCount}{" "}
+                    {row.lineCount === 1 ? "line renews" : "lines renew"} by{" "}
+                    {dashboard.renewalWindowEndDate}
+                    <span className={styles.memo}>
+                      {row.soonestRenewalDate
+                        ? `Soonest ${row.soonestRenewalDate}. ` +
+                          `${ENTITY_LABELS[row.entity].short} share of the annual cost, apportioned on the stated basis.`
+                        : `No ${ENTITY_LABELS[row.entity].short} line renews inside the window.`}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Withheld
+                    <span className={styles.memo}>{row.withheldReason}</span>
+                  </>
+                )}
+              </span>
+              {row.visible ? (
+                <Money amountCents={row.committedAnnualCents} lead showCurrency />
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <h2 className={styles.sectionHead}>Position, both entities</h2>
+      <p className={styles.note}>
+        The statement below is the module&rsquo;s point and it has not moved. There
+        is no total row and no field one could go in: a combined figure would be a
+        statement about an entity that does not exist.
+      </p>
 
       <div className={styles.twoUp}>
         {statement.columns.map((column) => {
@@ -81,10 +177,10 @@ export default async function PositionStatementPage() {
               <div className={styles.panelHead}>
                 <div>
                   <span className={styles.eyebrow}>{labels.subsection}</span>
-                  <h2 id={`pos-${column.entity}`} className={styles.panelTitle}>
+                  <h3 id={`pos-${column.entity}`} className={styles.panelTitle}>
                     <span className={styles.entityName}>{labels.short}</span>{" "}
                     <span className={styles.quiet}>{labels.long}</span>
-                  </h2>
+                  </h3>
                 </div>
               </div>
 
@@ -159,6 +255,12 @@ export default async function PositionStatementPage() {
               key={`funds-${column.entity}`}
               className={entityClass(column.entity)}
               aria-labelledby={`funds-h-${column.entity}`}
+              /* A grid item defaults to min-width:auto, so this section was
+                 sized by the fund table's intrinsic width and pushed the whole
+                 page sideways at 375px instead of letting `.scroller` scroll.
+                 This belongs in `.stack` in treasury.module.css, which is not
+                 this change's to edit; noted in the report. */
+              style={{ minWidth: 0 }}
             >
               <div className={styles.panelHead}>
                 <h3 id={`funds-h-${column.entity}`} className={styles.panelTitle}>

@@ -36,6 +36,7 @@ import {
   loadScholarshipAudit,
 } from "../src/lib/scholarships/board";
 import { loadChequeRun } from "../src/lib/scholarships/disbursement";
+import { loadScholarshipsDashboard } from "../src/lib/scholarships/kpis";
 import {
   newScholarshipRepository,
   type ScholarshipRepository,
@@ -131,6 +132,12 @@ const READS: {
     call: (r, s) => loadCycleExceptions(r, s),
   },
   {
+    name: "loadScholarshipsDashboard",
+    reviewerMay: false,
+    why: "The chair's dashboard. Carries every award amount as a total, the cumulative figures and the admin cost per dollar awarded, which is the same money a scorer must not be scoring against.",
+    call: (r, s) => loadScholarshipsDashboard(r, s),
+  },
+  {
     name: "loadChairRows",
     reviewerMay: false,
     why: "Every file in the cycle with its outcome, not just the ones they score.",
@@ -195,6 +202,9 @@ describe("what a scholarship reviewer may reach", () => {
   it("covers every read the module exports", async () => {
     // Guards against the real failure mode: a new read added at APPLICANT READ
     // that nobody thought about. If this number moves, a decision is owed.
-    expect(READS).toHaveLength(13);
+    // 14 since the chair's dashboard landed: one read, guarded at APPLICANT
+    // WRITE rather than the AGGREGATE the old overview used, because a tile
+    // that totals the awards is still the awards.
+    expect(READS).toHaveLength(14);
   });
 });
