@@ -49,6 +49,24 @@ import {
   reviewAcknowledgment,
 } from "../src/lib/donations/sponsorship";
 import type { Donation, Fund } from "../src/lib/donations/types";
+import {
+  HEADLINE_KPI_KEYS,
+  readDonationsDashboard,
+  splitKpis,
+} from "../src/lib/donations/kpis";
+import {
+  entitiesInScope,
+  functionTabHref,
+  functionTabs,
+  fundraisingCalendar,
+  fundraisingOutside,
+  fundraisingPlanning,
+  fundraisingProjects,
+  fundraisingTasks,
+  FUNDRAISING_PLANNING_ITEMS,
+  readSponsorshipDates,
+} from "../src/lib/donations/workspace";
+import { PROJECTS } from "../src/lib/projects/register";
 
 /* ------------------------------------------------------------------ *
  * Fixtures
@@ -1226,5 +1244,296 @@ describe("sponsorship record shape", () => {
         }
       }
     }
+  });
+});
+
+/* ================================================================== *
+ * 14. The role workspace: five spine tabs over the same data
+ *
+ * The spine's own rule is that four of the five tabs are FILTERS over
+ * shared data rather than per-role copies, and that a task is derived from
+ * state and never entered by hand. These are the tests that hold both.
+ * ================================================================== */
+
+describe("workspace: derived tasks", () => {
+  it("derives the task list from state, so an empty register yields no tasks", () => {
+    const empty = new InMemoryDonationsRepository(TEST_FUNDS, [], []);
+    const { tasks } = fundraisingTasks(treasurerJsof, empty);
+    expect(tasks).toEqual([]);
+  });
+
+  it("fills itself from the seeded register without anything being entered", () => {
+    const { tasks } = fundraisingTasks(treasurerJsof, repo());
+    expect(tasks.length).toBeGreaterThan(0);
+    // The gift carrying unvalued benefits is the one a donor is waiting on.
+    expect(tasks.some((task) => task.key === "JSOF-value-benefits")).toBe(true);
+    expect(tasks.some((task) => task.key === "JSOF-safe-harbour-review")).toBe(true);
+  });
+
+  it("gives every task a reason that says what it blocks, and an urgency", () => {
+    const { tasks } = fundraisingTasks(treasurerJsof, repo());
+    for (const task of tasks) {
+      expect(task.because.length).toBeGreaterThan(20);
+      expect(["overdue", "soon", "open"]).toContain(task.urgency);
+      expect(task.href.startsWith("/board/donations")).toBe(true);
+      expect(task.entity).toBe("JSOF");
+    }
+  });
+
+  it("withholds rather than denying for a role holding one scope and not the other", () => {
+    const { tasks, withheld } = fundraisingTasks(fundraisingChairJsof, repo());
+    // The Chair holds PUBLIC_CONTENT at WRITE, so the wording work is theirs.
+    expect(tasks.some((task) => task.key === "JSOF-rewrite-wording")).toBe(true);
+    // And holds FINANCIAL only at AGGREGATE, so the gift-by-gift work is not.
+    expect(tasks.some((task) => task.key === "JSOF-value-benefits")).toBe(false);
+    expect(withheld.join(" ")).toContain("Gifts that cannot be receipted");
+  });
+
+  it("gives a role with no scope on either entity no tasks and no counts", () => {
+    const vpMembership = subject("p-vpm", [{ role: "VP_MEMBERSHIP", entity: "JSOA" }]);
+    const { tasks, withheld } = fundraisingTasks(vpMembership, repo());
+    expect(tasks).toEqual([]);
+    expect(withheld.length).toBeGreaterThan(0);
+    // Nothing about the size of what is behind the wall.
+    expect(withheld.join(" ")).not.toMatch(/\d/);
+  });
+
+  it("gives an unassigned subject nothing at all", () => {
+    const { tasks, withheld } = fundraisingTasks(nobody, repo());
+    expect(tasks).toEqual([]);
+    expect(withheld.join(" ")).toContain("no assignment on either entity");
+  });
+});
+
+describe("workspace: three headline figures", () => {
+  it("promotes exactly three, and the same three for every reader", () => {
+    const board = readDonationsDashboard(treasurerJsof, "JSOF", repo());
+    const { headline, more } = splitKpis(board.kpis);
+    expect(headline.map((kpi) => kpi.key)).toEqual([...HEADLINE_KPI_KEYS]);
+    expect(headline.length).toBe(3);
+    expect(more.length).toBe(board.kpis.length - 3);
+    // The per-entity pair is one idea rendered twice and is never a headline.
+    expect(headline.some((kpi) => kpi.key === "giving-by-entity")).toBe(false);
+    expect(more.some((kpi) => kpi.key === "giving-by-entity")).toBe(true);
+  });
+
+  it("keeps a headline the reader may not see as a headline, withheld rather than swapped", () => {
+    const board = readDonationsDashboard(fundraisingChairJsof, "JSOF", repo());
+    const { headline } = splitKpis(board.kpis);
+    expect(headline.map((kpi) => kpi.key)).toEqual([...HEADLINE_KPI_KEYS]);
+    const unreceiptable = headline.find((kpi) => kpi.key === "gifts-unreceiptable")!;
+    expect(unreceiptable.value).toBeNull();
+    expect(unreceiptable.needs).toBeTruthy();
+    // The wording figure is the Chair's own and is a real number.
+    expect(headline.find((kpi) => kpi.key === "wording-flagged")!.value).not.toBeNull();
+  });
+});
+
+describe("workspace: calendar", () => {
+  it("derives pledge, renewal and event dates for a reader who holds the rows", () => {
+    const { items } = fundraisingCalendar(treasurerJsof, repo());
+    const kinds = items.map((item) => item.kind);
+    expect(kinds).toContain("CYCLE");
+    expect(kinds).toContain("RENEWAL");
+    expect(kinds).toContain("EVENT");
+    for (const item of items) {
+      expect(item.on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(item.entity).toBe("JSOF");
+    }
+  });
+
+  it("marks an inferred renewal and an unrecorded event date as unverified", () => {
+    const { items, gaps } = fundraisingCalendar(treasurerJsof, repo());
+    for (const item of items.filter((i) => i.kind === "RENEWAL" || i.kind === "EVENT")) {
+      expect(item.unverified).toBe(true);
+    }
+    // A pledge date is recorded, so it is not a guess.
+    for (const item of items.filter((i) => i.kind === "CYCLE")) {
+      expect(item.unverified).toBeUndefined();
+    }
+    expect(gaps.join(" ")).toContain("no recorded date");
+  });
+
+  it("withholds the whole calendar from a role holding financial only at aggregate", () => {
+    const { items, withheld } = fundraisingCalendar(fundraisingChairJsof, repo());
+    expect(items).toEqual([]);
+    expect(withheld.join(" ")).toContain("aggregate");
+  });
+
+  it("refuses the sponsorship dates read to a role without row-level financial", () => {
+    expect(() => readSponsorshipDates(fundraisingChairJsof, "JSOF", repo())).toThrow(
+      AuthzError,
+    );
+    expect(() => readSponsorshipDates(nobody, "JSOF", repo())).toThrow(AuthzError);
+  });
+
+  it("never carries a date from one entity onto the other", () => {
+    const { items } = fundraisingCalendar(treasurerJsoa, repo());
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((item) => item.entity === "JSOA")).toBe(true);
+  });
+});
+
+describe("workspace: planning", () => {
+  it("files the three decisions the role cannot take alone", () => {
+    expect(FUNDRAISING_PLANNING_ITEMS.length).toBe(3);
+    for (const item of FUNDRAISING_PLANNING_ITEMS) {
+      expect(item.proposedByRole).toBe("FUNDRAISING_CHAIR");
+      expect(item.estimateMinutes).toBeGreaterThan(0);
+      expect(item.reason.length).toBeGreaterThan(40);
+      expect(item.acceptedForMeetingId).toBeNull();
+    }
+  });
+
+  it("shows a viewer only the items filed against an entity they hold", () => {
+    expect(fundraisingPlanning(treasurerJsof).every((i) => i.entity === "JSOF")).toBe(true);
+    expect(fundraisingPlanning(treasurerJsof).length).toBe(2);
+    const chairBoth = subject("p-fund-both", [
+      { role: "FUNDRAISING_CHAIR", entity: "JSOA" },
+      { role: "FUNDRAISING_CHAIR", entity: "JSOF" },
+    ]);
+    expect(fundraisingPlanning(chairBoth).length).toBe(3);
+    expect(fundraisingPlanning(nobody)).toEqual([]);
+  });
+});
+
+describe("workspace: projects are a filter, not a copy", () => {
+  it("returns rows from the one org-level register by identity", () => {
+    const { owned, contributing } = fundraisingProjects();
+    for (const project of [...owned, ...contributing]) {
+      expect(PROJECTS).toContain(project);
+    }
+    expect(owned.every((p) => p.ownerRole === "FUNDRAISING_CHAIR")).toBe(true);
+    expect(
+      contributing.every((p) => p.contributorRoles.includes("FUNDRAISING_CHAIR")),
+    ).toBe(true);
+    expect(owned.length + contributing.length).toBeGreaterThan(0);
+  });
+});
+
+describe("workspace: outside view", () => {
+  it("keeps the two audiences separate and never merges them", () => {
+    const { surface } = fundraisingOutside(fundraisingChairJsof, repo());
+    expect(surface.noExternalSurface).toBe(false);
+    const audiences = new Set(surface.items.map((item) => item.audience));
+    expect(audiences.has("PUBLIC")).toBe(true);
+    expect(audiences.has("MEMBER_OR_DONOR")).toBe(true);
+  });
+
+  it("sorts a flagged string that is also approved above a flagged draft", () => {
+    /*
+     * The seed has no flagged-and-approved placement: its one flagged string
+     * is still a draft. That is the worse of the two states, so it is built
+     * here rather than left untested.
+     */
+    const placement = (
+      id: string,
+      text: string,
+      publicationState: "DRAFT" | "APPROVED",
+    ) => ({
+      id,
+      sponsorshipId: "s-loud",
+      entity: "JSOF" as Entity,
+      kind: "SIGNAGE" as const,
+      approvedAcknowledgmentString: text,
+      benefitFairMarketValueCents: 100,
+      publicationState,
+      approvedById: publicationState === "APPROVED" ? "p-vp-operations" : null,
+      authoredById: "p-fundraising-chair",
+      notes: "",
+    });
+    const loud = new InMemoryDonationsRepository(TEST_FUNDS, [], [
+      {
+        id: "s-loud",
+        entity: "JSOF",
+        sponsorName: "Testerman Supply",
+        eventName: "2026 Golf Tournament",
+        tier: "Tee sponsor",
+        paymentCents: 100_000,
+        currency: "USD",
+        contingentOnAttendanceOrImpressions: false,
+        exclusivity: "NONE",
+        receivedAt: "2026-02-10T14:00:00Z",
+        createdById: "p-fundraising-chair",
+        placements: [
+          placement("pl-draft", "Testerman Supply. The best prices in town.", "DRAFT"),
+          placement(
+            "pl-approved",
+            "Testerman Supply, the region's leading supplier. Call today.",
+            "APPROVED",
+          ),
+        ],
+      },
+    ]);
+
+    const { surface, counts } = fundraisingOutside(fundraisingChairJsof, loud);
+    expect(counts.flagged).toBe(2);
+    expect(counts.flaggedApproved).toBe(1);
+    const publicItems = surface.items.filter((item) => item.audience === "PUBLIC");
+    expect(publicItems[0].key).toBe("wording-pl-approved");
+    expect(publicItems[0].note).toContain("Approved, so this publishes as written");
+    expect(publicItems[0].note).toContain("taxable advertising");
+    expect(publicItems[1].key).toBe("wording-pl-draft");
+    expect(publicItems[1].note).toContain("cannot publish yet");
+  });
+
+  it("puts the flagged wording above the unproblematic pages either way", () => {
+    const { surface } = fundraisingOutside(fundraisingChairJsof, repo());
+    const publicItems = surface.items.filter((item) => item.audience === "PUBLIC");
+    expect(publicItems.findIndex((item) => item.key.startsWith("wording-"))).toBe(0);
+    expect(publicItems[0].note).toContain("taxable advertising");
+  });
+
+  it("flags that the Foundation has no public contact path", () => {
+    const { surface } = fundraisingOutside(fundraisingChairJsof, repo());
+    const contact = surface.items.find((item) => item.key === "foundation-contact")!;
+    expect(contact.audience).toBe("PUBLIC");
+    expect(contact.problem).toBe("MISSING_OWNER");
+    expect(contact.note).toContain("no named");
+  });
+
+  it("withholds the published wording from a role with no content read", () => {
+    const { surface, withheld, counts } = fundraisingOutside(treasurerJsof, repo());
+    expect(counts.flagged).toBe(0);
+    expect(surface.items.some((item) => item.key.startsWith("wording-"))).toBe(false);
+    expect(withheld.join(" ")).toContain("published content");
+    // The Treasurer still sees the donor side of their own entity's gifts.
+    expect(surface.items.some((item) => item.key === "donor-no-receipt-JSOF")).toBe(true);
+  });
+
+  it("withholds the count of donors waiting on a receipt from an aggregate-only role", () => {
+    const { surface, withheld } = fundraisingOutside(fundraisingChairJsof, repo());
+    expect(surface.items.some((item) => item.key.startsWith("donor-no-receipt"))).toBe(
+      false,
+    );
+    expect(withheld.join(" ")).toContain("gift-by-gift");
+  });
+});
+
+describe("workspace: the tab spine", () => {
+  it("keeps the three function tabs at their own routes", () => {
+    expect(functionTabs().map((tab) => tab.href)).toEqual([
+      "/board/donations/gifts",
+      "/board/donations/funds",
+      "/board/donations/sponsors",
+    ]);
+    // The dev override travels on the function tabs, as it always did.
+    expect(functionTabHref("gifts", "?as=TREASURER:JSOF")).toBe(
+      "/board/donations/gifts?as=TREASURER:JSOF",
+    );
+  });
+
+  it("scopes the workspace to the entities a viewer holds, Foundation first", () => {
+    expect(entitiesInScope(treasurerJsof)).toEqual(["JSOF"]);
+    expect(entitiesInScope(treasurerJsoa)).toEqual(["JSOA"]);
+    expect(
+      entitiesInScope(
+        subject("p-both", [
+          { role: "FUNDRAISING_CHAIR", entity: "JSOA" },
+          { role: "FUNDRAISING_CHAIR", entity: "JSOF" },
+        ]),
+      ),
+    ).toEqual(["JSOF", "JSOA"]);
+    expect(entitiesInScope(nobody)).toEqual([]);
   });
 });

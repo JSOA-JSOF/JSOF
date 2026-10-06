@@ -1,7 +1,13 @@
 import Link from "next/link";
 
+import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import { AuthzError } from "@/lib/authz/policy";
 import { issueReceipt, readDonationRegister } from "@/lib/donations/actions";
+import {
+  functionTabHref,
+  functionTabs,
+  WORKSPACE_BASE,
+} from "@/lib/donations/workspace";
 import { DEV_SWITCHER_PARAM } from "@/lib/donations/devSubject";
 import { resolveScreenViewer } from "@/lib/donations/screenSubject";
 import {
@@ -71,18 +77,19 @@ export default async function DonationsBoardPage({
           reason.
         </p>
 
-        <nav className={styles.nav}>
-          <span className={`${styles.navLink} ${styles.navLinkCurrent}`}>Gifts</span>
-          <Link href={`/board/donations/funds${qs}`} className={styles.navLink}>
-            Funds
-          </Link>
-          <Link href={`/board/donations/sponsors${qs}`} className={styles.navLink}>
-            Sponsors
-          </Link>
-          <Link href="/donate" className={styles.navLink}>
-            Public donate form
-          </Link>
-        </nav>
+        {/* The workspace spine, with this module's three function screens
+            appended. This screen is the gift register and keeps its route. */}
+        <RoleTabs
+          base={WORKSPACE_BASE}
+          current={functionTabHref("gifts", qs)}
+          functionTabs={functionTabs(qs)}
+        />
+        <p className={styles.sectionNote}>
+          <Link href="/donate" className={styles.back}>
+            The public donate form
+          </Link>{" "}
+          is what a donor fills in before any of this exists.
+        </p>
 
 
         {denial && (

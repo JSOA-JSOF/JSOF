@@ -53,7 +53,7 @@ export default async function ExceptionsPage({
   }
 
   return (
-    <MembershipShell current="exceptions">
+    <MembershipShell current="/board/membership/exceptions">
       <h1 className={styles.title}>Chair exceptions</h1>
       <p className={styles.lede}>
         Applications the vouch could not settle. A decline and a &ldquo;I do not know this

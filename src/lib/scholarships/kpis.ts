@@ -86,15 +86,79 @@ const OWED_AN_OUTCOME: Application["state"][] = ["AWARDED", "NOT_AWARDED"];
  * What the route gets
  * ------------------------------------------------------------------ */
 
-export type DashboardAction = {
-  key: string;
-  label: string;
-  note: string;
-  href: string;
-  count: number;
-  /** Rendered in the warning hue. True when the count is work nobody else can do. */
-  urgent: boolean;
+/**
+ * The cycle's outstanding work, counted once.
+ *
+ * This used to be `actions`, rendered under the figures on this dashboard. Per
+ * docs/ROLE-WORKSPACE.md the doing moved to the Overview tab and the figures
+ * stayed here, so what is left in this file is the counting. `workspace.ts`
+ * turns these counts into `RoleTask`s with a `because` on each.
+ *
+ * Deliberately a pure function over already-fetched records: it takes no
+ * repository and performs no authorization, so it is not a read and cannot be
+ * called to get round one. Both callers guard first and pass what they got.
+ */
+export type CycleWorkCounts = {
+  /** Files with no score sheet at all. */
+  unscored: number;
+  /** Files started and short of the full committee. */
+  partlyScored: number;
+  /** The two above, which is everything short of a defensible score. */
+  awaitingAFullCommittee: number;
+  verificationsOutstanding: number;
+  awardsWithTheBoard: number;
+  awardsAwaitingNotification: number;
+  chequesQueued: number;
+  /** Decided applications where nothing has been sent to the applicant. */
+  decidedWithNoOutcomeSent: number;
+  /** Of those, the ones holding no award and so no notification path at all. */
+  decidedWithNoAwardAtAll: number;
 };
+
+export function countCycleWork(input: {
+  applications: Application[];
+  sheetsByApplication: Map<string, number>;
+  awards: Award[];
+  cheques: Cheque[];
+  verificationsOutstanding: number;
+}): CycleWorkCounts {
+  const { applications, sheetsByApplication, awards, cheques } = input;
+  const live = applications.filter((application) => application.state !== "WITHDRAWN");
+
+  const unscored = live.filter(
+    (application) => (sheetsByApplication.get(application.id) ?? 0) === 0,
+  ).length;
+  const partlyScored = live.filter((application) => {
+    const sheets = sheetsByApplication.get(application.id) ?? 0;
+    return sheets > 0 && sheets < FULL_COMMITTEE;
+  }).length;
+
+  const notifiedApplicationIds = new Set(
+    awards.filter((award) => award.notifiedAt !== null).map((award) => award.applicationId),
+  );
+  const awardedApplicationIds = new Set(awards.map((award) => award.applicationId));
+  const decided = applications.filter((application) =>
+    OWED_AN_OUTCOME.includes(application.state),
+  );
+
+  return {
+    unscored,
+    partlyScored,
+    awaitingAFullCommittee: unscored + partlyScored,
+    verificationsOutstanding: input.verificationsOutstanding,
+    awardsWithTheBoard: awards.filter(
+      (award) => award.boardReview !== null && award.boardReview.outcome === null,
+    ).length,
+    awardsAwaitingNotification: awards.filter((award) => award.status === "APPROVED").length,
+    chequesQueued: cheques.filter((cheque) => cheque.status === "QUEUED").length,
+    decidedWithNoOutcomeSent: decided.filter(
+      (application) => !notifiedApplicationIds.has(application.id),
+    ).length,
+    decidedWithNoAwardAtAll: decided.filter(
+      (application) => !awardedApplicationIds.has(application.id),
+    ).length,
+  };
+}
 
 export type DistributionRow = {
   schoolName: string;
@@ -106,8 +170,34 @@ export type DistributionRow = {
 export type ScholarshipsDashboard = {
   cycleLabel: string;
   asOf: string;
-  /** This cycle's six figures, in the order the board asked for them. */
+  /**
+   * Every figure this cycle produces. Kept whole so nothing is lost, and split
+   * into the two fields below for rendering.
+   */
   thisCycle: Kpi[];
+  /**
+   * The three the board asked for. docs/ROLE-WORKSPACE.md: one to three per
+   * role, not seven. A volunteer looking at six numbers has none.
+   *
+   * These three, and why each one earns a slot:
+   *
+   *   1. Applicants who received an outcome. The only tile with a real
+   *      failure behind it: an applicant with no award hears nothing, ever.
+   *   2. Days from decision to money reaching the school. The only part of
+   *      the timeline the applicant actually experiences, and the measure of
+   *      the task she named as most draining.
+   *   3. Applications scored by the full committee. Defensibility, which is
+   *      what a grantmaker or a disappointed applicant asks about.
+   */
+  headline: Kpi[];
+  /**
+   * The rest, behind a disclosure on the same page. Not deleted: each one is
+   * still true and still has its provenance. They are not headlines because
+   * none of them would change a decision this week — one cannot be measured
+   * at all, one is 100% by construction, and one rests on an unverified
+   * estimate and is really the Treasurer's figure.
+   */
+  moreFigures: Kpi[];
   /** Cumulative figures across the cycles on file. */
   sinceInception: Kpi[];
   /**
@@ -116,8 +206,6 @@ export type ScholarshipsDashboard = {
    * this says what the data supports rather than guessing.
    */
   cumulativeBasis: string;
-  /** Under the figures: the work that follows from them. */
-  actions: DashboardAction[];
   distribution: {
     basis: string;
     schoolsReached: number;
@@ -226,19 +314,16 @@ export async function loadScholarshipsDashboard(
     );
   }
 
-  let verificationsOutstanding = 0;
-  for (const application of applications) {
-    if (application.state === "WITHDRAWN") continue;
-    if (!application.woundedPatriot) continue;
-    if (!(await repo.getVerification(application.id))) verificationsOutstanding += 1;
-  }
-
-  const thisCycle: Kpi[] = [
-    chairHours(),
+  // The three that earn a slot, in the order they are read. Every other figure
+  // this cycle produces is below them on the same page, behind a disclosure.
+  const headline: Kpi[] = [
     outcomeDelivered(applications, awards),
     decisionToCheque(awards, cheques),
-    notifiedWithoutRetyping(awards),
     scoredByFullCommittee(applications, sheetsByApplication),
+  ];
+  const moreFigures: Kpi[] = [
+    chairHours(),
+    notifiedWithoutRetyping(awards),
     adminCostPerDollar(awards, cycle.label),
   ];
 
@@ -254,10 +339,11 @@ export async function loadScholarshipsDashboard(
   return {
     cycleLabel: cycle.label,
     asOf: now.toISOString(),
-    thisCycle,
+    thisCycle: [...headline, ...moreFigures],
+    headline,
+    moreFigures,
     sinceInception: cumulative.kpis,
     cumulativeBasis: cumulative.basis,
-    actions: actionsFor(applications, sheetsByApplication, awards, cheques, verificationsOutstanding),
     distribution,
   };
 }
@@ -794,77 +880,4 @@ function awardDistribution(
     statesCovered: states.size,
     rows,
   };
-}
-
-/* ------------------------------------------------------------------ *
- * Then say what to do
- * ------------------------------------------------------------------ */
-
-function actionsFor(
-  applications: Application[],
-  sheetsByApplication: Map<string, number>,
-  awards: Award[],
-  cheques: Cheque[],
-  verificationsOutstanding: number,
-): DashboardAction[] {
-  const live = applications.filter((application) => application.state !== "WITHDRAWN");
-  const unscored = live.filter(
-    (application) => (sheetsByApplication.get(application.id) ?? 0) === 0,
-  ).length;
-  const partly = live.filter((application) => {
-    const sheets = sheetsByApplication.get(application.id) ?? 0;
-    return sheets > 0 && sheets < FULL_COMMITTEE;
-  }).length;
-  const withTheBoard = awards.filter(
-    (award) => award.boardReview !== null && award.boardReview.outcome === null,
-  ).length;
-  const awaitingNotification = awards.filter((award) => award.status === "APPROVED").length;
-  const chequesQueued = cheques.filter((cheque) => cheque.status === "QUEUED").length;
-
-  return [
-    {
-      key: "review",
-      // A file with two sheets on it is still waiting to be scored, so the
-      // count is everything short of a full committee and the note splits it.
-      label: "Files waiting to be scored",
-      note:
-        `${unscored} have no sheet at all; ${partly} have started and are ` +
-        `short of all ${FULL_COMMITTEE} reviewers.`,
-      href: "/board/scholarships/review",
-      count: unscored + partly,
-      urgent: unscored + partly > 0,
-    },
-    {
-      key: "verify",
-      label: "Verifications outstanding",
-      note: "Wounded Patriot claims. Yours alone, and never automatic.",
-      href: "/board/scholarships/verify",
-      count: verificationsOutstanding,
-      urgent: verificationsOutstanding > 0,
-    },
-    {
-      key: "awards",
-      label: "Awards with the full board",
-      note: "A sponsoring member holds a seat, so the board decides with them recused.",
-      href: "/board/scholarships/awards",
-      count: withTheBoard,
-      urgent: withTheBoard > 0,
-    },
-    {
-      key: "notify",
-      label: "Awards not yet notified",
-      note: "Approved, with the amount merged from the record and the sponsor copied in.",
-      href: "/board/scholarships/notify",
-      count: awaitingNotification,
-      urgent: awaitingNotification > 0,
-    },
-    {
-      key: "disbursement",
-      label: "Cheques to mail",
-      note: "Grouped into one envelope per school.",
-      href: "/board/scholarships/disbursement",
-      count: chequesQueued,
-      urgent: chequesQueued > 0,
-    },
-  ];
 }

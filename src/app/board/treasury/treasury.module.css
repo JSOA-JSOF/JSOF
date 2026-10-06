@@ -30,39 +30,64 @@
   white-space: nowrap;
 }
 
-/* --- Sub-navigation across the six treasury screens --- */
+/* --- The "more figures" disclosure on the Dashboard ---
+   The Dashboard is cut to three figures, and the rest live here rather than
+   being deleted: they are real, and somebody wants the operating cost when
+   something renews. Closed by default, because open by default is seven
+   figures again. */
 
-.subnav {
+.disclosure {
+  margin-top: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.disclosureSummary {
+  cursor: pointer;
+  padding: 13px 16px;
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
-  margin: 20px 0 28px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 0;
+  gap: 4px 14px;
+  align-items: baseline;
 }
 
-.subnavLink {
-  font-size: 0.9rem;
-  text-decoration: none;
+.disclosureSummary:hover {
+  color: var(--ink);
+}
+
+.disclosureSummary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.disclosureHint {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 400;
+  color: var(--mute);
+}
+
+.disclosureBody {
+  padding: 0 16px 20px;
+  border-top: 1px solid var(--line-2);
+}
+
+/* The Chapter 131F disclosure, reproduced as the statute writes it. Quoted
+   rather than styled: this is not the platform's prose. */
+
+.disclosure131f {
+  margin: 14px 0 0;
+  border-left: 3px solid var(--hue, var(--jsof));
+  padding: 10px 0 10px 14px;
+  max-width: 68ch;
+  font-size: 0.92rem;
   color: var(--ink-2);
-  padding: 8px 12px;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 3px 3px 0 0;
-  margin-bottom: -1px;
-}
-
-.subnavLink:hover {
-  color: var(--ink);
-  background: var(--line-2);
-}
-
-.subnavOn {
-  color: var(--ink);
-  font-weight: 600;
-  background: var(--panel);
-  border-color: var(--line);
-  border-bottom: 1px solid var(--panel);
 }
 
 /* --- Panels --- */
@@ -654,6 +679,7 @@
 
 .ruleSource {
   grid-column: 2;
+  display: block;
   font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   font-size: 0.62rem;
   letter-spacing: 0.08em;

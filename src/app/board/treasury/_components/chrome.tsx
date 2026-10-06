@@ -1,8 +1,9 @@
-import Link from "next/link";
-
+import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import type { Entity } from "@/lib/authz/model";
 import type { SodFinding } from "@/lib/authz/policy";
 import { formatCents } from "@/lib/treasury/money";
+import { TREASURY_FUNCTION_TABS } from "@/lib/treasury/workspace";
+import type { WorkspaceTab } from "@/lib/workspace/types";
 
 import styles from "../treasury.module.css";
 
@@ -67,30 +68,20 @@ export function Money({
  * Navigation
  * ------------------------------------------------------------------ */
 
-const TREASURY_NAV = [
-  { href: "/board/treasury", label: "Position" },
-  { href: "/board/treasury/ledger/JSOA", label: "Ledger, JSOA" },
-  { href: "/board/treasury/ledger/JSOF", label: "Ledger, JSOF" },
-  { href: "/board/treasury/transfers", label: "Transfers" },
-  { href: "/board/treasury/subscriptions", label: "Subscriptions" },
-  { href: "/board/treasury/controls", label: "Controls" },
-  { href: "/board/treasury/reimbursements", label: "Reimbursements" },
-];
-
-export function TreasuryNav({ current }: { current: string }) {
+/**
+ * The tab strip is `RoleTabs` from the workspace shell, not a treasury one.
+ *
+ * It is shared on purpose: six roles each rendering their own slightly
+ * different navigation is how a platform stops being one platform. This module
+ * passes its own function tabs in and writes none of the strip itself.
+ */
+export function TreasuryNav({ current }: { current: WorkspaceTab | string }) {
   return (
-    <nav className={styles.subnav} aria-label="Treasury">
-      {TREASURY_NAV.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={`${styles.subnavLink} ${item.href === current ? styles.subnavOn : ""}`}
-          aria-current={item.href === current ? "page" : undefined}
-        >
-          {item.label}
-        </Link>
-      ))}
-    </nav>
+    <RoleTabs
+      base="/board/treasury"
+      current={current}
+      functionTabs={[...TREASURY_FUNCTION_TABS]}
+    />
   );
 }
 
@@ -103,7 +94,8 @@ export function TreasuryHeader({
   title: string;
   lede: string;
   period?: string;
-  current: string;
+  /** A spine tab name for one of the five, or a function tab's href. */
+  current: WorkspaceTab | string;
 }) {
   return (
     <>

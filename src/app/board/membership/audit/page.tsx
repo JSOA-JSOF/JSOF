@@ -45,7 +45,7 @@ export default async function CohortAuditPage({
   }
 
   return (
-    <MembershipShell current="audit">
+    <MembershipShell current="/board/membership/audit">
       <h1 className={styles.title}>30-day cohort audit</h1>
       <p className={styles.lede}>
         Every member whose dues cleared within the last {AUDIT_WINDOW_DAYS} days, and what their

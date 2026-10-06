@@ -89,6 +89,21 @@ export type OutsideProblem =
   | "DEAD_LINK"
   | "MISSING_OWNER"
   | "PLACEHOLDER_PUBLISHED"
+  /**
+   * Published copy that may be substantively untrue, rather than merely old
+   * or broken. The live site's unqualified claim that gifts to the Association
+   * are tax-deductible is the case this exists for: it rests on a membership
+   * composition test nobody tracks per year, and the test currently fails.
+   * Four roles were carrying this meaning inside a free-text note.
+   */
+  | "CLAIM_UNSUPPORTED"
+  /**
+   * A duty the organization has, with no path built for it. Distinct from a
+   * dead link, which promises something and fails, and from a missing owner,
+   * which has a path nobody holds. Answering a member's records-inspection
+   * request is the case: the obligation is real and there is nothing to click.
+   */
+  | "NOT_BUILT"
   | "NONE";
 
 export type OutsideItem = {
@@ -100,6 +115,19 @@ export type OutsideItem = {
   problem: OutsideProblem;
   /** Only when there is a problem: what is wrong, in one line. */
   note?: string;
+  /**
+   * What this is, for a row with nothing wrong with it. Without it a healthy
+   * item renders as a bare title and roles were loading explanation into the
+   * title itself to compensate.
+   */
+  detail?: string;
+  /**
+   * Which entity's surface this is. In a two-entity organization attribution
+   * cannot be editorial: treasury was putting it in every title by hand and
+   * asserting that in a test, which is a convention rather than a rule.
+   * Null for something that genuinely belongs to neither.
+   */
+  entity?: "JSOA" | "JSOF" | null;
   /** Waiting on a second approver before it can be published. */
   awaitingRelease?: boolean;
 };

@@ -11,7 +11,7 @@
  *                 counts.
  *
  * Money is integer cents. There is exactly one money figure in this module
- * (annual dues) and it still goes through `amountCents`.
+ * (the one-time lifetime membership) and it still goes through `amountCents`.
  *
  * What is NOT here, on purpose: any document, any attachment, any national
  * identifier. See docs/PRIVACY-AND-PAYMENTS.md. Service is attested by the
@@ -22,7 +22,16 @@
 import type { DataClass, Entity } from "../authz/model";
 import type { MembershipState } from "./state";
 
-/** Annual JSOA dues. Not a charitable contribution; the receipt says so. */
+/**
+ * The one-time JSOA membership payment. Membership is for life, so this is
+ * charged once and never again — the payment page said "annual" in three
+ * places, which is the difference between billing somebody once and billing
+ * them every year.
+ *
+ * Not a charitable contribution; the receipt says so. Whether the figure
+ * should stay a lifetime payment is a board question and sits on the
+ * membership Planning tab.
+ */
 export const DUES_AMOUNT_CENTS = 20_000;
 export const DUES_CURRENCY = "USD" as const;
 

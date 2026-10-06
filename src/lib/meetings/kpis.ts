@@ -21,9 +21,10 @@
  *    Secretary of State annual report for each entity. All three are
  *    quarantined. They appear below the figures as work to resolve and never
  *    inside a due-soon or overdue count. `calendar.ts` already separates
- *    verified from unverified; nothing here undoes that, and the unverified
- *    entry falls inside the 90-day window, so counting it would have been the
- *    easy mistake.
+ *    verified from unverified; nothing here undoes that. The quarantine does
+ *    not depend on the horizon: the unverified entry sat inside the old 90-day
+ *    window and sits outside the 60-day one this file now shares with
+ *    `calendar.ts`, and it was uncountable under both.
  *
  * 3. The notice period is an assumption and the tile says so. North Carolina
  *    supplies no statutory notice period for a nonprofit board and the bylaws
@@ -48,20 +49,41 @@ import type { Kpi, KpiStatus } from "@/components/dashboard/Kpi";
 
 import { ENTITIES, type Entity } from "../authz/model";
 import type { Subject } from "../authz/policy";
+import type { TaskUrgency } from "../workspace/types";
 import {
   authorizeGovernanceRead,
   authorizeMinuteRead,
   canReadGovernance,
   canReadMinutes,
 } from "./access";
-import { daysUntil } from "./calendar";
+import { DUE_SOON_DAYS, daysUntil } from "./calendar";
 import { noticeRequiredHours } from "./distribution";
 import { MINUTE_FLAGS, checkMinute, minuteBookReady } from "./minutes";
 import { meetingsRepository, type MeetingsRepository } from "./repository";
 import type { Meeting } from "./types";
 
-/** The horizon the board plans filings over. Separate from the calendar page's 60. */
-export const DUE_HORIZON_DAYS = 90;
+/**
+ * The horizon a filing counts as due within.
+ *
+ * This used to be 90 here while `calendar.ts` used 60, so the Secretary's
+ * dashboard and the compliance page the dashboard links to disagreed about
+ * which filings were due soon. Two numbers for one idea is how a board ends up
+ * arguing about a figure instead of filing the thing.
+ *
+ * Settled at 60, by taking the calendar's own constant rather than restating
+ * it. 60 wins for two reasons: the compliance page is where the board actually
+ * reads filings and its urgency chip already says "Due within 60 days", so the
+ * tile and the page it links to now mean the same thing; and `DUE_SOON_DAYS`
+ * is the constant the urgency labels are generated from, so deriving from it
+ * makes a future drift impossible rather than merely unlikely.
+ *
+ * One consequence, stated because it changes a figure: the unverified 2027
+ * entry (reported commencement 1 January 2027) falls inside 90 days of this
+ * build's date and outside 60. It was quarantined before and is quarantined
+ * now — the window never decided that — but the tile no longer gets to say the
+ * uncounted entry sits inside the very window being counted.
+ */
+export const DUE_HORIZON_DAYS = DUE_SOON_DAYS;
 
 export type DashboardAction = {
   key: string;
@@ -73,6 +95,18 @@ export type DashboardAction = {
   note: string;
   /** Sorts first and takes colour. Reserved for an incomplete record. */
   urgent: boolean;
+  /** Which book. Never a blend of the two. */
+  entity?: Entity;
+  /**
+   * What is held up until this is done. One line, and deliberately narrower
+   * than `note`: the Overview's task list renders this as the `because`, and a
+   * task that does not say what it blocks is a count with a verb on it.
+   */
+  blocks?: string;
+  /** Derived, like the action itself. Nobody sets an urgency by hand. */
+  urgency?: TaskUrgency;
+  /** ISO date this is owed by, where the data supplies one. */
+  dueOn?: string;
 };
 
 export type SecretaryDashboard = {
@@ -317,6 +351,54 @@ function worst(...statuses: KpiStatus[]): KpiStatus {
 }
 
 /* ------------------------------------------------------------------ *
+ * The three that go on the wall
+ * ------------------------------------------------------------------ */
+
+/**
+ * The headline figures, in the order they are shown. Three, not seven.
+ *
+ * A volunteer looking at seven numbers has none, so the other four move behind
+ * a disclosure on the Dashboard tab. The three here are the ones that would
+ * change what the Secretary does tonight. Each is already rendered per entity,
+ * so a JSOA/JSOF pair is one idea shown twice and not two of the three.
+ *
+ * 1. `decisions-without-motion` — a decision nobody wrote down is the failure
+ *    this office exists to prevent, and it is the only figure here that
+ *    records something the board cannot go back and fix from memory.
+ * 2. `books-ready` — the first figure counts a defect inside a book; this one
+ *    counts whether the book exists at all for an evening already held. Taken
+ *    together they answer "is there a record, and does it show how the board
+ *    decided", which is the whole job.
+ * 3. `filings-due` — the only figure on this screen with an outside deadline
+ *    and a consequence the board cannot cure afterwards: the NC charitable
+ *    solicitation licence is not self-declaring, nothing announces its lapse,
+ *    and soliciting on a lapsed licence is the exposure. It is also the tile
+ *    that states the quarantine, so the unverified and blocked entries are
+ *    named exactly where someone would otherwise miscount them.
+ *
+ * Deliberately not headlined: `recusals-with-reason` is held at target by a
+ * save-path refusal rather than by diligence, so it cannot move and cannot
+ * change a decision; `unreviewed-drafts` is hygiene inside unfinished work the
+ * second tile already counts; `notice-inside-period` is measured against this
+ * platform's own assumption rather than a statutory period, which earns a
+ * caveat, not a headline; and `minutes-circulated-lag` is not measurable yet.
+ */
+export const HEADLINE_KPI_KEYS = [
+  "decisions-without-motion",
+  "books-ready",
+  "filings-due",
+] as const;
+
+/** The three, then the rest, with nothing dropped and nothing duplicated. */
+export function splitHeadlineKpis(kpis: Kpi[]): { headline: Kpi[]; more: Kpi[] } {
+  const headline = HEADLINE_KPI_KEYS.map((key) =>
+    kpis.find((kpi) => kpi.key === key),
+  ).filter((kpi): kpi is Kpi => kpi !== undefined);
+  const headlineKeys = new Set(headline.map((kpi) => kpi.key));
+  return { headline, more: kpis.filter((kpi) => !headlineKeys.has(kpi.key)) };
+}
+
+/* ------------------------------------------------------------------ *
  * The one authorized read.
  * ------------------------------------------------------------------ */
 
@@ -478,7 +560,8 @@ export function secretaryDashboard(
       status: overdue > 0 ? "problem" : "good",
       from:
         `Of the verified, unfiled duties each entity tracks, those due by ` +
-        `${asOf} plus ${DUE_HORIZON_DAYS} days. Quarantined and counted nowhere ` +
+        `${asOf} plus ${DUE_HORIZON_DAYS} days, which is the same window the ` +
+        `compliance page's chip names, from the same constant. Quarantined and counted nowhere ` +
         `above: ${quarantined.unverified} unverified ` +
         `${quarantined.unverified === 1 ? "entry" : "entries"}` +
         `${
@@ -590,6 +673,13 @@ export function secretaryDashboard(
         href: `/board/meetings/${out.meeting.id}/minutes`,
         note: `${parts.join("; ")}. Until this closes, the ${book.entity} book does not show how the board decided.`,
         urgent: true,
+        entity: book.entity,
+        urgency: "overdue",
+        dueOn: out.meeting.scheduledStart.slice(0, 10),
+        blocks:
+          `The evening has been held, so the ${book.entity} book is already owed. ` +
+          "Nothing can cite a minute that was never written: a treasury transfer, " +
+          "an award, or anyone asking next year how the board decided.",
       });
     }
     if (book.unreviewedDrafts > 0) {
@@ -602,12 +692,19 @@ export function secretaryDashboard(
           "Written by the parser and not yet cleared by the Secretary. Edit and clear " +
           "each one, or the register carries a provisional entry as though it were a minute.",
         urgent: false,
+        entity: book.entity,
+        urgency: "open",
+        blocks:
+          `Blocks the ${book.entity} decision register being quotable. Every other ` +
+          "module reads that register, and until these are cleared it carries a " +
+          "machine draft marked provisional where a minute of record should be.",
       });
     }
   }
 
   for (const book of books.filter(gov)) {
     for (const meeting of book.agendaUnadopted) {
+      const daysOut = daysUntil(meeting.scheduledStart.slice(0, 10), now);
       actions.push({
         key: `adopt-${meeting.id}`,
         label: `Adopt the ${book.entity} agenda for ${meeting.title}`,
@@ -618,14 +715,36 @@ export function secretaryDashboard(
           "reference against this meeting is stable yet, and the treasury module " +
           "cannot record a transfer that points at one.",
         urgent: false,
+        entity: book.entity,
+        urgency: daysOut <= 14 ? "soon" : "open",
+        dueOn: meeting.scheduledStart.slice(0, 10),
+        blocks:
+          `Blocks every ${book.entity} minute reference for this evening. Item ` +
+          "numbers move until the agenda is adopted, so the treasury module cannot " +
+          "record a transfer pointing at one, and the other side of an inter-entity " +
+          "transfer cannot be written at all.",
       });
     }
     for (const unnoticed of book.unnoticed) {
+      const noticeBy = new Date(
+        Date.parse(unnoticed.meeting.scheduledStart) - unnoticed.requiredHours * HOUR_MS,
+      )
+        .toISOString()
+        .slice(0, 10);
       actions.push({
         key: `notice-${unnoticed.meeting.id}`,
         label: `Send the ${book.entity} notice and agenda for ${unnoticed.meeting.title}`,
         count: 1,
         href: `/board/meetings/${unnoticed.meeting.id}/distribute`,
+        entity: book.entity,
+        urgency: unnoticed.stillAchievable ? "soon" : "overdue",
+        dueOn: noticeBy,
+        blocks:
+          `Blocks the ${book.entity} agenda reaching the board at all, and a meeting ` +
+          "noticed late is a meeting whose decisions can be questioned afterwards. " +
+          `The ${Math.round(unnoticed.requiredHours / 24)}-day period this is measured ` +
+          "against is the platform's assumption, not a statutory figure: NC supplies " +
+          "no board-notice period and the bylaws govern.",
         note: unnoticed.stillAchievable
           ? `Nothing sent yet. The assumed ${Math.round(
               unnoticed.requiredHours / 24,
@@ -650,6 +769,12 @@ export function secretaryDashboard(
         `The due ${quarantined.blocked === 1 ? "date is a placeholder" : "dates are placeholders"} ` +
         "and counted in no figure above.",
       urgent: false,
+      urgency: "open",
+      blocks:
+        "Blocks nothing and is owed by nobody, which is the point: it is on the " +
+        "calendar as a question, not a duty. No due-soon or overdue count includes " +
+        "it, and it stays visible so the question gets answered rather than " +
+        "quietly becoming a deadline.",
     });
   }
 
@@ -664,6 +789,11 @@ export function secretaryDashboard(
         "entry with the real duty or delete it. Until then it is not an obligation, is " +
         "not in the due-soon count above, and must not be put to the board as fact.",
       urgent: false,
+      urgency: "open",
+      blocks:
+        "Blocks nothing, because an unconfirmed duty is not a duty. It is here so " +
+        "the reading of the session law actually happens; it is counted in no " +
+        "figure, has no deadline the board owes, and cannot be marked filed.",
     });
   }
 

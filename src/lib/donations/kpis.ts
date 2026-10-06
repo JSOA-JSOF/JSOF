@@ -44,6 +44,7 @@
 
 import type { Kpi } from "@/components/dashboard/Kpi";
 
+import type { TaskUrgency } from "../workspace/types";
 import { ENTITIES, type Entity } from "../authz/model";
 import { AuthzError, can, type Subject } from "../authz/policy";
 import {
@@ -66,16 +67,76 @@ export const ENTITY_LABEL: Record<Entity, string> = {
   JSOA: "Association",
 };
 
-/** What needs doing, with a count and somewhere to go and do it. */
+/**
+ * What needs doing, with a count and somewhere to go and do it.
+ *
+ * This list is the role's task list. It lives here, computed alongside the
+ * figures it follows from, and the Overview tab renders it as `RoleTask` —
+ * which is why every action carries a `because` and an `urgency` rather than
+ * the Overview inventing either. A task is a function of the data; nobody
+ * types one of these.
+ */
 export type DashboardAction = {
   key: string;
   label: string;
+  /** The longer explanation: how to do it, and what to watch for. */
   note: string;
+  /** One line: what this blocks until it is done. */
+  because: string;
   count: number;
   href: string;
   /** Colours the count. Reserved for a count that should not be sitting there. */
   urgent: boolean;
+  urgency: TaskUrgency;
 };
+
+/**
+ * The three figures that would change a decision. Everything else on the
+ * dashboard is second tier, behind a disclosure.
+ *
+ * Why these three:
+ *
+ *   - `gifts-unreceiptable` — the only figure here with a person behind every
+ *     unit. Each one is a donor who cannot claim a deduction on a gift already
+ *     taken, and the fix is a valuation somebody can do this evening.
+ *   - `safe-harbour` — the cliff. One cent over 2% carves out the whole
+ *     benefit value, not the excess, so this figure decides whether the next
+ *     placement contract can be signed as drafted.
+ *   - `wording-flagged` — one qualitative adjective converts a placement from
+ *     acknowledgment into taxable advertising, and a flagged string that is
+ *     also approved can publish today.
+ *
+ * Deliberately NOT headline tiles:
+ *
+ *   - `giving-by-entity` is one idea rendered twice. It is the per-entity pair
+ *     and the two halves are never summed, so promoting it would spend two of
+ *     three slots on one thought.
+ *   - `restricted-committed` cannot be computed in this module at all. A tile
+ *     that will read "not measured" on every visit is not a headline, however
+ *     much the question matters.
+ *   - `disclosure-conspicuous` and `awaiting-release` are the ones that are
+ *     usually fine, and good is unremarkable.
+ */
+export const HEADLINE_KPI_KEYS = [
+  "gifts-unreceiptable",
+  "safe-harbour",
+  "wording-flagged",
+] as const;
+
+/**
+ * Three tiles and the rest, in the order above.
+ *
+ * A headline figure the viewer may not see stays a headline and reads
+ * "withheld". Swapping in a figure they can see would quietly tell the
+ * Fundraising Chair that the dashboard holds nothing they are missing.
+ */
+export function splitKpis(kpis: Kpi[]): { headline: Kpi[]; more: Kpi[] } {
+  const headline = HEADLINE_KPI_KEYS.map((key) => kpis.find((kpi) => kpi.key === key)).filter(
+    (kpi): kpi is Kpi => kpi !== undefined,
+  );
+  const promoted = new Set(headline.map((kpi) => kpi.key));
+  return { headline, more: kpis.filter((kpi) => !promoted.has(kpi.key)) };
+}
 
 /** Second tier, below the actions. Rows, not tiles. */
 export type RestrictedFundRow = {
@@ -216,9 +277,15 @@ export function readDonationsDashboard(
         note:
           "Value what the donor received. Only the excess over that value is " +
           "deductible, so the receipt cannot be written until the value exists.",
+        because:
+          "Blocks the receipt on each of these gifts, so every donor behind one " +
+          "cannot claim the deduction their gift was taken on.",
         count: blocked.length,
-        href: "#awaiting-valuation",
+        href: "/board/donations/gifts",
         urgent: true,
+        // Already overdue by the time it appears: the gift was taken and the
+        // donor is waiting on paperwork that cannot be written.
+        urgency: "overdue",
       });
     }
   } else {
@@ -284,9 +351,14 @@ export function readDonationsDashboard(
         note:
           "Either the valuations are wrong or the benefit package is too rich for " +
           "the payment. Counsel before the next placement contract is signed.",
+        because:
+          "Blocks the next placement contract. Above the ceiling the whole benefit " +
+          "value is carved out of qualified sponsorship, not the excess.",
         count: breaching.length,
         href: `/board/donations/sponsors`,
         urgent: true,
+        // The carve-out has already happened on these payments.
+        urgency: "overdue",
       });
     }
   } else {
@@ -370,9 +442,18 @@ export function readDonationsDashboard(
           "Keep it to identity: name, address, telephone, logo, neutral product " +
           "line. A message that mixes advertising with acknowledgment is advertising " +
           "in its entirety.",
+        because:
+          flaggedApproved.length > 0
+            ? `Blocks nothing, which is the problem: ${flaggedApproved.length} of these ` +
+              `${flaggedApproved.length === 1 ? "string is" : "strings are"} approved ` +
+              `and can publish as written, taking the placement with them into ` +
+              `taxable advertising.`
+            : "Blocks these placements from being sent for release, because approving " +
+              "the wording as it stands approves the advertising signal in it.",
         count: flagged.length,
         href: `/board/donations/sponsors`,
         urgent: flaggedApproved.length > 0,
+        urgency: flaggedApproved.length > 0 ? "overdue" : "soon",
       });
     }
 
@@ -410,9 +491,13 @@ export function readDonationsDashboard(
         note:
           "The approver cannot be the person who wrote the wording. Changed wording " +
           "returns here automatically, because the previous approval was of different words.",
+        because:
+          "Blocks publication. Nothing goes out on its author's own approval, so " +
+          "these placements sit where they are until a second approver reads them.",
         count: awaitingRelease.length,
         href: `/board/donations/sponsors`,
         urgent: false,
+        urgency: "open",
       });
     }
   } else {
@@ -495,9 +580,13 @@ export function readDonationsDashboard(
           "A restriction the board cannot state is one it cannot honour. Read the " +
           "purpose on each fund holding money and confirm nothing has been drawn " +
           "against it for something else.",
+        because:
+          "Nothing in this module records money out, so no figure will raise a " +
+          "misapplied restricted gift. Reading the purposes is the only check there is.",
         count: restrictedWithMoney,
         href: `/board/donations/funds`,
         urgent: false,
+        urgency: "open",
       });
     }
   } else {
@@ -633,9 +722,13 @@ export function readDonationsDashboard(
         note:
           "The size and the emphasis are part of the requirement, not presentation. " +
           "A receipt that fails this has gone out non-compliant.",
+        because:
+          "Every receipt this entity issues carries the same defect until the " +
+          "template is fixed, and the ones already sent cannot be unsent.",
         count: failures.length,
-        href: `/board/donations/funds`,
+        href: `/board/donations/gifts`,
         urgent: true,
+        urgency: "overdue",
       });
     }
   } else {

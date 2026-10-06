@@ -248,3 +248,34 @@
   color: var(--warn);
   line-height: 1.4;
 }
+
+/* A healthy outside row explaining itself, as distinct from .problem which
+   carries what is wrong with one. */
+.detail {
+  font-size: 0.84rem;
+  color: var(--mute);
+  line-height: 1.4;
+}
+
+/* Entity attribution on an outside row. Rendered rather than written into
+   every title by hand, so the two-entity rule is enforceable. */
+.entityTag {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  color: var(--mute);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+/* The count a task already carried and nothing rendered. */
+.taskCount {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--ink);
+}

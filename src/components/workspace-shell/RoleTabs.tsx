@@ -67,7 +67,23 @@ export function RoleTabs({
  * Each row says what to do and what it blocks, because a count on its own
  * ("32 pending") tells a volunteer nothing about whether to open it tonight.
  */
-export function TaskList({ tasks }: { tasks: RoleTask[] }) {
+export function TaskList({
+  tasks,
+  withheld,
+}: {
+  tasks: RoleTask[];
+  /**
+   * Why the reader is seeing nothing, when the reason is their scope rather
+   * than the state of the work. "Nothing is waiting on you" is a claim about
+   * the work; for a reader who cannot see the work it is false, and it is the
+   * one confusion this platform never permits. Three roles suppressed this
+   * component and wrote their own sentence rather than let it lie.
+   */
+  withheld?: string;
+}) {
+  if (tasks.length === 0 && withheld) {
+    return <p className={styles.empty}>{withheld}</p>;
+  }
   if (tasks.length === 0) {
     return (
       <p className={styles.empty}>
@@ -86,6 +102,9 @@ export function TaskList({ tasks }: { tasks: RoleTask[] }) {
             <span className={styles.taskBecause}>{task.because}</span>
           </Link>
           <span className={styles.taskMeta}>
+            {typeof task.count === "number" && task.count > 0 ? (
+              <span className={styles.taskCount}>{task.count}</span>
+            ) : null}
             {task.entity ? <span className={styles.taskEntity}>{task.entity}</span> : null}
             <span
               className={`${styles.taskUrgency} ${
@@ -111,7 +130,18 @@ export function TaskList({ tasks }: { tasks: RoleTask[] }) {
   );
 }
 
-export function CalendarStrip({ items }: { items: RoleCalendarItem[] }) {
+export function CalendarStrip({
+  items,
+  withheld,
+}: {
+  items: RoleCalendarItem[];
+  /** Same reason as TaskList: an empty list is not the same answer as a
+   *  withheld one, and only the caller knows which this is. */
+  withheld?: string;
+}) {
+  if (items.length === 0 && withheld) {
+    return <p className={styles.empty}>{withheld}</p>;
+  }
   if (items.length === 0) {
     return <p className={styles.empty}>Nothing dated is yours in the period ahead.</p>;
   }
@@ -148,6 +178,8 @@ const PROBLEM_COPY: Record<OutsideItem["problem"], string> = {
   DEAD_LINK: "Goes nowhere",
   MISSING_OWNER: "No office owns this",
   PLACEHOLDER_PUBLISHED: "A placeholder is public",
+  CLAIM_UNSUPPORTED: "This may not be true as published",
+  NOT_BUILT: "The duty is real and nothing has been built for it",
   NONE: "",
 };
 
@@ -185,7 +217,12 @@ export function OutsideColumns({ surface }: { surface: OutsideSurface }) {
               <ul className={styles.outsideList}>
                 {items.map((item) => (
                   <li key={item.key} className={styles.outsideItem}>
-                    <Link href={item.href}>{item.title}</Link>
+                    <span>
+                      <Link href={item.href}>{item.title}</Link>
+                      {item.entity ? (
+                        <span className={styles.entityTag}>{item.entity}</span>
+                      ) : null}
+                    </span>
                     {item.awaitingRelease ? (
                       <span className={styles.awaiting}>awaiting a second approver</span>
                     ) : null}
@@ -193,6 +230,8 @@ export function OutsideColumns({ surface }: { surface: OutsideSurface }) {
                       <span className={styles.problem}>
                         {item.note ?? PROBLEM_COPY[item.problem]}
                       </span>
+                    ) : item.detail ? (
+                      <span className={styles.detail}>{item.detail}</span>
                     ) : null}
                   </li>
                 ))}

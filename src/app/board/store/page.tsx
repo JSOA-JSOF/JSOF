@@ -1,12 +1,13 @@
 import Link from "next/link";
 
-import { KpiGrid } from "@/components/dashboard/Kpi";
-import dash from "@/components/dashboard/dashboard.module.css";
+import { CalendarStrip, TaskList } from "@/components/workspace-shell/RoleTabs";
 import { effectiveLevel } from "@/lib/authz/policy";
 import { getCurrentSubject } from "@/lib/authz/session";
-import { mayReadOrderRows } from "@/lib/store/board";
-import { storeActions, storeKpis, storeSecondTier } from "@/lib/store/kpis";
-import { COLLECTION_POSTURE_NOTE } from "@/lib/store/tax";
+import {
+  storeCalendar,
+  storeStockDrivingEvents,
+  storeTasks,
+} from "@/lib/store/workspace";
 
 import styles from "./board.module.css";
 import { Refused, StoreHeader, StoreScreen, StoreSodWarning } from "./parts";
@@ -14,135 +15,119 @@ import { Refused, StoreHeader, StoreScreen, StoreSodWarning } from "./parts";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Store — JSOA board",
+  title: "Store overview — JSOA board",
   robots: { index: false, follow: false },
 };
 
 /**
- * The Store and Sales Chair's dashboard.
+ * The Store and Sales Chair's Overview: the landing tab, per
+ * `docs/ROLE-WORKSPACE.md`. Two things only, both filtered to the signed-in
+ * role: what needs doing, and what is dated.
  *
- * Every figure comes from `src/lib/store/kpis.ts`, which calls `authorize()`
- * before it reads anything and demands AGGREGATE on FINANCIAL for JSOA. That
- * is what STORE_CHAIR holds, so the chair sees the whole dashboard: the
- * member versus non-member split, the tax figures, the counts. The row-level
- * order list needs READ, which the chair does not hold, and the panel at the
- * foot says so rather than showing an empty table or quietly dropping the
- * link.
+ * The tasks are DERIVED. `storeTasks` computes every one of them from the same
+ * authorized read the Dashboard tiles use, and each is conditional on state —
+ * there is no standing row that appears whatever the data says. A task list a
+ * volunteer has to populate is dead within a cycle, which is the failure of
+ * the spreadsheet this platform replaces.
  *
- * What is deliberately absent: a gross sales headline. It tells the chair
- * nothing they can act on and it buries the member split, which is the figure
- * with legal weight. The split's total appears only as the denominator of the
- * non-member share, where it belongs.
+ * The figures moved to the Dashboard tab. This tab is the doing.
  */
-export default async function BoardStoreDashboard() {
+export default async function StoreOverview() {
   const subject = await getCurrentSubject();
   const held = effectiveLevel(subject, "FINANCIAL", "JSOA");
 
-  let kpis = null;
-  let actions = null;
-  let secondTier = null;
+  let tasks = null;
+  let calendar = null;
   try {
-    kpis = storeKpis(subject);
-    actions = storeActions(subject);
-    secondTier = storeSecondTier(subject);
+    tasks = storeTasks(subject);
+    calendar = storeCalendar(subject);
   } catch {
-    kpis = null;
+    tasks = null;
   }
+
+  const events = storeStockDrivingEvents();
+  const undatedEvents = events.filter((event) => !event.dated);
 
   return (
     <StoreScreen>
-      <StoreHeader here="/board/store" title="Store" />
+      <StoreHeader here="/board/store" title="Store and Sales" />
 
-      <p className={dash.lede}>
-        The two figures that matter here are compliance records rather than
-        sales statistics: what the store took in from members as against
-        everyone else, and what it collected in sales tax and is holding for
-        the state. Everything else on this page exists to keep those two
-        defensible.
+      <p className={styles.lede}>
+        What is waiting on this seat, and what is dated. Every item below is
+        computed from the store&rsquo;s own records rather than entered by hand,
+        so the list empties itself when the work is done and fills itself when
+        more arrives. The figures are on the Dashboard tab.
       </p>
 
       <StoreSodWarning subject={subject} />
 
-      {kpis === null || actions === null || secondTier === null ? (
+      {tasks === null || calendar === null ? (
         <Refused
-          what="The store figures"
+          what="The store&rsquo;s task list"
           needed="aggregate"
           held={held.toLowerCase()}
           because={
             subject.mfaSatisfied
-              ? "The role table gives this role no reach into JSOA financial records. That is the role definition, not a missing feature."
+              ? "Every task here is derived from the store's financial records, so a role that cannot read them in aggregate cannot be told what they imply. That is the role definition, not a missing feature."
               : "The TOTP challenge has not been satisfied this session. Every non-public read requires it."
           }
         />
       ) : (
         <>
-          <div className={dash.heading}>
-            <h2 className={dash.title}>Where the store stands</h2>
-            <span className={dash.asOf}>JSOA · calendar year to date</span>
-          </div>
-
-          <KpiGrid kpis={kpis} />
-
           <h2 className={styles.sectionHead}>What needs doing</h2>
-
-          <div className={dash.actions}>
-            {actions.map((action) => (
-              <Link
-                key={action.key}
-                href={action.href}
-                className={`${dash.action} ${action.urgent ? dash.actionUrgent : ""}`}
-              >
-                <span className={dash.actionLabel}>{action.label}</span>
-                <span className={dash.actionNote}>{action.note}</span>
-                <span className={dash.actionCount}>{action.count}</span>
-              </Link>
-            ))}
-          </div>
-
-          <h2 className={styles.sectionHead}>Also on the record</h2>
-
-          <div className={dash.actions}>
-            {secondTier.map((note) => (
-              <div key={note.key} className={dash.action}>
-                <span className={dash.actionLabel}>{note.label}</span>
-                <span className={dash.actionNote}>{note.detail}</span>
-                <span className={dash.actionCount}>
-                  {note.value === null ? "not measured" : note.value}
-                </span>
-              </div>
-            ))}
-          </div>
+          <TaskList tasks={tasks} />
 
           <div className={styles.whyNote}>
-            <strong>Why the member split outranks the sales total.</strong> The
-            Association may run a store open to the public, but it has to keep
-            separate records of what it takes in from members and from everyone
-            else. If the non-member records are not adequate, the whole of the
-            income from the public activity can be treated as unrelated
-            business income, not only the non-member share. So the split is a
-            control on the Association&apos;s tax position, and a single gross
-            sales figure that hides it would be the wrong headline.{" "}
-            <Link href="/board/store/receipts" className={styles.back}>
-              Open the receipts report
-            </Link>
-            .
+            <strong>Why the quarterly count is the sharpest item here.</strong>{" "}
+            The Treasurer also chairs the store, which puts authorize, custody,
+            record and reconcile in one pair of hands. The physical count
+            entered by somebody else is the compensating control for exactly
+            that: it is the only thing in the store that checks the records
+            against the goods rather than against themselves. It is a
+            compensating control and not a fix. The fix is a board decision and
+            it is on the{" "}
+            <Link href="/board/store/planning">Planning tab</Link>.
           </div>
 
-          {!mayReadOrderRows(subject) ? (
-            <Refused
-              what="The order list, row by row"
-              needed="read"
-              held={held.toLowerCase()}
-              because={
-                "The role table gives the Store Chair aggregate on financial records and not read. " +
-                "That is deliberate: the person who sets the prices and holds the goods gets the " +
-                "totals, not a list of who bought what. Every figure above is built from the same " +
-                "orders, counted rather than listed."
-              }
-            />
-          ) : null}
+          <h2 className={styles.sectionHead}>Dated and mine</h2>
+          <CalendarStrip items={calendar} />
 
-          <p className={styles.note}>{COLLECTION_POSTURE_NOTE}</p>
+          <p className={styles.note}>
+            The sales-tax filing dates are marked unverified and counted as
+            obligations nowhere. The 20th of the month after the period is the
+            due date for a monthly filer, but NCDOR assigns the filing frequency
+            when an organization registers, and the platform holds no
+            registration number for the Association. Confirming it is a{" "}
+            <Link href="/board/store/planning">Planning</Link> item. A date
+            nobody has established is not a deadline.
+          </p>
+
+          {undatedEvents.length > 0 ? (
+            <>
+              <h3 className={styles.subHead}>
+                Events that drive stock, with no date set
+              </h3>
+              <ul className={styles.plainList}>
+                {undatedEvents.map(({ project }) => (
+                  <li key={project.id}>
+                    <Link href="/board/store/projects">{project.title}</Link>{" "}
+                    <span className={styles.subtle}>
+                      {project.status.toLowerCase()}, owned by{" "}
+                      {project.ownerRole.toLowerCase().replace(/_/g, " ")}, no
+                      target date in the register
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className={styles.note}>
+                These are above the calendar rather than in it because nobody
+                has set a date. An event is what empties the shelves fastest, so
+                a guessed date here would become a stock decision made against a
+                number somebody invented. The register is the one place a date
+                belongs, and when one is set this reads it.
+              </p>
+            </>
+          ) : null}
         </>
       )}
     </StoreScreen>

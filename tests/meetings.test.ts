@@ -34,7 +34,28 @@ import {
   agendaSchedule,
   agendaTotals,
 } from "../src/lib/meetings/agenda";
-import { countsFor, splitVerified, urgencyOf } from "../src/lib/meetings/calendar";
+import {
+  DUE_SOON_DAYS,
+  countsFor,
+  splitVerified,
+  urgencyOf,
+} from "../src/lib/meetings/calendar";
+import {
+  DUE_HORIZON_DAYS,
+  HEADLINE_KPI_KEYS,
+  secretaryDashboard,
+  splitHeadlineKpis,
+} from "../src/lib/meetings/kpis";
+import {
+  INBOUND_PLANNING_NOTE,
+  SECRETARY_OWNED_PAGES,
+  secretaryCalendar,
+  secretaryPlanning,
+  secretaryProjects,
+  secretaryPublicRecord,
+  secretaryTasks,
+} from "../src/lib/meetings/workspace";
+import { PROJECTS } from "../src/lib/projects/register";
 import {
   FormShapeError,
   assertAlignedRows,
@@ -1705,5 +1726,337 @@ describe("repository hygiene", () => {
     });
     expect(serialised).not.toMatch(/amountCents/);
     expect(serialised).not.toMatch(/\$[0-9]/);
+  });
+});
+
+/* ================================================================== *
+ * THE ROLE WORKSPACE
+ *
+ * The five spine tabs are filters over data that already exists, so
+ * these tests assert the two things a filter can get wrong: counting
+ * something it must not count, and blending the two books.
+ * ================================================================== */
+
+/** Fixed, so nothing here depends on the day the suite happens to run. */
+const NOW = new Date("2026-10-06T12:00:00.000Z");
+/** Far enough on that the unverified 2027 entry falls inside the horizon. */
+const NEARER = new Date("2026-12-01T12:00:00.000Z");
+
+describe("workspace overview: tasks are derived and say what they block", () => {
+  it("lifts every dashboard action into a task with a reason", () => {
+    const dashboard = secretaryDashboard(secretaryBoth, NOW, repo);
+    const tasks = secretaryTasks(secretaryBoth, NOW, repo);
+    expect(dashboard.actions.length).toBeGreaterThan(0);
+    for (const action of dashboard.actions) {
+      const task = tasks.find((t) => t.key === action.key);
+      expect(task, `${action.key} did not reach the task list`).toBeDefined();
+      expect(task!.because.length).toBeGreaterThan(20);
+      expect(task!.href).toBe(action.href);
+    }
+  });
+
+  it("gives every task an urgency, a link and a reason, and none a blank", () => {
+    for (const task of secretaryTasks(secretaryBoth, NOW, repo)) {
+      expect(["overdue", "soon", "open"]).toContain(task.urgency);
+      expect(task.href.startsWith("/board/")).toBe(true);
+      expect(task.because.trim()).not.toBe("");
+    }
+  });
+
+  it("says the notice period is an assumption on every task that measures against it", () => {
+    const notices = secretaryTasks(secretaryBoth, NOW, repo).filter((t) =>
+      t.key.startsWith("notice-"),
+    );
+    expect(notices.length).toBeGreaterThan(0);
+    for (const task of notices) {
+      expect(task.because).toMatch(/assumption/i);
+      expect(task.because).toMatch(/bylaws/i);
+    }
+  });
+
+  it("makes no task out of an unverified or blocked filing", () => {
+    for (const when of [NOW, NEARER]) {
+      const keys = secretaryTasks(secretaryBoth, when, repo).map((t) => t.key);
+      expect(keys).not.toContain("file-c-unverified-2027");
+      expect(keys).not.toContain("file-c-sos-jsoa");
+      expect(keys).not.toContain("file-c-sos-jsof");
+    }
+  });
+
+  it("names the entity on every task that belongs to one book", () => {
+    for (const task of secretaryTasks(secretaryBoth, NOW, repo)) {
+      if (task.entity) expect(["JSOA", "JSOF"]).toContain(task.entity);
+      // A task naming one book in its label must carry that book.
+      if (/\bJSOA\b/.test(task.label)) expect(task.entity).toBe("JSOA");
+      if (/\bJSOF\b/.test(task.label)) expect(task.entity).toBe("JSOF");
+    }
+  });
+});
+
+describe("workspace overview: the calendar never counts what nobody owes", () => {
+  it("quarantines the unverified entry and both blocked ones", () => {
+    const calendar = secretaryCalendar(secretaryBoth, NOW, repo);
+    expect(calendar.unresolved.map((u) => u.key).sort()).toEqual([
+      "c-sos-jsoa",
+      "c-sos-jsof",
+      "c-unverified-2027",
+    ]);
+    expect(
+      calendar.unresolved.filter((u) => u.reason === "UNVERIFIED").map((u) => u.key),
+    ).toEqual(["c-unverified-2027"]);
+    expect(calendar.unresolved.filter((u) => u.reason === "BLOCKED")).toHaveLength(2);
+  });
+
+  it("keeps all three visible, flagged, rather than hiding them", () => {
+    const calendar = secretaryCalendar(secretaryBoth, NOW, repo);
+    for (const entry of calendar.unresolved) {
+      const item = calendar.items.find((i) => i.key === entry.key);
+      expect(item, `${entry.key} vanished from the calendar`).toBeDefined();
+      expect(item!.unverified).toBe(true);
+      expect(entry.note.length).toBeGreaterThan(20);
+    }
+  });
+
+  it("counts as obligations only what is verified, unfiled and unblocked", () => {
+    const calendar = secretaryCalendar(secretaryBoth, NOW, repo);
+    for (const book of calendar.obligations) {
+      const expected = repo
+        .listComplianceItems(book.entity)
+        .filter(
+          (item) =>
+            item.ownerRole === "SECRETARY" &&
+            item.verified &&
+            item.status !== "BLOCKED" &&
+            item.status !== "FILED",
+        ).length;
+      expect(book.count).toBe(expected);
+    }
+    // Both books, separately, and no combined figure anywhere in the shape.
+    expect(calendar.obligations.map((b) => b.entity)).toEqual(["JSOA", "JSOF"]);
+    expect(Object.keys(calendar)).not.toContain("total");
+  });
+
+  it("quarantines whatever the horizon, including when the entry falls inside it", () => {
+    const unverified = repo.listComplianceItems().find((i) => !i.verified)!;
+    // Inside 60 days of this date, which is when counting it would be easy.
+    expect(
+      Math.round(
+        (Date.parse(`${unverified.dueDate}T00:00:00.000Z`) - NEARER.getTime()) / 86_400_000,
+      ),
+    ).toBeLessThanOrEqual(DUE_SOON_DAYS);
+    const calendar = secretaryCalendar(secretaryBoth, NEARER, repo);
+    expect(calendar.unresolved.map((u) => u.key)).toContain(unverified.id);
+    const counted = calendar.obligations.reduce((n, b) => n + b.count, 0);
+    const quarantinedAsObligation = calendar.obligations.find(
+      (b) => b.entity === unverified.entity,
+    )!;
+    expect(counted).toBeGreaterThan(0);
+    expect(quarantinedAsObligation.count).toBe(
+      repo
+        .listComplianceItems(unverified.entity)
+        .filter(
+          (item) =>
+            item.ownerRole === "SECRETARY" &&
+            item.verified &&
+            item.status !== "BLOCKED" &&
+            item.status !== "FILED",
+        ).length,
+    );
+  });
+
+  it("filters the shared calendar to this office rather than copying it", () => {
+    const calendar = secretaryCalendar(secretaryBoth, NOW, repo);
+    const filings = calendar.items.filter((i) => i.kind !== "MEETING");
+    expect(filings.length).toBeGreaterThan(0);
+    for (const item of filings) {
+      expect(item.ownerRole).toBe("SECRETARY");
+    }
+    // The Treasurer's 990s are on the same calendar and are not lifted here.
+    expect(filings.map((i) => i.key)).not.toContain("c-990-jsoa");
+  });
+});
+
+describe("workspace dashboard: three figures, and no blended one", () => {
+  it("headlines exactly three and keeps every other figure", () => {
+    const all = secretaryDashboard(secretaryBoth, NOW, repo).kpis;
+    const { headline, more } = splitHeadlineKpis(all);
+    expect(headline).toHaveLength(3);
+    expect(headline.map((k) => k.key)).toEqual([...HEADLINE_KPI_KEYS]);
+    expect(headline.length + more.length).toBe(all.length);
+    expect(more.map((k) => k.key)).not.toContain(HEADLINE_KPI_KEYS[0]);
+  });
+
+  it("headlines the decision that nobody wrote down", () => {
+    expect(HEADLINE_KPI_KEYS).toContain("decisions-without-motion");
+  });
+
+  it("reports each headline figure per book and never as one number", () => {
+    const { headline } = splitHeadlineKpis(
+      secretaryDashboard(secretaryBoth, NOW, repo).kpis,
+    );
+    for (const kpi of headline) {
+      expect(kpi.value, `${kpi.key} carried no figure`).not.toBeNull();
+      expect(kpi.value!).toMatch(/JSOA/);
+      expect(kpi.value!).toMatch(/JSOF/);
+      expect(kpi.from.length).toBeGreaterThan(20);
+    }
+  });
+
+  it("measures due-soon from one constant across the module", () => {
+    expect(DUE_HORIZON_DAYS).toBe(DUE_SOON_DAYS);
+    expect(DUE_HORIZON_DAYS).toBe(60);
+  });
+});
+
+describe("workspace planning: this office's own half, and no invented inbound", () => {
+  it("separates its own items from other offices', per entity", () => {
+    const planning = secretaryPlanning(secretaryBoth, NOW, repo);
+    expect(planning.meetings.length).toBeGreaterThan(0);
+    expect(planning.meetings.map((m) => m.meeting.entity).sort()).toEqual(["JSOA", "JSOF"]);
+    for (const book of planning.meetings) {
+      for (const item of book.mine) {
+        expect(item.proposedByRole).toBe("SECRETARY");
+        expect(item.entity).toBe(book.meeting.entity);
+      }
+      for (const item of book.fromOtherRoles) {
+        expect(item.proposedByRole).not.toBe("SECRETARY");
+        expect(item.entity).toBe(book.meeting.entity);
+      }
+    }
+  });
+
+  it("takes only the next meeting of each entity, never a merged evening", () => {
+    const planning = secretaryPlanning(secretaryBoth, NOW, repo);
+    const entities = planning.meetings.map((m) => m.meeting.entity);
+    expect(new Set(entities).size).toBe(entities.length);
+    for (const book of planning.meetings) {
+      expect(Date.parse(book.meeting.scheduledStart)).toBeGreaterThanOrEqual(NOW.getTime());
+    }
+  });
+
+  it("treats an item as accepted only once the agenda is adopted", () => {
+    const planning = secretaryPlanning(secretaryBoth, NOW, repo);
+    for (const book of planning.meetings) {
+      for (const item of [...book.mine, ...book.fromOtherRoles]) {
+        expect(item.acceptedForMeetingId).toBe(book.adopted ? book.meeting.id : null);
+      }
+    }
+    // The seed has one adopted and one draft agenda ahead, so both arms run.
+    expect(new Set(planning.meetings.map((b) => b.adopted)).size).toBe(2);
+  });
+
+  it("does not claim an inbound queue no module publishes", () => {
+    const planning = secretaryPlanning(secretaryBoth, NOW, repo);
+    expect(planning.inboundQueueAvailable).toBe(false);
+    expect(planning.inboundNote).toBe(INBOUND_PLANNING_NOTE);
+    expect(planning.inboundNote).toMatch(/does not exist yet/i);
+  });
+});
+
+describe("workspace projects: a filter over one register", () => {
+  it("returns entries of the shared register by identity, never copies", () => {
+    const projects = secretaryProjects(secretaryBoth);
+    for (const project of [...projects.owned, ...projects.contributing]) {
+      expect(PROJECTS).toContain(project);
+    }
+    expect(projects.registerSize).toBe(PROJECTS.length);
+  });
+
+  it("selects what this office owns and contributes to, and nothing else", () => {
+    const projects = secretaryProjects(secretaryBoth);
+    for (const project of projects.owned) {
+      expect(project.ownerRole).toBe("SECRETARY");
+    }
+    for (const project of projects.contributing) {
+      expect(project.contributorRoles).toContain("SECRETARY");
+      expect(project.ownerRole).not.toBe("SECRETARY");
+    }
+    expect(projects.owned.length + projects.contributing.length).toBeLessThan(
+      PROJECTS.length,
+    );
+  });
+});
+
+describe("workspace outside view: an empty surface with a stated reason", () => {
+  it("states no external surface rather than rendering a blank", () => {
+    expect(SECRETARY_OWNED_PAGES.noExternalSurface).toBe(true);
+    expect(SECRETARY_OWNED_PAGES.whyEmpty).toBeTruthy();
+    expect(SECRETARY_OWNED_PAGES.whyEmpty!.length).toBeGreaterThan(80);
+    expect(SECRETARY_OWNED_PAGES.whyEmpty!).toMatch(/minute book/i);
+    expect(SECRETARY_OWNED_PAGES.items).toHaveLength(0);
+  });
+
+  it("still names what is public, in both audiences, never merged", () => {
+    const surface = secretaryPublicRecord("/board/meetings/m-jsoa-2026-10/distribute");
+    expect(surface.noExternalSurface).toBe(false);
+    const audiences = new Set(surface.items.map((i) => i.audience));
+    expect(audiences).toEqual(new Set(["PUBLIC", "MEMBER_OR_DONOR"]));
+    const publicTitles = surface.items
+      .filter((i) => i.audience === "PUBLIC")
+      .map((i) => i.title)
+      .join(" ");
+    expect(publicTitles).toMatch(/990/);
+    expect(publicTitles).toMatch(/determination letter/i);
+    expect(publicTitles).toMatch(/JSOA|Association/);
+    expect(publicTitles).toMatch(/JSOF|Foundation/);
+    expect(
+      surface.items.some(
+        (i) => i.audience === "MEMBER_OR_DONOR" && /notice/i.test(i.title),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("required: a wrong-role request to the workspace is told nothing", () => {
+  it("tells a plain member nothing, and withholds rather than zeroes", () => {
+    expect(secretaryTasks(plainMember, NOW, repo)).toHaveLength(0);
+    const calendar = secretaryCalendar(plainMember, NOW, repo);
+    expect(calendar.items).toHaveLength(0);
+    expect(calendar.obligations).toHaveLength(0);
+    expect(calendar.unresolved).toHaveLength(0);
+    expect(calendar.withheld).toEqual([...ENTITIES]);
+    const planning = secretaryPlanning(plainMember, NOW, repo);
+    expect(planning.meetings).toHaveLength(0);
+    expect(planning.withheld).toEqual([...ENTITIES]);
+    const projects = secretaryProjects(plainMember);
+    expect(projects.owned).toHaveLength(0);
+    expect(projects.contributing).toHaveLength(0);
+    expect(projects.withheld).toEqual([...ENTITIES]);
+  });
+
+  it("tells a Secretary with no second factor nothing", () => {
+    expect(secretaryTasks(secretaryNoMfa, NOW, repo)).toHaveLength(0);
+    expect(secretaryCalendar(secretaryNoMfa, NOW, repo).items).toHaveLength(0);
+    expect(secretaryCalendar(secretaryNoMfa, NOW, repo).withheld).toEqual([...ENTITIES]);
+    expect(secretaryPlanning(secretaryNoMfa, NOW, repo).meetings).toHaveLength(0);
+  });
+
+  it("gives an aggregate-only role the calendar and the agenda, and not the book", () => {
+    const keys = secretaryTasks(treasurerJsoa, NOW, repo).map((k) => k.key);
+    expect(keys.some((k) => k.startsWith("finish-"))).toBe(false);
+    expect(keys.some((k) => k.startsWith("review-drafts-"))).toBe(false);
+
+    const calendar = secretaryCalendar(treasurerJsoa, NOW, repo);
+    expect(calendar.withheld).toEqual(["JSOF"]);
+    for (const item of calendar.items) expect(item.entity).toBe("JSOA");
+
+    const planning = secretaryPlanning(treasurerJsoa, NOW, repo);
+    expect(planning.meetings.map((m) => m.meeting.entity)).toEqual(["JSOA"]);
+    expect(planning.withheld).toEqual(["JSOF"]);
+
+    const projects = secretaryProjects(treasurerJsoa);
+    for (const project of [...projects.owned, ...projects.contributing]) {
+      expect(project.entity).toBe("JSOA");
+    }
+  });
+
+  it("does not let one entity's workspace leak the other's", () => {
+    const calendar = secretaryCalendar(secretaryJsoaOnly, NOW, repo);
+    expect(calendar.withheld).toEqual(["JSOF"]);
+    expect(calendar.items.every((i) => i.entity === "JSOA")).toBe(true);
+    expect(calendar.unresolved.every((u) => u.entity === "JSOA")).toBe(true);
+    expect(JSON.stringify(secretaryPlanning(secretaryJsoaOnly, NOW, repo).meetings)).not.toMatch(
+      /JSOF/,
+    );
   });
 });

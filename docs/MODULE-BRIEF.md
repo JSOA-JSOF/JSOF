@@ -28,6 +28,20 @@ Shared and **read-only to every module**: `src/lib/authz/**`,
 Your own test file is `tests/<module>.test.ts`. Do not edit
 `tests/invariants.test.ts`.
 
+## Reading another module's shared register
+
+Allowed, and in one case required: a **read-only** call into another module's
+library for something the spine says there is exactly one of — the compliance
+calendar, the projects register. That is the filter the spine asks for, and the
+alternative is six private copies, which is the drift the rule exists to stop.
+
+Treasury does this for the compliance calendar and four other roles declined to,
+because this brief did not say. It says now. Wrap the call so a failure there
+degrades your tab rather than taking it out, and never write through it.
+
+Everything else stays off limits: no reaching into another module's internals,
+no writing, no importing its components.
+
 ## Do not
 
 - Do not run `npm install` or add a dependency. The toolchain is fixed.

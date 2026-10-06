@@ -55,6 +55,24 @@ import {
   TRANSFERS,
 } from "../src/lib/treasury/seed";
 import type { Reimbursement, Subscription, Transfer } from "../src/lib/treasury/types";
+import { splitKpis, treasuryKpis } from "../src/lib/treasury/kpis";
+import {
+  DEDUCTIBILITY_FLAG,
+  monthlyCloseDate,
+  NC_131F_DISCLOSURE,
+  NC_131F_STATUTORY_SPELLING,
+  NC_131F_TYPE_SIZE_POINTS,
+  TASK_URGENCIES,
+  TREASURY_FUNCTION_TABS,
+  entitiesInScope,
+  treasurerCalendar,
+  treasurerOutside,
+  treasurerPlanning,
+  treasurerProjects,
+  treasurerTasks,
+} from "../src/lib/treasury/workspace";
+import { PROJECTS } from "../src/lib/projects/register";
+import { SEED_COMPLIANCE } from "../src/lib/meetings/seed";
 
 const repo = new InMemoryTreasuryRepository();
 
@@ -854,6 +872,509 @@ describe("seed and subject integrity", () => {
         s.assignments.some((a) => a.role === "TREASURER" && a.entity === entity),
       );
       expect(holders).toHaveLength(1);
+    }
+  });
+});
+
+/* ================================================================== *
+ * 10. The role workspace spine
+ *
+ * docs/ROLE-WORKSPACE.md is binding and two of its rules are the ones that
+ * fail silently, so they are asserted rather than reviewed:
+ *
+ *   - A task is DERIVED from state. A list a volunteer board must populate by
+ *     hand is dead inside a cycle, so nothing here may be typed in.
+ *   - Four of the five tabs are FILTERS over shared data, not per-role copies.
+ *     A per-role store is a second source of truth that drifts from the first.
+ *
+ * And the module's own rule on top of both: two entities, never blended. A
+ * shared invoice is two figures on two agendas or it is not a figure.
+ * ================================================================== */
+
+describe("the workspace spine keeps the existing function routes", () => {
+  it("leaves every function tab at the route it already had", () => {
+    expect(TREASURY_FUNCTION_TABS.map((tab) => tab.href)).toEqual([
+      "/board/treasury/ledger/JSOA",
+      "/board/treasury/ledger/JSOF",
+      "/board/treasury/transfers",
+      "/board/treasury/subscriptions",
+      "/board/treasury/controls",
+      "/board/treasury/reimbursements",
+    ]);
+  });
+
+  it("keeps the ledger as two routes, because there is no 'both' to select", () => {
+    const ledgers = TREASURY_FUNCTION_TABS.filter((tab) => tab.href.includes("/ledger/"));
+    expect(ledgers).toHaveLength(2);
+    for (const entity of ENTITIES) {
+      expect(ledgers.some((tab) => tab.href.endsWith(`/${entity}`))).toBe(true);
+    }
+  });
+});
+
+describe("Overview tasks are derived from state, never entered", () => {
+  it("derives a task for every outstanding action, with what it blocks", () => {
+    const tasks = treasurerTasks(treasurerJsoa, repo);
+    expect(tasks.length).toBeGreaterThan(0);
+    for (const task of tasks) {
+      // `because` is the field that makes a count actionable. An empty one
+      // would turn the list back into "32 pending".
+      expect(task.because.length, task.key).toBeGreaterThan(40);
+      expect(task.href.startsWith("/board/")).toBe(true);
+      expect(TASK_URGENCIES).toContain(task.urgency);
+    }
+    expect(new Set(tasks.map((t) => t.key)).size).toBe(tasks.length);
+  });
+
+  it("carries the age of the oldest reimbursement into the reason, not just a count", () => {
+    const tasks = treasurerTasks(treasurerJsoa, repo);
+    const claims = tasks.find((task) => task.key === "reimbursements-JSOA");
+    expect(claims).toBeDefined();
+    // A volunteer out of pocket is a retention problem, and the age is the
+    // figure that says so. A count with no age does not.
+    expect(claims!.because).toMatch(/\d+ days/);
+    expect(claims!.urgency).toBe("overdue");
+    expect(claims!.entity).toBe("JSOA");
+  });
+
+  it("splits the reimbursement queues per entity rather than carrying one count", () => {
+    const tasks = treasurerTasks(president, repo);
+    const queues = tasks.filter((task) => task.key.startsWith("reimbursements-JSO"));
+    expect(queues.map((task) => task.entity).sort()).toEqual(["JSOA", "JSOF"]);
+    for (const queue of queues) expect(queue.entity).toBeDefined();
+  });
+
+  it("reserves overdue for something that has actually run past its tolerance", () => {
+    const tasks = treasurerTasks(president, repo);
+    for (const task of tasks.filter((t) => t.urgency === "overdue")) {
+      // Either a person has been waiting too long, or a control finding stands.
+      expect(
+        /\d+ days/.test(task.because) || task.key === "controls-findings",
+        task.key,
+      ).toBe(true);
+    }
+  });
+
+  it("gives a wrong-role reader no tasks at all rather than an unscoped list", () => {
+    expect(treasurerTasks(member(), repo)).toEqual([]);
+
+    // A webmaster holding PUBLIC_CONTENT and nothing financial gets nothing
+    // either, despite being an administrator. Break-glass is a logged request,
+    // not a standing grant, and the Overview does not honour it.
+    const plainWebmaster: Subject = {
+      personId: "p-ferro",
+      assignments: [
+        { role: "WEBMASTER", entity: "JSOA" },
+        { role: "WEBMASTER", entity: "JSOF" },
+      ],
+      mfaSatisfied: true,
+    };
+    expect(treasurerTasks(plainWebmaster, repo).some((t) => t.href.includes("subscriptions")))
+      .toBe(false);
+    expect(entitiesInScope(plainWebmaster)).toEqual([]);
+  });
+
+  it("gives the seeded webmaster treasury tasks only because they also chair comms", () => {
+    // `p-ferro` is Webmaster AND Communications Chair, and the chair's seat
+    // carries FINANCIAL aggregate on the Association. Two roles that are each
+    // legal add up to more reach than either implies, which is a fact about
+    // the board's arrangement rather than a leak — but it must come from the
+    // assignment and never from the Overview wanting rows.
+    expect(entitiesInScope(webmaster)).toEqual(["JSOA"]);
+    const tasks = treasurerTasks(webmaster, repo);
+    expect(tasks.every((task) => task.entity !== "JSOF")).toBe(true);
+    // No row-level work: aggregate scope approves nothing.
+    expect(tasks.some((task) => task.href.includes("reimbursements"))).toBe(false);
+  });
+});
+
+describe("the Overview calendar is a filter over the shared compliance calendar", () => {
+  it("takes the Treasurer's own filings from the one board calendar", () => {
+    const calendar = treasurerCalendar(president, repo);
+    const filings = calendar.items.filter((item) => item.kind === "FILING");
+    expect(filings.length).toBeGreaterThan(0);
+    for (const filing of filings) {
+      // Every one of them is owned by this office in the shared calendar, not
+      // declared here. A treasury copy of the calendar is the mistake the
+      // spine's rule names.
+      expect(filing.ownerRole).toBe("TREASURER");
+      const source = SEED_COMPLIANCE.find((item) => `filing-${item.id}` === filing.key);
+      expect(source, filing.key).toBeDefined();
+      expect(filing.on).toBe(source!.dueDate);
+      expect(filing.title).toBe(source!.title);
+    }
+  });
+
+  it("never claims a filing the shared calendar has not verified", () => {
+    const calendar = treasurerCalendar(president, repo);
+    for (const item of calendar.items.filter((i) => i.kind === "FILING")) {
+      const source = SEED_COMPLIANCE.find((c) => `filing-${c.id}` === item.key)!;
+      expect(Boolean(item.unverified)).toBe(!source.verified);
+    }
+  });
+
+  it("renews a shared invoice as two labelled figures and never as its total", () => {
+    const calendar = treasurerCalendar(president, repo);
+    // Resend is split 70/30 across the entities and renews inside the window.
+    const rows = calendar.items.filter((item) => item.key.startsWith("renewal-sub-resend-"));
+    expect(rows.map((row) => row.entity).sort()).toEqual(["JSOA", "JSOF"]);
+
+    const resend = SUBSCRIPTIONS.find((s) => s.id === "sub-resend")!;
+    const total = subscriptionAnnualCents(resend);
+    const parts = annualByEntity(resend);
+    for (const row of rows) {
+      const part = parts.find((p) => p.entity === row.entity)!;
+      expect(row.title).toContain(formatCents(part.amountCents));
+      // The invoice total appears on neither row. It is a figure about an
+      // organization that does not exist.
+      expect(row.title).not.toContain(formatCents(total));
+    }
+  });
+
+  it("withholds the other entity's dated items and counts them, rather than dropping them", () => {
+    const calendar = treasurerCalendar(treasurerJsoa, repo);
+    expect(calendar.withheldEntities).toEqual(["JSOF"]);
+    expect(calendar.withheldCount).toBeGreaterThan(0);
+    expect(calendar.items.every((item) => item.entity !== "JSOF")).toBe(true);
+  });
+
+  it("gives a wrong-role reader nothing dated, and no zero either", () => {
+    const calendar = treasurerCalendar(member(), repo);
+    expect(calendar.items).toEqual([]);
+    expect(calendar.withheldEntities).toEqual([...ENTITIES]);
+    expect(calendar.withheldCount).toBeGreaterThan(0);
+  });
+
+  it("derives the monthly close rather than storing a list of close dates", () => {
+    expect(monthlyCloseDate("2026-09-30")).toBe("2026-10-15");
+    expect(monthlyCloseDate("2026-10-01")).toBe("2026-10-15");
+    expect(monthlyCloseDate("2026-10-15")).toBe("2026-10-15");
+    expect(monthlyCloseDate("2026-12-20")).toBe("2027-01-15");
+  });
+
+  it("puts one close on each entity's calendar, because the books never merge", () => {
+    const calendar = treasurerCalendar(president, repo);
+    const closes = calendar.items.filter((item) => item.kind === "CYCLE");
+    expect(closes.map((item) => item.entity).sort()).toEqual(["JSOA", "JSOF"]);
+  });
+});
+
+describe("Planning items are derived, and are per entity", () => {
+  it("raises the critical separation-of-duties finding as a decision for its own board", () => {
+    const planning = treasurerPlanning(treasurerJsoa, repo);
+    const sod = planning.items.find((item) => item.id.startsWith("plan-sod-"));
+    expect(sod).toBeDefined();
+    expect(sod!.type).toBe("DECISION");
+    // The Association's Treasurer also chairs the store: authorize, custody,
+    // record and reconcile in one pair of hands.
+    expect(sod!.entity).toBe("JSOA");
+    expect(sod!.title).toMatch(/Treasurer and Store and Sales Chair/);
+    // The role identifiers belong in the model, not on a board member's agenda.
+    expect(sod!.title).not.toMatch(/[A-Z]{3,}_[A-Z]{3,}/);
+    expect(sod!.proposedByRole).toBe("TREASURER");
+    expect(sod!.acceptedForMeetingId).toBeNull();
+  });
+
+  it("derives the Finance Review Officer item from the finding that names it", () => {
+    const planning = treasurerPlanning(treasurerJsoa, repo);
+    const fro = planning.items.find((item) => item.id === "plan-fro-JSOA");
+    expect(fro).toBeDefined();
+    expect(fro!.type).toBe("DECISION");
+    expect(fro!.reason).toMatch(/statements arrive from the institution/);
+    // Independence is mechanical: the platform refuses that role write scope.
+    expect(fro!.reason).toMatch(/refuses it write scope/);
+  });
+
+  it("raises no reviewer item where no finding names one", () => {
+    // p-okonkwo holds the Foundation treasury alone, so no finding stands
+    // about them, and a planning item with nothing behind it would be a wish.
+    const planning = treasurerPlanning(treasurerJsof, repo);
+    expect(planning.items.some((item) => item.id.startsWith("plan-sod-"))).toBe(false);
+    expect(planning.items.some((item) => item.id.startsWith("plan-fro-"))).toBe(false);
+    // But the findings exist and are simply not theirs to see.
+    expect(planning.withheldCount).toBeGreaterThan(0);
+  });
+
+  it("puts a shared invoice on both agendas with each board's own share", () => {
+    const planning = treasurerPlanning(president, repo);
+    const zoom = planning.items.filter((item) => item.id.startsWith("plan-renewal-sub-zoom-"));
+    expect(zoom.map((item) => item.entity).sort()).toEqual(["JSOA", "JSOF"]);
+
+    const subscription = SUBSCRIPTIONS.find((s) => s.id === "sub-zoom")!;
+    const parts = annualByEntity(subscription);
+    const total = subscriptionAnnualCents(subscription);
+    for (const item of zoom) {
+      const part = parts.find((p) => p.entity === item.entity)!;
+      expect(item.title).toContain(formatCents(part.amountCents));
+      expect(item.title).not.toContain(formatCents(total));
+      expect(item.reason).not.toContain(formatCents(total));
+    }
+  });
+
+  it("raises a renewal the board already decided to stop paying for", () => {
+    const planning = treasurerPlanning(treasurerJsoa, repo);
+    const wix = planning.items.find((item) => item.id === "plan-renewal-sub-wix-JSOA");
+    expect(wix).toBeDefined();
+    // Minuted "cancel" in September, renewing in November. A decision nobody
+    // actioned is not a decision.
+    expect(wix!.reason.length).toBeGreaterThan(80);
+  });
+
+  it("says which renewals correctly do not need the board, rather than just omitting them", () => {
+    const planning = treasurerPlanning(president, repo);
+    expect(planning.silentRenewals.length).toBeGreaterThan(0);
+    for (const row of planning.silentRenewals) {
+      expect(row.why).toMatch(/Reviewed/);
+      expect(ENTITIES).toContain(row.entity);
+    }
+    // Nothing is both on the agenda and excused from it.
+    for (const row of planning.silentRenewals) {
+      expect(
+        planning.items.some(
+          (item) => item.title.includes(row.tool) && item.entity === row.entity,
+        ),
+        `${row.tool} on ${row.entity}`,
+      ).toBe(false);
+    }
+  });
+
+  it("estimates every item and sums the estimates for the agenda builder", () => {
+    const planning = treasurerPlanning(president, repo);
+    expect(planning.items.length).toBeGreaterThan(0);
+    for (const item of planning.items) {
+      expect(item.estimateMinutes).toBeGreaterThan(0);
+      expect(Number.isInteger(item.estimateMinutes)).toBe(true);
+      expect(item.reason.length).toBeGreaterThan(40);
+    }
+    expect(planning.totalEstimateMinutes).toBe(
+      planning.items.reduce((sum, item) => sum + item.estimateMinutes, 0),
+    );
+    expect(new Set(planning.items.map((i) => i.id)).size).toBe(planning.items.length);
+  });
+
+  it("gives a wrong-role reader no agenda, and says the sources are withheld", () => {
+    const planning = treasurerPlanning(member(), repo);
+    expect(planning.items).toEqual([]);
+    expect(planning.withheldCount).toBeGreaterThan(0);
+  });
+});
+
+describe("Projects is a filter over the one register, never a copy", () => {
+  it("returns the register's own records rather than treasury copies of them", () => {
+    const { owned, contributing } = treasurerProjects();
+    for (const project of [...owned, ...contributing]) {
+      // Identity, not equality. A copy would pass a deep comparison and then
+      // drift the first time the register changed.
+      expect(PROJECTS).toContain(project);
+    }
+  });
+
+  it("shows what the Treasurer owns and what the Treasurer holds a part of", () => {
+    const { owned, contributing } = treasurerProjects();
+    for (const project of owned) expect(project.ownerRole).toBe("TREASURER");
+    for (const project of contributing) {
+      expect(project.contributorRoles).toContain("TREASURER");
+      expect(project.ownerRole).not.toBe("TREASURER");
+    }
+    // The treasury is a part of other people's work nearly every time, and an
+    // owned column invented to fill the space would be a second source of
+    // truth about work somebody else is accountable for.
+    expect(owned).toHaveLength(0);
+    expect(contributing.length).toBeGreaterThan(0);
+  });
+
+  it("names who holds the other parts, which is where the handoffs are", () => {
+    for (const project of treasurerProjects().contributing) {
+      expect(project.ownerRole).toBeDefined();
+      expect(project.outcome.length).toBeGreaterThan(20);
+    }
+  });
+});
+
+describe("the Outside view is honest about a small surface", () => {
+  it("says it has a surface rather than claiming none", () => {
+    const { surface } = treasurerOutside(president);
+    expect(surface.noExternalSurface).toBe(false);
+    expect(surface.items.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the two audiences separate and never merges them", () => {
+    const { surface } = treasurerOutside(president);
+    const audiences = new Set(surface.items.map((item) => item.audience));
+    expect(audiences.has("PUBLIC")).toBe(true);
+    expect(audiences.has("MEMBER_OR_DONOR")).toBe(true);
+    // A receipt is addressed to one named donor and is never public.
+    for (const item of surface.items.filter((i) => i.key.startsWith("receipts-"))) {
+      expect(item.audience).toBe("MEMBER_OR_DONOR");
+    }
+    // A 990 is public by law.
+    for (const item of surface.items.filter((i) => i.key.startsWith("990-"))) {
+      expect(item.audience).toBe("PUBLIC");
+    }
+  });
+
+  it("names its entity on every item, because the two returns are different documents", () => {
+    const { surface } = treasurerOutside(president);
+    for (const item of surface.items) {
+      const names = /Association|Foundation/.test(item.title);
+      expect(names, item.key).toBe(true);
+    }
+  });
+
+  it("flags the unqualified tax-deductibility claim on the Association's pages", () => {
+    const { surface } = treasurerOutside(president);
+    const flagged = surface.items.find((item) => item.key === "deductibility-claim-JSOA");
+    expect(flagged).toBeDefined();
+    expect(flagged!.audience).toBe("PUBLIC");
+    expect(flagged!.problem).not.toBe("NONE");
+    expect(flagged!.note).toMatch(/501\(c\)\(19\)/);
+    expect(flagged!.note).toMatch(/membership/);
+
+    // And at the length the question deserves, where the column has no room.
+    expect(DEDUCTIBILITY_FLAG.why).toMatch(/war veterans/);
+    expect(DEDUCTIBILITY_FLAG.remedy).toMatch(/counsel/);
+  });
+
+  it("reproduces the Chapter 131F disclosure with the statute's own spelling", () => {
+    // The statute writes "license". This platform writes "licence" in its own
+    // prose, and a quotation is not the platform's prose.
+    expect(NC_131F_STATUTORY_SPELLING).toBe("license");
+    expect(NC_131F_DISCLOSURE).toContain("license");
+    expect(NC_131F_DISCLOSURE).not.toContain("licence");
+    expect(NC_131F_DISCLOSURE).toContain("not an endorsement by the State");
+    expect(NC_131F_TYPE_SIZE_POINTS).toBe(9);
+  });
+
+  it("carries the disclosure into the receipt item's own title", () => {
+    const { surface } = treasurerOutside(president);
+    for (const item of surface.items.filter((i) => i.key.startsWith("receipts-"))) {
+      expect(item.title).toContain("131F");
+      expect(item.title).toContain(`${NC_131F_TYPE_SIZE_POINTS}-point`);
+    }
+  });
+
+  it("withholds the other entity's outward-facing items from a single-entity treasurer", () => {
+    const outside = treasurerOutside(treasurerJsof);
+    expect(outside.withheldEntities).toEqual(["JSOA"]);
+    expect(outside.withheldCount).toBeGreaterThan(0);
+    // The Association's receipts and return are gone from the list.
+    expect(outside.surface.items.some((item) => item.key === "receipts-JSOA")).toBe(false);
+    expect(outside.surface.items.some((item) => item.key === "990-JSOA")).toBe(false);
+  });
+
+  it("shows the published claim to every reader, because it is already public", () => {
+    // Withholding a sentence a stranger can read would be theatre, and it
+    // would mean the Foundation's Treasurer — whose entity gifts ARE
+    // deductible to — never learns the Association's pages say otherwise.
+    for (const subject of [president, treasurerJsoa, treasurerJsof, secretary, member()]) {
+      expect(
+        treasurerOutside(subject).surface.items.some(
+          (item) => item.key === "deductibility-claim-JSOA",
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("gives a wrong-role reader nothing of either entity's, and counts what is withheld", () => {
+    const outside = treasurerOutside(member());
+    // Only the already-public flagged claim survives. No receipt, no return,
+    // no cheque run.
+    expect(outside.surface.items.map((item) => item.key)).toEqual([
+      "deductibility-claim-JSOA",
+    ]);
+    expect(outside.withheldEntities).toEqual([...ENTITIES]);
+    expect(outside.withheldCount).toBeGreaterThan(0);
+  });
+
+  it("says plainly that nothing of the Treasurer's goes through the release queue", () => {
+    expect(treasurerOutside(president).releaseQueueNote.length).toBeGreaterThan(80);
+  });
+});
+
+describe("the Dashboard is cut to three ideas, and the pair is never collapsed", () => {
+  it("promotes exactly three ideas, with net assets as a per-entity pair", () => {
+    const { headline, more } = splitKpis(treasuryKpis(president, repo));
+    // Three ideas: net assets (one idea, two entities), separation of duties,
+    // and the longest reimbursement wait.
+    expect(headline.map((kpi) => kpi.key)).toEqual([
+      "net-assets-JSOA",
+      "net-assets-JSOF",
+      "sod-findings",
+      "reimbursement-wait",
+    ]);
+    const ideas = new Set(
+      headline.map((kpi) => kpi.key.replace(/-(JSOA|JSOF)$/, "")),
+    );
+    expect(ideas.size).toBe(3);
+    expect(more.length).toBeGreaterThan(0);
+  });
+
+  it("keeps the pair adjacent so neither entity reads as the headline", () => {
+    const { headline } = splitKpis(treasuryKpis(president, repo));
+    const a = headline.findIndex((kpi) => kpi.key === "net-assets-JSOA");
+    const b = headline.findIndex((kpi) => kpi.key === "net-assets-JSOF");
+    expect(Math.abs(a - b)).toBe(1);
+  });
+
+  it("loses no tile: everything is either a headline or behind the disclosure", () => {
+    const kpis = treasuryKpis(president, repo);
+    const { headline, more } = splitKpis(kpis);
+    expect([...headline, ...more].map((k) => k.key).sort()).toEqual(
+      kpis.map((k) => k.key).sort(),
+    );
+  });
+
+  it("withholds a headline figure rather than showing it as zero", () => {
+    const { headline } = splitKpis(treasuryKpis(treasurerJsoa, repo));
+    const jsof = headline.find((kpi) => kpi.key === "net-assets-JSOF")!;
+    expect(jsof.status).toBe("withheld");
+    expect(jsof.value).toBeNull();
+    expect(jsof.from).toMatch(/not yours to see|withheld/i);
+  });
+});
+
+describe("no workspace view carries a money figure that names no entity", () => {
+  it("passes the no-blend guard on every shape the workspace returns", () => {
+    for (const subject of [president, treasurerJsoa, treasurerJsof, secretary]) {
+      // The guard throws if a `*Cents` number sits outside an entity-scoped
+      // object. A combined figure has nowhere to sit in any of these.
+      expect(() =>
+        assertUnblended(
+          {
+            tasks: treasurerTasks(subject, repo),
+            calendar: treasurerCalendar(subject, repo),
+            planning: treasurerPlanning(subject, repo),
+            outside: treasurerOutside(subject),
+          },
+          "treasuryWorkspace",
+        ),
+      ).not.toThrow();
+    }
+  });
+
+  it("names no field anywhere in the workspace that reads as a cross-entity total", () => {
+    const shapes = {
+      calendar: treasurerCalendar(president, repo),
+      planning: treasurerPlanning(president, repo),
+    };
+    const keys = new Set<string>();
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (typeof node !== "object" || node === null) return;
+      for (const [key, child] of Object.entries(node)) {
+        keys.add(key);
+        walk(child);
+      }
+    };
+    walk(shapes);
+    for (const key of keys) {
+      // `totalEstimateMinutes` is agenda length, not money, and is allowed.
+      // A cross-entity MONEY field is what must not exist.
+      expect(
+        /(combined|consolidated|bothEntities|grandTotal)/i.test(key) ||
+          /^(total|overall|group)\w*Cents$/i.test(key),
+        key,
+      ).toBe(false);
     }
   });
 });

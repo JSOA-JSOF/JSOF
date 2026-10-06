@@ -1,23 +1,27 @@
 import Link from "next/link";
 
-import { KpiGrid } from "@/components/dashboard/Kpi";
+import { CalendarStrip, TaskList } from "@/components/workspace-shell/RoleTabs";
 import { ENTITIES } from "@/lib/authz/model";
-import { agendaTotals } from "@/lib/meetings/agenda";
+import { getCurrentPersona, getCurrentSubject } from "@/lib/authz/session";
 import { canReadMinutes, readableEntities } from "@/lib/meetings/access";
+import { agendaTotals } from "@/lib/meetings/agenda";
 import {
   ENTITY_LONG_NAME,
   NOTICE_BASIS_NOTE,
   formatMeetingDate,
-  formatMeetingTime,
 } from "@/lib/meetings/distribution";
-import { getCurrentPersona, subjectFor } from "@/lib/authz/session";
-import { secretaryDashboard } from "@/lib/meetings/kpis";
 import { bookRefForMeeting } from "@/lib/meetings/reference";
 import { meetingsRepository } from "@/lib/meetings/repository";
+import {
+  HORIZON_NOTE,
+  secretaryCalendar,
+  secretaryTasks,
+  taskCountsByUrgency,
+} from "@/lib/meetings/workspace";
 import { Refused, Shell, hueFor } from "./Shell";
 import styles from "./meetings.module.css";
 
-export const metadata = { title: "Minute book and compliance — Secretary" };
+export const metadata = { title: "Overview — Secretary" };
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Agenda in draft",
@@ -27,96 +31,169 @@ const STATUS_LABEL: Record<string, string> = {
   MINUTES_ADOPTED: "Minutes adopted",
 };
 
-export default async function SecretaryDashboard() {
+/**
+ * The Overview tab, and the landing screen for this office.
+ *
+ * Two things, both filtered to the signed-in role: what is waiting, and what is
+ * dated. The figures moved to the Dashboard tab; this tab took the doing.
+ *
+ * Every task here is DERIVED from the state of the books. Nothing on this
+ * screen can be typed in, which is deliberate: a task list a volunteer board
+ * has to populate is dead within a cycle, and that is the same failure as the
+ * spreadsheet this platform replaces.
+ */
+export default async function SecretaryOverview() {
   const persona = await getCurrentPersona();
-  const subject = subjectFor(persona);
+  const subject = await getCurrentSubject();
   const visible = readableEntities(subject, ENTITIES);
   const repo = meetingsRepository();
-  const pairs = repo.listSameDayPairs();
 
-  // One authorized read. It calls through access.ts per entity before it
-  // touches the repository, and withholds rather than zeroes what this role
-  // cannot see.
-  const dashboard = secretaryDashboard(subject);
+  // Both reads are guarded per entity inside the library, before the first
+  // repository call, and withhold rather than zero what this role cannot see.
+  const tasks = secretaryTasks(subject);
+  const calendar = secretaryCalendar(subject);
+
+  const pairs = repo.listSameDayPairs();
+  const noticeTasks = tasks.filter((task) => task.key.startsWith("notice-"));
+  const urgency = taskCountsByUrgency(tasks);
+
+  // Withheld, not empty. The shared task and calendar components say "nothing
+  // is waiting on you" when handed an empty list, which is true for a reader
+  // with scope and a lie for a reader without it. A reader who may see none of
+  // this is told that instead of being shown a reassuring blank.
+  if (visible.length === 0) {
+    return (
+      <Shell entity={null} meetingId={null} active="overview" persona={persona}>
+        <p className={styles.eyebrow}>Secretary &middot; Overview</p>
+        <h1 className={styles.title}>Two boards, two books</h1>
+        <Refused
+          reason={`${persona.label} holds no board grant on member data for either entity, so neither meeting list nor either minute book is readable. This page is not showing an empty task list or an empty calendar: both are withheld, which is a different answer from nothing being due, and a reader acting on a false zero is the failure these screens exist to prevent.`}
+        />
+      </Shell>
+    );
+  }
 
   return (
-    <Shell entity={null} meetingId={null} active="meetings" persona={persona}>
-      <p className={styles.eyebrow}>Secretary</p>
+    <Shell entity={null} meetingId={null} active="overview" persona={persona}>
+      <p className={styles.eyebrow}>Secretary &middot; Overview</p>
       <h1 className={styles.title}>Two boards, two books</h1>
       <p className={styles.lede}>
-        The Association and the Foundation meet the same evening with largely the
-        same people in the room. Separate minute books are the cheapest evidence
-        that the separation is real, so every agenda, motion, vote and minute in
-        here records which board was in session. A minute that does not name its
-        entity cannot be saved. These figures measure one thing: whether that
-        record is actually complete, because an incomplete minute book is only
-        ever discovered when somebody needs it.
-      </p>
-      <p className={styles.rowMeta}>
-        As of {dashboard.asOf} &middot; every figure per entity, none blended
+        The Association and the Foundation meet the same evening with largely
+        the same people in the room. Separate minute books are the cheapest
+        evidence that the separation is real, so every agenda, motion, vote and
+        minute in here records which board was in session, and a minute that
+        does not name its entity cannot be saved. Nothing on this page is ever
+        counted across the two.
       </p>
 
-      {visible.length === 0 ? (
-        <Refused
-          reason={`${persona.label} holds no board grant on member data for either entity, so neither meeting list nor either minute book is readable. Every figure on this page is withheld rather than shown as zero: the two are not the same answer.`}
-        />
-      ) : null}
-
-      <h2 className={styles.sectionHead}>The record, as it stands</h2>
-      <KpiGrid kpis={dashboard.kpis} />
-
-      <div className={styles.quiet}>
-        <strong>The standard the notice figure is measured against.</strong>{" "}
-        {NOTICE_BASIS_NOTE}
+      <h2 className={styles.sectionHead}>Waiting on you</h2>
+      <p className={styles.sectionNote}>
+        Derived from the state of the books, never entered by hand. Each row
+        says what it blocks, because a count with a verb on it does not tell
+        anyone whether to open it tonight.
+      </p>
+      {tasks.length > 0 && (
+        <div className={styles.meterLegend} style={{ marginTop: 12 }}>
+          <span>{urgency.overdue} overdue</span>
+          <span>{urgency.soon} dated and close</span>
+          <span>{urgency.open} open, with no date owed</span>
+        </div>
+      )}
+      <div style={{ marginTop: 14 }}>
+        <TaskList tasks={tasks} />
       </div>
 
-      {visible.length === 1 && (
+      {noticeTasks.length > 0 && (
         <div className={styles.quiet}>
-          This role reaches {visible[0]} only. The other entity&apos;s figures are
-          withheld, not counted as zero, and its book is not listed below. That is
-          the boundary working rather than an error.
+          <strong>The notice period those rows measure against is an assumption.</strong>{" "}
+          {NOTICE_BASIS_NOTE}
         </div>
       )}
 
-      {dashboard.minuteEntities.length === 0 && visible.length > 0 && (
-        <div className={styles.quiet}>
-          This role reads the meeting list and the compliance calendar but not the
-          minute book itself, which names who moved, who seconded and who recused.
-          The four figures that come out of the book are withheld above. Custody of
-          the book is a separate question again: writing in it requires the office
-          of Secretary for that entity, not merely access to it.
-        </div>
-      )}
+      <h2 className={styles.sectionHead}>Dated, and this office&rsquo;s</h2>
+      <p className={styles.sectionNote}>
+        The one shared compliance calendar, filtered to the entries this office
+        owns, plus the meetings ahead. A filter rather than a copy: the
+        Treasurer&rsquo;s filings and the Webmaster&rsquo;s renewals are on the
+        same calendar and are not this office&rsquo;s to carry.{" "}
+        <Link href="/board/meetings/calendar">The whole calendar is on the Compliance tab.</Link>
+      </p>
 
-      <h2 className={styles.sectionHead}>What follows from this</h2>
-      {dashboard.actions.length === 0 ? (
-        <p className={styles.sectionNote}>
-          Nothing is outstanding within this role&apos;s reach. That is either the
-          record being complete or the record being out of view, and the figures
-          above say which.
-        </p>
-      ) : (
-        <ul className={styles.list}>
-          {dashboard.actions.map((action) => (
-            <li key={action.key}>
-              <div className={styles.rowHead}>
-                <Link href={action.href} className={styles.rowTitle}>
-                  {action.label}
-                </Link>
-                <span
-                  className={
-                    action.urgent
-                      ? `${styles.chip} ${styles.chipWarn}`
-                      : styles.chip
-                  }
-                >
-                  {action.count} waiting
-                </span>
-              </div>
-              <p className={styles.rowNote}>{action.note}</p>
-            </li>
+      {calendar.obligations.length > 0 && (
+        <div className={styles.meterLegend} style={{ marginTop: 12 }}>
+          {calendar.obligations.map((book) => (
+            <span key={book.entity}>
+              {book.entity} {book.count} confirmed{" "}
+              {book.count === 1 ? "obligation" : "obligations"}
+            </span>
           ))}
-        </ul>
+          <span>
+            {calendar.unresolved.length} not counted as{" "}
+            {calendar.unresolved.length === 1 ? "an obligation" : "obligations"}
+          </span>
+        </div>
+      )}
+
+      <CalendarStrip items={calendar.items} />
+
+      <div className={styles.quiet}>
+        <strong>The window &ldquo;due&rdquo; means.</strong> {HORIZON_NOTE}
+      </div>
+
+      {calendar.withheld.length > 0 && (
+        <div className={styles.quiet}>
+          {calendar.withheld.join(" and ")}{" "}
+          {calendar.withheld.length === 1 ? "is" : "are"} withheld from this
+          role, so {calendar.withheld.length === 1 ? "that entity's" : "those entities'"}{" "}
+          entries are absent from this list rather than counted as none.
+        </div>
+      )}
+
+      {calendar.unresolved.length > 0 && (
+        <>
+          <h2 className={styles.sectionHead}>On the calendar, and not an obligation</h2>
+          <div className={styles.warn}>
+            <div className={styles.warnHead}>
+              {calendar.unresolved.length} entries nobody owes yet, and they are
+              counted in nothing.
+            </div>
+            <p className={styles.rowNote}>
+              These are kept here so the question does not get lost, and kept out
+              of every count so the question does not quietly become a deadline.
+              None of them appears in a due-soon figure, an overdue figure or the
+              obligation counts above. None may be put to the board as fact, and
+              the unverified one cannot be marked filed at all. Each needs
+              somebody to read the source and either replace the entry with the
+              real duty or delete it.
+            </p>
+          </div>
+          <ul className={styles.list}>
+            {calendar.unresolved.map((entry) => (
+              <li key={entry.key}>
+                <div className={styles.rowHead}>
+                  <Link href={entry.href} className={styles.rowTitle}>
+                    {entry.title}
+                  </Link>
+                  <span className={`${styles.chip} ${styles.chipWarn}`}>
+                    {entry.reason === "UNVERIFIED"
+                      ? "Unverified duty"
+                      : "Blocked, may not apply"}
+                  </span>
+                </div>
+                <div className={styles.chipRow}>
+                  <span className={styles.chip}>{entry.entity}</span>
+                  <span className={styles.chip}>
+                    {entry.reason === "UNVERIFIED"
+                      ? `reported commencement ${entry.shownDate}`
+                      : `placeholder date ${entry.shownDate}`}
+                  </span>
+                  <span className={styles.chip}>counted nowhere</span>
+                </div>
+                <p className={styles.rowNote}>{entry.note}</p>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       {visible.length > 0 && (
@@ -124,7 +201,7 @@ export default async function SecretaryDashboard() {
           <h2 className={styles.sectionHead}>Both books, meeting by meeting</h2>
           <p className={styles.sectionNote}>
             Listed by the evening the two boards sit, and never merged into one
-            list. Each panel is one entity&apos;s own meeting, with its own
+            list. Each panel is one entity&rsquo;s own meeting, with its own
             reference series.
           </p>
 
@@ -166,6 +243,9 @@ export default async function SecretaryDashboard() {
                           <span className={styles.chip}>
                             {STATUS_LABEL[meeting.status] ?? meeting.status}
                           </span>
+                          <span className={styles.chip}>
+                            {totals.itemCount} items, {totals.committedMinutes} min
+                          </span>
                           {meeting.noticeSentAt === null && (
                             <span className={`${styles.chip} ${styles.chipWarn}`}>
                               Notice not sent
@@ -177,34 +257,6 @@ export default async function SecretaryDashboard() {
                             </span>
                           )}
                         </div>
-                        <table className={styles.table} style={{ marginTop: 12 }}>
-                          <tbody>
-                            <tr>
-                              <th scope="row">Time</th>
-                              <td>{formatMeetingTime(meeting.scheduledStart)}</td>
-                            </tr>
-                            <tr>
-                              <th scope="row">Scheduled</th>
-                              <td className={styles.mono}>
-                                {meeting.scheduledMinutes} min
-                              </td>
-                            </tr>
-                            <tr>
-                              <th scope="row">Agenda</th>
-                              <td className={styles.mono}>
-                                {totals.itemCount} items, {totals.committedMinutes} min
-                                committed
-                              </td>
-                            </tr>
-                            <tr>
-                              <th scope="row">Quorum</th>
-                              <td className={styles.mono}>
-                                {meeting.attendees.filter((a) => a.present).length} present
-                                of {meeting.quorum} required
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
                         <div className={styles.buttonRow}>
                           <Link
                             href={`/board/meetings/${meeting.id}/agenda`}
@@ -243,25 +295,6 @@ export default async function SecretaryDashboard() {
           })}
         </>
       )}
-
-      <h2 className={styles.sectionHead}>Minute reference format</h2>
-      <p className={styles.sectionNote}>
-        Other modules point at minutes by reference, and an inter-entity transfer
-        cannot be recorded without one on both sides. The format carries the
-        entity in the string, because a bare item number is exactly the ambiguity
-        two books exist to prevent.
-      </p>
-      <pre className={styles.pre}>
-        {`JSOA-2026-10-min-4
-└──┘ └──┘ └┘     └┘
- │    │    │      └ item number in that meeting's adopted agenda
- │    │    └─────── calendar month, two digits
- │    └──────────── calendar year
- └───────────────── entity
-
-JSOF-2026-10-S2-min-2   second meeting of that entity in the month
-JSOA-2026-10            the whole book for that meeting`}
-      </pre>
     </Shell>
   );
 }

@@ -31,9 +31,15 @@ decision a figure would change, leave it out.
 **5. Honest arithmetic.** Integer cents, no floats. A percentage states its
 denominator. A median says it is a median.
 
-**6. Then say what to do.** Under the figures, the actions that follow from
-them, each with a count and a link into the work. A dashboard that only reports
-is a report.
+**6. Then say what to do — but not here.** A dashboard that only reports is a
+report, so the actions matter. They live on the role's **Overview** tab, not
+under the figures: see `docs/ROLE-WORKSPACE.md`. One list, in one place, so
+there are not two to keep in step. Leave a line on the Dashboard pointing at
+the Overview and nothing more.
+
+This rule used to say the opposite, and said it while the spine said otherwise.
+Three agents each resolved the contradiction the same way before it was fixed
+here.
 
 ## What a tile looks like
 

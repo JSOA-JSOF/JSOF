@@ -48,6 +48,12 @@ import {
   reviewerCalibration,
 } from "../src/lib/scholarships/review";
 import { loadVerificationQueue } from "../src/lib/scholarships/verification";
+import {
+  loadScholarshipsOutside,
+  loadScholarshipsOverview,
+  loadScholarshipsPlanning,
+  loadScholarshipsProjects,
+} from "../src/lib/scholarships/workspace";
 
 function repo(): ScholarshipRepository {
   return newScholarshipRepository({ seed: true });
@@ -138,6 +144,34 @@ const READS: {
     call: (r, s) => loadScholarshipsDashboard(r, s),
   },
   {
+    name: "loadScholarshipsOverview",
+    reviewerMay: false,
+    why: "The chair's task list. The whole cycle's outstanding work: the files short of a full committee, the Wounded Patriot verification queue, the awards with the board and the cheque run. A reviewer's queue is their own files, which is nextForReview above.",
+    call: (r, s) => loadScholarshipsOverview(r, s),
+  },
+  {
+    name: "loadScholarshipsPlanning",
+    reviewerMay: false,
+    why: "What this seat is putting on the board's agenda, including the unconfirmed award amount and the retention period for named applicants. Filing an item on an agenda is a board seat's act and a reviewer is not a board seat.",
+    call: (r, s) => loadScholarshipsPlanning(r, s),
+  },
+  {
+    name: "loadScholarshipsProjects",
+    reviewerMay: false,
+    why: "The register filtered to this seat, naming what is blocked and by whom, including the eligibility rule with counsel and the unconfirmed award amount. Accountability for a line of effort, not scoring.",
+    call: (r, s) => loadScholarshipsProjects(r, s),
+  },
+  {
+    name: "loadScholarshipsOutside",
+    reviewerMay: false,
+    // The only read in this module guarded on PUBLIC_CONTENT rather than
+    // APPLICANT, and the boundary falls out of the role table rather than
+    // being tightened to produce it: the chair holds PUBLIC_CONTENT WRITE and
+    // a scholarship reviewer holds no PUBLIC_CONTENT grant at all.
+    why: "Ownership of the published pages this function is seen through, plus what is queued for release. A PUBLIC_CONTENT grant, which a reviewer does not hold.",
+    call: (r, s) => loadScholarshipsOutside(r, s),
+  },
+  {
     name: "loadChairRows",
     reviewerMay: false,
     why: "Every file in the cycle with its outcome, not just the ones they score.",
@@ -205,6 +239,15 @@ describe("what a scholarship reviewer may reach", () => {
     // 14 since the chair's dashboard landed: one read, guarded at APPLICANT
     // WRITE rather than the AGGREGATE the old overview used, because a tile
     // that totals the awards is still the awards.
-    expect(READS).toHaveLength(14);
+    //
+    // 18 since the role workspace landed. Four reads, one per spine tab that
+    // needs data, and all four on the chair's side. Three are APPLICANT WRITE
+    // for the reason the dashboard is: they carry the cycle's work, its
+    // unresolved money and what it is accountable for. The fourth, the Outside
+    // view, is PUBLIC_CONTENT READ, which is the first read in this module to
+    // sit on a class other than APPLICANT — a reviewer holds no
+    // PUBLIC_CONTENT grant at all, so no guard had to be tightened to keep
+    // them out of it.
+    expect(READS).toHaveLength(18);
   });
 });

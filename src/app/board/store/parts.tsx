@@ -1,9 +1,9 @@
-import Link from "next/link";
-
 import { AuthzError, type Subject } from "@/lib/authz/policy";
+import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import { storeSodBanner } from "@/lib/store/board";
 import { SECOND_COUNTER_NOTE } from "@/lib/store/inventory";
 import { SEED_PEOPLE } from "@/lib/store/seed";
+import type { WorkspaceTab } from "@/lib/workspace/types";
 
 import styles from "./board.module.css";
 
@@ -12,16 +12,22 @@ import styles from "./board.module.css";
  *
  * The brand bar, the platform nav, the dev persona switcher and the global
  * separation-of-duties strip all come from the shared board shell in
- * `src/app/board/layout.tsx`, so none of them are repeated here. What is here
- * is the store section nav, the store-specific consequence of the Treasurer
- * and Store Chair overlap, and the panel a screen shows when the signed-in
- * role does not reach the data.
+ * `src/app/board/layout.tsx`, so none of them are repeated here. The tab strip
+ * comes from `@/components/workspace-shell/RoleTabs`. What is here is the
+ * store-specific consequence of the Treasurer and Store Chair overlap, and the
+ * panel a screen shows when the signed-in role does not reach the data.
  */
 
 export const HUE_STYLE = { ["--hue" as string]: "var(--jsoa)" };
 
-const NAV = [
-  { href: "/board/store", label: "Overview" },
+export const STORE_BASE = "/board/store";
+
+/**
+ * The role's own work, appended after the spine by `RoleTabs`. These keep the
+ * routes they already had: the five spine tabs are new screens and did not
+ * displace anything.
+ */
+export const STORE_FUNCTION_TABS = [
   { href: "/board/store/orders", label: "Orders" },
   { href: "/board/store/receipts", label: "Member vs non-member receipts" },
   { href: "/board/store/tax", label: "Sales tax" },
@@ -29,22 +35,31 @@ const NAV = [
   { href: "/board/store/refunds", label: "Refunds" },
 ];
 
+/** Spine routes to the tab key `RoleTabs` marks as current. */
+const SPINE: Record<string, WorkspaceTab> = {
+  "/board/store": "overview",
+  "/board/store/dashboard": "dashboard",
+  "/board/store/planning": "planning",
+  "/board/store/projects": "projects",
+  "/board/store/outside": "outside",
+};
+
+/**
+ * The tab strip is `@/components/workspace-shell/RoleTabs`, shared across all
+ * six workspaces, and the store's own screens are passed to it as
+ * `functionTabs` rather than being listed in a second nav here. A per-role tab
+ * strip is exactly the per-role copy `docs/ROLE-WORKSPACE.md` forbids.
+ */
 export function StoreHeader({ here, title }: { here: string; title: string }) {
   return (
     <div style={HUE_STYLE}>
       <span className={styles.status}>JSOA store</span>
       <h1 className={styles.title}>{title}</h1>
-      <nav className={styles.nav}>
-        {NAV.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`${styles.navLink} ${item.href === here ? styles.navOn : ""}`}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+      <RoleTabs
+        base={STORE_BASE}
+        current={SPINE[here] ?? here}
+        functionTabs={STORE_FUNCTION_TABS}
+      />
     </div>
   );
 }
@@ -97,17 +112,20 @@ export function Refused({
   needed,
   held,
   because,
+  onClass = "financial records",
 }: {
   what: string;
   needed: string;
   held: string;
   because: string;
+  /** The data class in words. Not every store screen reads financial records. */
+  onClass?: string;
 }) {
   return (
     <div className={styles.refused}>
       <span className={styles.refusedHead}>Not available to this role</span>
       <p className={styles.findingBody}>
-        {what} needs {needed} on financial records for JSOA. This role holds {held}.
+        {what} needs {needed} on {onClass} for JSOA. This role holds {held}.
       </p>
       <p className={styles.findingMitigation}>{because}</p>
     </div>

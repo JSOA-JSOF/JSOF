@@ -1,47 +1,47 @@
-import Link from "next/link";
-
+import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import type { Persona } from "@/lib/authz/session";
+import type { WorkspaceTab } from "@/lib/workspace/types";
 
 import styles from "./board.module.css";
 
-export const BOARD_TABS = [
-  { key: "overview", href: "/board/membership", label: "Overview" },
-  { key: "queue", href: "/board/membership/queue", label: "Application queue" },
-  { key: "exceptions", href: "/board/membership/exceptions", label: "Chair exceptions" },
-  { key: "roster", href: "/board/membership/roster", label: "Roster" },
-  { key: "audit", href: "/board/membership/audit", label: "30-day audit" },
-  { key: "composition", href: "/board/membership/composition", label: "Composition" },
-] as const;
-
-export type BoardTab = (typeof BOARD_TABS)[number]["key"];
+/**
+ * The membership module's own work, appended after the spine.
+ *
+ * These five kept their routes when the workspace was built on top of them.
+ * The spine's five tabs are new screens; nothing that already worked moved or
+ * changed address, because a bookmark a volunteer has is a thing to keep.
+ */
+export const FUNCTION_TABS = [
+  { href: "/board/membership/queue", label: "Application queue" },
+  { href: "/board/membership/exceptions", label: "Chair exceptions" },
+  { href: "/board/membership/roster", label: "Roster" },
+  { href: "/board/membership/audit", label: "30-day audit" },
+  { href: "/board/membership/composition", label: "Composition" },
+];
 
 /**
- * Chrome for the membership pages: the module's own tabs, inside the shared
- * board shell. The role switcher and the controls findings strip belong to the
- * shell and are not repeated here.
+ * Chrome for the membership pages: the shared role-workspace tab strip, inside
+ * the shared board shell. The tab strip itself is `@/components/workspace-shell`
+ * and is not reimplemented here — six roles rendering six slightly different
+ * tab strips is how a platform stops being one platform.
+ *
+ * The role switcher and the controls findings strip belong to the board shell
+ * and are not repeated.
  */
 export function MembershipShell({
   current,
   children,
 }: {
-  current: BoardTab;
+  /** A spine tab, or the href of one of the function tabs. */
+  current: WorkspaceTab | string;
   children: React.ReactNode;
 }) {
   return (
     <div className={styles.page} style={{ ["--hue" as string]: "var(--jsoa)" }}>
-      <nav className={styles.nav} aria-label="Membership">
-        {BOARD_TABS.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            className={`${styles.navLink} ${tab.key === current ? styles.navHere : ""}`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
-
-      <div className={styles.body}>{children}</div>
+      <div className={styles.body}>
+        <RoleTabs base="/board/membership" current={current} functionTabs={FUNCTION_TABS} />
+        {children}
+      </div>
     </div>
   );
 }

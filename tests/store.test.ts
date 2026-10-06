@@ -28,7 +28,7 @@ import {
   boardTaxPeriods,
   storeChairPersonIdFor,
 } from "../src/lib/store/board";
-import { parseCartParam, totalCart } from "../src/lib/store/cart";
+import { formatCents, parseCartParam, totalCart } from "../src/lib/store/cart";
 import {
   CatalogueError,
   findProductForViewer,
@@ -39,6 +39,22 @@ import {
   type CatalogueViewer,
 } from "../src/lib/store/catalogue";
 import { buildPhysicalCount, inventoryRows } from "../src/lib/store/inventory";
+import {
+  storeKpis,
+  storeMoreFigures,
+} from "../src/lib/store/kpis";
+import {
+  memberColumn,
+  publicColumn,
+  storeCalendar,
+  storeOutsideSummary,
+  storeOutsideSurface,
+  storePlanningItems,
+  storeProjects,
+  storeStockDrivingEvents,
+  storeTasks,
+} from "../src/lib/store/workspace";
+import { PROJECTS } from "../src/lib/projects/register";
 import { placeOrder, snapshotBuyerType } from "../src/lib/store/orders";
 import {
   approveRefund,
@@ -46,7 +62,7 @@ import {
   REFUND_SECOND_APPROVER_THRESHOLD_CENTS,
   refundRequiresSecondApprover,
 } from "../src/lib/store/refunds";
-import { freshStoreRepository } from "../src/lib/store/repository";
+import { freshStoreRepository, storeRepository } from "../src/lib/store/repository";
 import { receiptsReport, receiptsReportCsv, yearPeriod } from "../src/lib/store/reports";
 import {
   MEMBER_RESTRICTED_SKUS,
@@ -114,6 +130,34 @@ const FINANCE_REVIEW = subject("p-langley", [
   { role: "FINANCE_REVIEW_OFFICER", entity: "JSOA" },
 ]);
 const NO_MFA = subject("p-ferris", [{ role: "TREASURER", entity: "JSOA" }], false);
+
+/**
+ * A fixed clock for the workspace tests. The seed's quarters, filing periods
+ * and refund ages are all relative to a date, so a test that used the real
+ * clock would start failing on its own in January.
+ */
+const NOW = new Date("2026-10-06T12:00:00.000Z");
+
+/** Active lines that hold stock. A print-on-demand line has no shelf to count. */
+function stockedSkus(): string[] {
+  return storeRepository()
+    .listProducts(STORE_ENTITY)
+    .filter((p) => p.active && p.fulfilment === "stock")
+    .map((p) => p.sku);
+}
+
+/**
+ * Stocked lines with no count recorded for the quarter, read live rather than
+ * hardcoded: earlier tests in this file record counts through the authorized
+ * path and the repository is a module singleton, so a fixed 7 here would be a
+ * test that depended on its own position in the file.
+ */
+function uncountedSkus(quarter: string): string[] {
+  const counts = storeRepository().listCounts(STORE_ENTITY);
+  return stockedSkus().filter(
+    (sku) => !counts.some((c) => c.sku === sku && c.quarter === quarter),
+  );
+}
 
 const MEMBER_ONLY_SKU = "JSOA-COIN-FOUNDERS";
 const PUBLIC_SKU = "JSOA-COIN-STD";
@@ -926,5 +970,318 @@ describe("a print-on-demand product does not break the inventory view", () => {
     expect(polo?.unitsOnHand).toBe(87);
     expect(polo?.lastCount?.countedUnits).toBe(86);
     expect(polo?.varianceUnits).toBe(-1);
+  });
+});
+
+/* ================================================================== *
+ * 9. The role workspace spine
+ * ================================================================== */
+
+describe("the Overview's tasks are derived from state, never entered", () => {
+  it("derives the quarterly count as the sharpest item, and says what it is a control for", () => {
+    const tasks = storeTasks(STORE_CHAIR_ONLY, NOW);
+    const count = tasks.find((t) => t.key === "quarterly-count");
+    expect(count).toBeDefined();
+    // 2026-Q3 closed short of every stocked line, so the control has already
+    // been missed once and this is overdue rather than merely due.
+    expect(count?.urgency).toBe("overdue");
+    expect(count?.count).toBe(uncountedSkus("2026-Q4").length);
+    expect(count?.because).toMatch(/2026-Q3 already closed at 1 of \d+ lines/);
+    expect(count?.because).toMatch(/compensating control/);
+    expect(count?.because).toMatch(/authorize, custody, record and reconcile/);
+    // The count is due at the quarter end, which is a real date and not a guess.
+    expect(count?.dueOn).toBe("2026-12-31");
+  });
+
+  it("gives every task a because, because a bare count tells a volunteer nothing", () => {
+    for (const task of storeTasks(STORE_CHAIR_ONLY, NOW)) {
+      expect(task.because.length).toBeGreaterThan(40);
+      expect(task.href.startsWith("/board/store")).toBe(true);
+      expect(task.entity).toBe(STORE_ENTITY);
+    }
+  });
+
+  it("ties the member split task to the Pub. 3386 consequence, not to a timer", () => {
+    const task = storeTasks(STORE_CHAIR_ONLY, NOW).find(
+      (t) => t.key === "receipts-separate-records",
+    );
+    expect(task).toBeDefined();
+    expect(task?.because).toMatch(/unrelated business income/);
+    // It fires because non-member orders exist in the period.
+    expect(task?.count).toBe(
+      receiptsReport(freshStoreRepository().listOrders(STORE_ENTITY), yearPeriod(2026)).rows.find(
+        (r) => r.buyerType === "NON_MEMBER",
+      )?.orderCount,
+    );
+  });
+
+  it("never counts a print-on-demand line as a stock shortage", () => {
+    const tasks = storeTasks(STORE_CHAIR_ONLY, NOW);
+    const count = tasks.find((t) => t.key === "quarterly-count");
+    const stocked = stockedSkus().length;
+    const active = storeRepository().listProducts(STORE_ENTITY).filter((p) => p.active).length;
+    expect(active).toBeGreaterThan(stocked);
+    // The figure can never exceed the stocked lines, whatever has been counted:
+    // a line with no shelf is not an uncounted line.
+    expect(count?.count).toBeLessThanOrEqual(stocked);
+    expect(count?.count).toBe(uncountedSkus("2026-Q4").length);
+    expect(count?.because).toContain(`of ${stocked} lines`);
+    const cover = tasks.find((t) => t.key === "stock-cover");
+    if (cover) expect(cover.count).toBeLessThanOrEqual(stocked);
+  });
+
+  it("surfaces the separation-of-duties problem only to the person holding both seats", () => {
+    const both = storeTasks(TREASURER_AND_STORE_CHAIR, NOW);
+    const sod = both.find((t) => t.key === "sod-to-agenda");
+    expect(sod?.urgency).toBe("overdue");
+    expect(sod?.because).toMatch(/Treasurer and Store Chair/);
+    // And the count task tells that person they cannot enter it themselves.
+    expect(both.find((t) => t.key === "quarterly-count")?.because).toMatch(
+      /you cannot enter it yourself/,
+    );
+    expect(storeTasks(STORE_CHAIR_ONLY, NOW).some((t) => t.key === "sod-to-agenda")).toBe(
+      false,
+    );
+  });
+
+  it("withholds the row-level order task rather than widening the grant", () => {
+    // AWAITING_PAYMENT orders exist, so the only reason the Store Chair does
+    // not get this task is the level: it needs READ and the chair holds
+    // AGGREGATE. The Treasurer, who holds WRITE, does get it.
+    expect(
+      storeTasks(STORE_CHAIR_ONLY, NOW).some((t) => t.key === "orders-awaiting-payment"),
+    ).toBe(false);
+    expect(storeTasks(TREASURER, NOW).some((t) => t.key === "orders-awaiting-payment")).toBe(
+      true,
+    );
+  });
+
+  it("refuses a role with no reach into the store's financial records", () => {
+    expect(() => storeTasks(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
+    expect(() => storeCalendar(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
+    expect(() => storePlanningItems(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
+    expect(() => storeTasks(NO_MFA, NOW)).toThrow(AuthzError);
+  });
+});
+
+describe("the Overview's calendar does not invent an obligation", () => {
+  it("marks every sales-tax filing date unverified, because no registration is on record", () => {
+    const filings = storeCalendar(STORE_CHAIR_ONLY, NOW).filter((i) => i.kind === "FILING");
+    expect(filings.length).toBeGreaterThan(0);
+    for (const filing of filings) {
+      expect(filing.unverified).toBe(true);
+      expect(filing.title).toMatch(/NCDOR/);
+    }
+  });
+
+  it("does not mark the quarterly count unverified, because the quarter is a real date", () => {
+    const cycle = storeCalendar(STORE_CHAIR_ONLY, NOW).find((i) => i.kind === "CYCLE");
+    expect(cycle?.on).toBe("2026-12-31");
+    expect(cycle?.unverified).toBeUndefined();
+  });
+
+  it("puts no event on the calendar while the register holds no date for one", () => {
+    const events = storeStockDrivingEvents();
+    expect(events.length).toBeGreaterThan(0);
+    // Every stock-driving event in the register is undated, so none of them
+    // may appear as a dated calendar item.
+    for (const event of events) expect(event.dated).toBe(false);
+    expect(storeCalendar(STORE_CHAIR_ONLY, NOW).some((i) => i.kind === "EVENT")).toBe(false);
+  });
+});
+
+describe("the Dashboard tab is three tiles and the split is one of them", () => {
+  it("shows three headline tiles, not seven", () => {
+    expect(storeKpis(STORE_CHAIR_ONLY, NOW)).toHaveLength(3);
+  });
+
+  it("reports the member and non-member split as a single compliance tile", () => {
+    const kpis = storeKpis(STORE_CHAIR_ONLY, NOW);
+    const split = kpis.filter((k) => k.key === "receipts-member-split");
+    expect(split).toHaveLength(1);
+    // Not two tiles. The split is one record, not a segmentation.
+    expect(kpis.some((k) => k.key === "receipts-member")).toBe(false);
+    expect(kpis.some((k) => k.key === "receipts-non-member")).toBe(false);
+    expect(split[0].value).toMatch(/member/);
+    expect(split[0].value).toMatch(/non-member/);
+    expect(split[0].from).toMatch(/recorded at the sale and never recomputed/);
+  });
+
+  it("reports collected sales tax beside the split and never inside it", () => {
+    const kpis = storeKpis(STORE_CHAIR_ONLY, NOW);
+    const report = receiptsReport(
+      freshStoreRepository().listOrders(STORE_ENTITY),
+      yearPeriod(2026),
+    );
+    const tax = kpis.find((k) => k.key === "sales-tax-held-in-trust");
+    const split = kpis.find((k) => k.key === "receipts-member-split");
+
+    // The tax tile is exactly what was collected, on its own.
+    expect(tax?.value).toBe(formatCents(report.totalSalesTaxCollectedCents));
+    // And no tile anywhere carries receipts plus tax, which would be wrong.
+    const wrong = formatCents(
+      report.totalGrossReceiptsCents + report.totalSalesTaxCollectedCents,
+    );
+    for (const kpi of [...kpis, ...storeMoreFigures(STORE_CHAIR_ONLY, NOW)]) {
+      expect(kpi.value ?? "").not.toContain(wrong);
+    }
+    expect(split?.value).not.toContain(formatCents(report.totalSalesTaxCollectedCents));
+  });
+
+  it("keeps the rest of the figures, behind the disclosure rather than deleted", () => {
+    const headline = storeKpis(STORE_CHAIR_ONLY, NOW).map((k) => k.key);
+    const more = storeMoreFigures(STORE_CHAIR_ONLY, NOW).map((k) => k.key);
+    expect(more).toContain("tax-record-gaps");
+    expect(more).toContain("refunds-awaiting-second-approver");
+    expect(more).toContain("stock-cover");
+    // No figure appears in both tiers.
+    for (const key of more) expect(headline).not.toContain(key);
+  });
+
+  it("refuses the whole dashboard to a role that holds nothing here", () => {
+    expect(() => storeKpis(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
+    expect(() => storeMoreFigures(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
+  });
+});
+
+describe("Planning carries the three the board actually has to settle", () => {
+  it("raises fulfilment, the chair's seat and NCDOR registration, all as decisions", () => {
+    const items = storePlanningItems(STORE_CHAIR_ONLY, NOW);
+    expect(items.map((i) => i.id)).toEqual([
+      "store-plan-fulfilment",
+      "store-plan-separation-of-duties",
+      "store-plan-ncdor-registration",
+    ]);
+    for (const item of items) {
+      expect(item.type).toBe("DECISION");
+      expect(item.proposedByRole).toBe("STORE_CHAIR");
+      expect(item.entity).toBe(STORE_ENTITY);
+      expect(item.estimateMinutes).toBeGreaterThan(0);
+      // The Secretary's agenda builder sets this. This module never does.
+      expect(item.acceptedForMeetingId).toBeNull();
+    }
+  });
+
+  it("builds the fulfilment reason from the flag as it currently stands", () => {
+    const item = storePlanningItems(STORE_CHAIR_ONLY, NOW)[0];
+    const stocked = SEED_PRODUCTS.filter((p) => p.active && p.fulfilment === "stock").length;
+    const pod = SEED_PRODUCTS.filter(
+      (p) => p.active && p.fulfilment === "print_on_demand",
+    ).length;
+    expect(item.reason).toContain(`${stocked} lines are held as stock`);
+    expect(item.reason).toContain(`${pod} are printed to order`);
+    expect(item.reason).toMatch(/because the board has not decided/);
+  });
+
+  it("carries the live separation-of-duties finding for whoever is in the seats", () => {
+    const forBoth = storePlanningItems(TREASURER_AND_STORE_CHAIR, NOW)[1];
+    const finding = separationOfDutiesFindings(
+      TREASURER_AND_STORE_CHAIR.personId,
+      TREASURER_AND_STORE_CHAIR.assignments,
+    ).find((f) => f.roles.includes("STORE_CHAIR") && f.roles.includes("TREASURER"));
+    expect(finding).toBeDefined();
+    expect(forBoth.reason).toContain(finding!.finding);
+
+    // And says so plainly when nobody holds both, rather than implying one.
+    expect(storePlanningItems(STORE_CHAIR_ONLY, NOW)[1].reason).toMatch(
+      /Nobody holds both seats/,
+    );
+  });
+});
+
+describe("Projects is a filter over the one register, not a copy", () => {
+  it("returns the register's own objects rather than rebuilt ones", () => {
+    const { owned, contributing } = storeProjects();
+    for (const project of [...owned, ...contributing]) {
+      // Identity, not equality: a copy would pass a deep comparison and then
+      // drift the first time another chair edited the register.
+      expect(PROJECTS).toContain(project);
+    }
+  });
+
+  it("shows what the role owns and what it contributes to, and owns nothing today", () => {
+    const { owned, contributing, linesTouched } = storeProjects();
+    expect(owned).toHaveLength(0);
+    expect(contributing.map((p) => p.id)).toContain("prj-golf");
+    for (const project of contributing) {
+      expect(project.contributorRoles).toContain("STORE_CHAIR");
+    }
+    expect(linesTouched.map((l) => l.title)).toContain("Support JSOC family events");
+  });
+});
+
+describe("the Outside view keeps the two audiences apart", () => {
+  const surface = () => storeOutsideSurface(STORE_CHAIR_ONLY);
+
+  it("has both columns and merges neither", () => {
+    const s = surface();
+    expect(s.noExternalSurface).toBe(false);
+    expect(publicColumn(s).length).toBeGreaterThan(0);
+    expect(memberColumn(s).length).toBeGreaterThan(0);
+    // Every item belongs to exactly one audience.
+    expect(publicColumn(s).length + memberColumn(s).length).toBe(s.items.length);
+  });
+
+  it("names no member-restricted line anywhere in the public column", () => {
+    const text = publicColumn(surface())
+      .map((item) => `${item.title} ${item.note ?? ""} ${item.href}`)
+      .join(" ");
+    const restricted = SEED_PRODUCTS.filter((p) => !p.publiclyPurchasable);
+    expect(restricted.length).toBeGreaterThan(0);
+    for (const product of restricted) {
+      expect(text).not.toContain(product.sku);
+      expect(text).not.toContain(product.name);
+      if (product.collection) expect(text).not.toContain(product.collection);
+    }
+  });
+
+  it("carries no count of what is hidden on the public side", () => {
+    // A count is the same disclosure as a locked row: it tells a visitor that
+    // something exists. The number lives in the member column instead.
+    const restricted = SEED_PRODUCTS.filter((p) => p.active && !p.publiclyPurchasable).length;
+    const publicText = publicColumn(surface())
+      .map((item) => `${item.title} ${item.note ?? ""}`)
+      .join(" ");
+    expect(publicText).not.toMatch(new RegExp(`${restricted}\\s+(more|member|hidden|other)`));
+    const memberText = memberColumn(surface())
+      .map((item) => `${item.title} ${item.note ?? ""}`)
+      .join(" ");
+    expect(memberText).toContain(String(restricted));
+  });
+
+  it("flags the live site's store link to a construction page", () => {
+    const flagged = publicColumn(surface()).find(
+      (item) => item.problem === "PLACEHOLDER_PUBLISHED",
+    );
+    expect(flagged).toBeDefined();
+    expect(flagged?.note).toMatch(/under construction/);
+    expect(flagged?.note).toMatch(/main navigation/);
+  });
+
+  it("links an item page by a publicly purchasable SKU only", () => {
+    const item = publicColumn(surface()).find((i) => i.key === "public-item-pages");
+    const sku = item?.href.replace("/store/item/", "");
+    const product = SEED_PRODUCTS.find((p) => p.sku === sku);
+    expect(product?.publiclyPurchasable).toBe(true);
+  });
+
+  it("reads public content, and refuses a role that holds none of it", () => {
+    // The Treasurer holds FINANCIAL WRITE and no PUBLIC_CONTENT at all, which
+    // is the right refusal: what the site publishes is not a financial record.
+    expect(() => storeOutsideSurface(TREASURER)).toThrow(AuthzError);
+    expect(() => storeOutsideSummary(TREASURER)).toThrow(AuthzError);
+    expect(() => storeOutsideSurface(NO_MFA)).toThrow(AuthzError);
+    // And the Store Chair, who holds PUBLIC_CONTENT WRITE, is not refused.
+    expect(() => storeOutsideSurface(STORE_CHAIR_ONLY)).not.toThrow();
+  });
+
+  it("counts the member catalogue as every active line, stocked or printed", () => {
+    const summary = storeOutsideSummary(STORE_CHAIR_ONLY);
+    expect(summary.activeLines).toBe(SEED_PRODUCTS.filter((p) => p.active).length);
+    expect(summary.publicLines + summary.memberOnlyLines).toBe(summary.activeLines);
+    // Print-on-demand lines are present in the catalogue counts and absent
+    // from anything that would read as a stock figure.
+    expect(summary.publicPodLines).toBeGreaterThan(0);
+    expect(summary.collections.length).toBeGreaterThan(0);
   });
 });

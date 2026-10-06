@@ -6,35 +6,6 @@
   --hue: var(--jsoa);
 }
 
-/* Nav ------------------------------------------------------------ */
-
-.nav {
-  border-bottom: 1px solid var(--line-2);
-  padding: 0 20px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 20px;
-}
-
-.navLink {
-  padding: 11px 0;
-  font-size: 0.92rem;
-  text-decoration: none;
-  color: var(--ink-2);
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-}
-
-.navLink:hover {
-  color: var(--ink);
-}
-
-.navHere {
-  color: var(--hue);
-  border-bottom-color: var(--hue);
-  font-weight: 600;
-}
-
 /* Body ----------------------------------------------------------- */
 
 .body {
@@ -515,4 +486,33 @@
   .tierRow {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* "More figures" disclosure -------------------------------------- */
+
+/* The four tiles that did not earn the headline. Closed by default and plainly
+   labelled: the point of cutting to three is that a volunteer reads three, and
+   a disclosure that looks like a section heading is not closed in practice. */
+.more {
+  margin-top: 36px;
+  border-top: 1px solid var(--line-2);
+  padding-top: 14px;
+}
+
+.moreSummary {
+  cursor: pointer;
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.moreSummary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.more[open] .moreSummary {
+  margin-bottom: 10px;
 }

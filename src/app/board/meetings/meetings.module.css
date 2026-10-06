@@ -44,32 +44,20 @@
   color: var(--hue, var(--mute));
 }
 
-.nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
+/*
+ * The tab strip itself is the shared spine component. This only gives it the
+ * module's page gutter and panel background; the tabs, their type and their
+ * current-tab rule all come from components/workspace-shell, so the six role
+ * workspaces cannot drift apart visually.
+ */
+.tabStrip {
   padding: 0 20px;
-  border-bottom: 1px solid var(--line-2);
   background: var(--panel);
 }
 
-.navLink {
-  font-size: 0.85rem;
-  text-decoration: none;
-  color: var(--ink-2);
-  padding: 9px 12px;
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-}
-
-.navLink:hover {
-  color: var(--ink);
-}
-
-.navLinkActive {
-  color: var(--hue, var(--ink));
-  border-bottom-color: var(--hue, var(--ink));
-  font-weight: 600;
+.tabStrip > nav {
+  margin-bottom: 0;
+  border-bottom-color: var(--line-2);
 }
 
 .body {

@@ -47,6 +47,7 @@ import type {
   SubscriptionRegister,
   Transfer,
 } from "./types";
+import type { TaskUrgency } from "../workspace/types";
 
 /** Imported for the shape only. `@/components/dashboard/Kpi` is read-only. */
 import type { Kpi } from "../../components/dashboard/Kpi";
@@ -57,17 +58,48 @@ export type { Kpi };
  * Shapes the dashboard returns
  * ------------------------------------------------------------------ */
 
+/**
+ * One thing that needs doing, derived from state.
+ *
+ * This list is the Overview tab's task list rather than the Dashboard's: the
+ * Dashboard keeps the figures and the Overview takes the doing, per
+ * docs/ROLE-WORKSPACE.md. It stays in this file because every one of these is
+ * computed from the same single authorized read as the tiles, and splitting
+ * the read in two would mean asking the repository twice and risking two
+ * different answers on one screen.
+ *
+ * `note` says which items and what happens if nobody acts. `because` says what
+ * it BLOCKS, which is the question a volunteer deciding whether to open it
+ * tonight is actually asking. They are different sentences on purpose.
+ */
 export type TreasuryAction = {
   key: string;
   /** What to do, in the imperative. */
   label: string;
   /** Which items, and what happens if nobody does it. */
   note: string;
+  /** What this blocks, in one line. Becomes `RoleTask.because`. */
+  because: string;
   /** Short enough for the count column. "3", not "3 Association, 1 Foundation". */
   count: string;
+  /** Countable items behind the count, for `RoleTask.count`. */
+  countValue: number;
   href: string;
   /** Urgent colours the count. Used sparingly, or it stops meaning anything. */
   urgent: boolean;
+  /**
+   * Sort order on the Overview. `overdue` is reserved for something that has
+   * already run past the date or the tolerance it had, never for "important".
+   */
+  urgency: TaskUrgency;
+  /**
+   * Set only where the action belongs to ONE entity. An action covering both
+   * is split into one per entity rather than carrying a blended count, which
+   * is why the reimbursement queues produce two actions and not one.
+   */
+  entity?: Entity;
+  /** Set when a date drives the urgency. */
+  dueOn?: string;
 };
 
 /**
@@ -553,9 +585,16 @@ function buildActions(data: Gathered): TreasuryAction[] {
           `Still outstanding: ` +
           first.unmet.map((rule) => rule.requirement).join(" ") +
           ` Until all of them are met it is not recordable on either book.`,
+        because:
+          `Blocks the money moving at all. ${first.transfer.id} is one transaction sitting ` +
+          `on two ledgers, so until every condition is met neither the ${first.transfer.fromEntity} ` +
+          `nor the ${first.transfer.toEntity} book can record it, and the purpose it was raised ` +
+          `for is unfunded.`,
         count: `${blocked.length}`,
+        countValue: blocked.length,
         href: "/board/treasury/transfers",
         urgent: true,
+        urgency: "soon",
       });
     }
   }
@@ -575,9 +614,32 @@ function buildActions(data: Gathered): TreasuryAction[] {
       note:
         `Oldest is ${oldest.claim.id}, ${oldest.ageDays} days since it was incurred. ` +
         `Every one of these is a volunteer who paid out of their own pocket.`,
+      /* The age is the whole point of this line. A volunteer who paid out of
+         pocket and is still waiting is a retention problem before it is an
+         accounting one, and a count with no age does not say that. */
+      because:
+        `${oldest.claim.claimantName} has been out of pocket ${oldest.ageDays} days on ` +
+        `${oldest.claim.id} (${formatCentsWithSymbol(oldest.claim.amountCents)}). ` +
+        (mine.length > 1
+          ? `${mine.length - 1} other ${plural(mine.length - 1, "claim is", "claims are")} ` +
+            `behind it, ${mine
+              .slice(1)
+              .map((entry) => `${entry.ageDays} days`)
+              .join(", ")}. `
+          : "") +
+        `This blocks the person, not the books: the next time the ${ENTITY_NAME[queue.entity]} ` +
+        `needs somebody to front a venue deposit, this is the wait they will remember.`,
       count: `${mine.length}`,
+      countValue: mine.length,
       href: "/board/treasury/reimbursements",
       urgent: oldest.ageDays > REIMBURSEMENT_WAIT_PROBLEM_DAYS,
+      urgency:
+        oldest.ageDays > REIMBURSEMENT_WAIT_PROBLEM_DAYS
+          ? "overdue"
+          : oldest.ageDays > REIMBURSEMENT_WAIT_WATCH_DAYS
+            ? "soon"
+            : "open",
+      entity: queue.entity,
     });
   }
 
@@ -591,9 +653,17 @@ function buildActions(data: Gathered): TreasuryAction[] {
         `${noReceipt.map((entry) => entry.claim.id).join(", ")}. Approval is refused ` +
         `without one: a reimbursement with no receipt is an unsubstantiated payment ` +
         `to a board member.`,
+      because:
+        `Blocks the approval itself, so the claimant is waiting on a document rather than ` +
+        `on a decision and nobody has told them. ` +
+        `${noReceipt
+          .map((entry) => `${entry.claim.id}, ${entry.ageDays} days`)
+          .join("; ")}.`,
       count: `${noReceipt.length}`,
+      countValue: noReceipt.length,
       href: "/board/treasury/reimbursements",
       urgent: false,
+      urgency: "open",
     });
   }
 
@@ -608,9 +678,15 @@ function buildActions(data: Gathered): TreasuryAction[] {
         note:
           `${missing.map((row) => row.subscription.tool).join(", ")}. Record the credential ` +
           `in the shared password manager, not in one volunteer's personal inbox.`,
+        because:
+          `Blocks handover. If the one named owner of ${missing[0].subscription.tool} is ` +
+          `unreachable, nobody on either board can get into the account, change the card ` +
+          `on it or switch it off, and the renewal happens anyway.`,
         count: `${missing.length}`,
+        countValue: missing.length,
         href: "/board/treasury/subscriptions",
         urgent: true,
+        urgency: "soon",
       });
     }
 
@@ -632,9 +708,17 @@ function buildActions(data: Gathered): TreasuryAction[] {
         note:
           `The first is ${soonest}. Each of these renews by default if nobody decides, ` +
           `and the cash it commits is on the row below.`,
+        because:
+          `Blocks nothing and that is the problem: silence is a yes. The first falls on ` +
+          `${soonest}, and after that the board is committed for another term without ` +
+          `having decided anything. The cash each entity commits is stated per entity on ` +
+          `the Dashboard.`,
         count: `${dueSoon.length}`,
+        countValue: dueSoon.length,
         href: "/board/treasury/subscriptions",
         urgent: false,
+        urgency: "soon",
+        dueOn: soonest,
       });
     }
   }
@@ -654,9 +738,18 @@ function buildActions(data: Gathered): TreasuryAction[] {
             )}`
           : "Answer the controls findings on the record",
       note: `${lead.mitigation} Accepting a finding knowingly is a board decision to minute.`,
+      because:
+        (critical.length > 0
+          ? `Blocks the board being able to say its money is controlled. ${lead.finding} `
+          : `${lead.finding} `) +
+        `Until it is either remedied or knowingly accepted in a minute, every other figure ` +
+        `on these screens rests on one person's word.`,
       count: `${findings.length}`,
+      countValue: findings.length,
       href: "/board/treasury/controls",
       urgent: critical.length > 0,
+      urgency: critical.length > 0 ? "overdue" : "open",
+      entity: lead.entity,
     });
   }
 
@@ -695,6 +788,60 @@ export function treasuryDashboard(
     renewalWindowDays: RENEWAL_WINDOW_DAYS,
     renewalWindowEndDate: addDays(data.asOf, RENEWAL_WINDOW_DAYS),
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Headline figures
+ *
+ * docs/ROLE-WORKSPACE.md cuts the Dashboard to one to three figures. A
+ * volunteer looking at seven numbers has none.
+ *
+ * Three IDEAS, not three tiles. Net assets is a per-entity PAIR, which is one
+ * idea rendered twice because the Association and the Foundation are separate
+ * legal persons and a combined movement describes an entity that does not
+ * exist. Collapsing the pair into one tile to save a slot would be the exact
+ * blend this module is built to refuse, so the pair costs one slot and renders
+ * as two labelled figures.
+ *
+ * The three, and why each one would change what the Treasurer does next:
+ *
+ *   1. Net assets, change over the period, per entity. The only figure that
+ *      says whether each treasury is going the right way. A negative change
+ *      changes the next spending decision.
+ *   2. Separation-of-duties findings outstanding. On this board the
+ *      Association's Treasurer also chairs the store, which is authorize,
+ *      custody, record and reconcile in one pair of hands. It changes whether
+ *      the board appoints a Finance Review Officer this month or next year.
+ *   3. Longest wait on an unapproved reimbursement. A volunteer who paid out
+ *      of pocket and is still waiting is a retention problem, and the age is
+ *      the figure that says so. It changes what gets opened tonight.
+ *
+ * Behind the disclosure: annual operating cost per entity, which is a planning
+ * figure reviewed at renewal rather than a weekly one; and subscriptions with
+ * no second administrator, which already drives a task on the Overview and a
+ * finding on the Subscriptions tab and does not need a headline too.
+ * ------------------------------------------------------------------ */
+
+export const HEADLINE_KPI_KEYS: readonly string[] = [
+  ...ENTITIES.map((entity) => `net-assets-${entity}`),
+  "sod-findings",
+  "reimbursement-wait",
+];
+
+/**
+ * Split the tiles into the headline figures and the rest.
+ *
+ * Order follows `HEADLINE_KPI_KEYS` rather than the order the tiles were
+ * built in, so the pair stays adjacent and the headline does not reshuffle
+ * when a tile is added below.
+ */
+export function splitKpis(kpis: Kpi[]): { headline: Kpi[]; more: Kpi[] } {
+  const byKey = new Map(kpis.map((kpi) => [kpi.key, kpi]));
+  const headline = HEADLINE_KPI_KEYS.map((key) => byKey.get(key)).filter(
+    (kpi): kpi is Kpi => kpi !== undefined,
+  );
+  const headlineKeys = new Set(headline.map((kpi) => kpi.key));
+  return { headline, more: kpis.filter((kpi) => !headlineKeys.has(kpi.key)) };
 }
 
 /** The figures alone, for a caller that wants the tiles and nothing else. */

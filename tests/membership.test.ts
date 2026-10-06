@@ -47,6 +47,14 @@ import {
   type MembershipDashboard,
 } from "../src/lib/membership/kpis";
 import { personaById, subjectFor } from "../src/lib/authz/personas";
+import { PROJECTS } from "../src/lib/projects/register";
+import {
+  guardWorkspaceRead,
+  loadMembershipOverview,
+  loadMembershipPlanning,
+  membershipOutside,
+  membershipProjects,
+} from "../src/lib/membership/workspace";
 import { BOARD_CONTACTS } from "../src/lib/membership/contacts";
 import {
   ACKNOWLEDGMENT_PATH,
@@ -976,7 +984,10 @@ describe("the membership dashboard", () => {
     for (const key of ["oldest-undecided", "vouch-expiry", "record-defects", "contactable"]) {
       const withheld = tile(dashboard, key);
       expect(withheld.value).toBeNull();
-      expect(withheld.status).toBe("unmeasured");
+      // `withheld`, not `unmeasured`. Both are null and neither is zero, but
+      // "not measurable yet" and "not yours to see" are different answers and
+      // the shared tile renders them differently on purpose.
+      expect(withheld.status).toBe("withheld");
       expect(withheld.needs).toMatch(/READ on member records/);
     }
 
@@ -1117,5 +1128,203 @@ describe("the membership dashboard", () => {
     expect(requiredNumerator(THRESHOLDS.ARMED_FORCES, 40)).toBe(30);
     // 97.5% of 41 is 39.975. Forty records, not thirty-nine.
     expect(requiredNumerator(THRESHOLDS.MEMBERS_CADETS_RELATIVES, 41)).toBe(40);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * The VP Membership role workspace
+ *
+ * `docs/ROLE-WORKSPACE.md` as requirements:
+ *
+ *   1. The Dashboard leads with three figures, and the 90% war-veteran test is
+ *      one of them. The other four still exist.
+ *   2. Tasks are DERIVED. Nothing can be typed, a count of zero is not a task,
+ *      and a count the reader may not see is withheld rather than shown as
+ *      none.
+ *   3. Projects is a FILTER over the one register, not a copy.
+ *   4. A wrong-role request to every tab fails, and the denial is logged.
+ *   5. The two outside audiences are never merged.
+ * ------------------------------------------------------------------ */
+
+describe("the membership role workspace", () => {
+  it("leads the dashboard with three tiles and keeps the other four", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+
+    expect(dashboard.headline).toHaveLength(3);
+    expect(dashboard.more).toHaveLength(4);
+    // The partition is a view of one list, so nothing is lost and nothing is
+    // counted twice.
+    expect([...dashboard.headline, ...dashboard.more].map((k) => k.key).sort()).toEqual(
+      dashboard.kpis.map((k) => k.key).sort(),
+    );
+  });
+
+  it("puts the failing 90% test first, because it is the one that contradicts the site", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    expect(dashboard.headline[0].key).toBe("composition-war-veterans");
+    expect(dashboard.headline[0].status).toBe("problem");
+    // The 75% test passes with margin, and good is unremarkable, so it is not
+    // one of the three.
+    expect(dashboard.more.map((k) => k.key)).toContain("composition-armed-forces");
+  });
+
+  it("derives every task from the dashboard's own actions", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const overview = await loadMembershipOverview(store, actor("vp-membership"), dashboard);
+
+    // One list, two renderings. A task that is not an action would mean a
+    // second source of truth, which is the thing the spine forbids.
+    for (const task of overview.tasks) {
+      const action = dashboard.actions.find((a) => `task-${a.key}` === task.key);
+      expect(action, task.key).toBeDefined();
+      expect(task.count).toBe(action!.n);
+      expect(task.because.length).toBeGreaterThan(30);
+    }
+    expect(overview.tasks.length).toBeGreaterThan(0);
+  });
+
+  it("does not render a task for work with nothing waiting", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const overview = await loadMembershipOverview(store, actor("vp-membership"), dashboard);
+    // A count of zero is a figure, and it has a tile. It is not a task.
+    for (const task of overview.tasks) expect(task.count).not.toBe(0);
+  });
+
+  it("withholds a task rather than showing an aggregate reader no work", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-ops"));
+    const overview = await loadMembershipOverview(store, actor("vp-ops"), dashboard);
+
+    // The composition item survives: the report needs only AGGREGATE, so the
+    // board matter the roster produced still reaches the reader.
+    expect(overview.tasks.map((t) => t.key)).toEqual(["task-composition"]);
+    expect(overview.withheld?.items).toHaveLength(4);
+    expect(overview.withheld?.why).toMatch(/READ on member records/);
+    // The thing that must never happen: a withheld count rendered as none.
+    for (const task of overview.tasks) expect(task.count).not.toBeNull();
+  });
+
+  it("marks a calendar date nobody has established as unverified", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-membership"));
+    const overview = await loadMembershipOverview(store, actor("vp-membership"), dashboard);
+
+    const hygiene = overview.calendar.find((item) => item.key === "cal-roster-hygiene")!;
+    expect(hygiene.unverified).toBe(true);
+    // Everything else on the calendar is a real date out of the data or the
+    // register, so nothing else may claim to be unverified or need to.
+    for (const item of overview.calendar.filter((i) => i.key !== "cal-roster-hygiene")) {
+      expect(item.unverified, item.key).toBeUndefined();
+      expect(item.on).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  it("keeps the cohort audit and vouch dates off an aggregate reader's calendar", async () => {
+    const store = repo();
+    const dashboard = await loadMembershipDashboard(store, actor("vp-ops"));
+    const overview = await loadMembershipOverview(store, actor("vp-ops"), dashboard);
+    const keys = overview.calendar.map((item) => item.key);
+    // Both are derived from one member's cleared payment and one applicant's
+    // window, so they are record-level however short they look.
+    expect(keys).not.toContain("cal-cohort-audit");
+    expect(keys).not.toContain("cal-vouch-window");
+    expect(keys).toContain("cal-roster-hygiene");
+  });
+
+  it("takes the failing test to the board and the record fixes to the chair", async () => {
+    const store = repo();
+    const planning = await loadMembershipPlanning(store, actor("vp-membership"));
+    const ids = planning.items.map((item) => item.id);
+
+    expect(ids).toContain("plan-war-veteran-test");
+    expect(ids).toContain("plan-augmentee-decider");
+    // Correcting a self-contradicting record is the chair's own work and is a
+    // task on the Overview. It is not an agenda item.
+    expect(ids).not.toContain("plan-record-defects");
+
+    const war = planning.items.find((item) => item.id === "plan-war-veteran-test")!;
+    expect(war.type).toBe("DECISION");
+    expect(war.reason).toContain("33 of 40");
+    expect(war.proposedByRole).toBe("VP_MEMBERSHIP");
+    // Nothing is on an agenda until the Secretary puts it there, and that
+    // handoff is not built yet.
+    expect(war.acceptedForMeetingId).toBeNull();
+    expect(planning.handoffWired).toBe(false);
+  });
+
+  it("gives an aggregate reader the composition items and withholds the augmentee count", async () => {
+    const store = repo();
+    const planning = await loadMembershipPlanning(store, actor("vp-ops"));
+    const ids = planning.items.map((item) => item.id);
+    expect(ids).toContain("plan-war-veteran-test");
+    expect(ids).not.toContain("plan-augmentee-decider");
+    expect(planning.withheld?.items).toHaveLength(1);
+  });
+
+  it("filters the one register instead of keeping a membership copy", async () => {
+    const { owned, contributing } = membershipProjects();
+    // Every row came out of the shared register, by identity.
+    for (const project of [...owned, ...contributing]) {
+      expect(PROJECTS.find((p) => p.id === project.id), project.id).toBeDefined();
+    }
+    // This office owns nothing and contributes to the scholarship cycle, which
+    // is the handoff the tab exists to make visible.
+    expect(owned).toHaveLength(0);
+    expect(contributing.map((p) => p.id)).toContain("prj-scholarship-cycle");
+    for (const project of contributing) {
+      expect(project.contributorRoles).toContain("VP_MEMBERSHIP");
+    }
+  });
+
+  it("never merges the two outside audiences", () => {
+    const outside = membershipOutside(actor("vp-membership"));
+    expect(outside.surface.noExternalSurface).toBe(false);
+
+    const audiences = new Set(outside.surface.items.map((item) => item.audience));
+    expect(audiences).toEqual(new Set(["PUBLIC", "MEMBER_OR_DONOR"]));
+    // Every item belongs to exactly one audience, so no row can be rendered
+    // into both columns.
+    for (const item of outside.surface.items) {
+      expect(["PUBLIC", "MEMBER_OR_DONOR"], item.key).toContain(item.audience);
+      if (item.problem !== "NONE") expect(item.note, item.key).toBeTruthy();
+    }
+  });
+
+  it("flags the dead membership URL and the unqualified dues statement", () => {
+    const outside = membershipOutside(actor("vp-membership"));
+    const dead = outside.surface.items.find((item) => item.key === "out-membership-404")!;
+    expect(dead.audience).toBe("PUBLIC");
+    expect(dead.problem).toBe("DEAD_LINK");
+    expect(dead.note).toMatch(/404/);
+
+    const dues = outside.surface.items.find((item) => item.key === "out-dues-deductibility")!;
+    expect(dues.note).toMatch(/not a charitable contribution/);
+  });
+
+  it("reads this role's reach over public content from the role table", () => {
+    // The office that owns membership cannot change a word of the pages that
+    // describe it. Computed, so it stays true if the role table changes.
+    expect(membershipOutside(actor("vp-membership")).publicContentLevel).toBe("NONE");
+    expect(membershipOutside(actor("vp-ops")).publicContentLevel).toBe("READ");
+  });
+
+  it("refuses every workspace tab to a role with no member data at all", async () => {
+    const store = repo();
+    for (const persona of ["member", "webmaster", "scholarships"]) {
+      await expect(
+        guardWorkspaceRead(store, actor(persona), "READ_MEMBERSHIP_PROJECTS"),
+      ).rejects.toThrow(AuthzError);
+      await expect(loadMembershipPlanning(store, actor(persona))).rejects.toThrow(AuthzError);
+    }
+    await expect(
+      guardWorkspaceRead(store, withoutMfa("vp-membership"), "READ_MEMBERSHIP_OUTSIDE_VIEW"),
+    ).rejects.toThrow(AuthzError);
+
+    const log = await loadMembershipAudit(store, actor("secretary"));
+    expect(log.map((e) => e.action)).toContain("READ_MEMBERSHIP_PROJECTS:DENIED");
   });
 });

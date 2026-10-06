@@ -1,7 +1,13 @@
 import Link from "next/link";
 
+import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import { AuthzError } from "@/lib/authz/policy";
 import { readFundAggregates, readFundRegister } from "@/lib/donations/actions";
+import {
+  functionTabHref,
+  functionTabs,
+  WORKSPACE_BASE,
+} from "@/lib/donations/workspace";
 import { DEV_SWITCHER_PARAM } from "@/lib/donations/devSubject";
 import { resolveScreenViewer } from "@/lib/donations/screenSubject";
 import { formatCents } from "@/lib/donations/money";
@@ -85,15 +91,13 @@ export default async function FundsPage({
           entities&rsquo; funds are never shown in one total.
         </p>
 
-        <nav className={styles.nav}>
-          <Link href={`/board/donations${qs}`} className={styles.navLink}>
-            Gifts
-          </Link>
-          <span className={`${styles.navLink} ${styles.navLinkCurrent}`}>Funds</span>
-          <Link href={`/board/donations/sponsors${qs}`} className={styles.navLink}>
-            Sponsors
-          </Link>
-        </nav>
+        {/* The workspace spine, with this module's three function screens
+            appended. Funds keeps its own route. */}
+        <RoleTabs
+          base={WORKSPACE_BASE}
+          current={functionTabHref("funds", qs)}
+          functionTabs={functionTabs(qs)}
+        />
 
 
         {denial && (

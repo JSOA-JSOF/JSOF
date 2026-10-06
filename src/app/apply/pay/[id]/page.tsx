@@ -55,22 +55,23 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
         <Link href="/jsoa" className={styles.back}>
           ← Association
         </Link>
-        <span className={styles.status}>Annual dues</span>
+        <span className={styles.status}>Membership dues</span>
       </header>
 
       <main className={styles.body}>
         <h1 className={styles.title}>Your application has been accepted</h1>
         <p className={styles.lede}>
           A member has stood behind your application. Dues are the last step, and membership
-          starts as soon as they clear.
+          starts as soon as they clear. This is a one-time payment: membership is for life
+          and you will not be billed again.
         </p>
 
-        <p className={styles.amountNote}>Annual dues, Association</p>
+        <p className={styles.amountNote}>Lifetime membership, Association</p>
         <p className={styles.amount}>{formatCents(DUES_AMOUNT_CENTS)}</p>
 
         <ul className={styles.lines}>
           <li>
-            <span>Annual membership dues</span>
+            <span>Lifetime membership dues</span>
             <span>{formatCents(view.amountCents)}</span>
           </li>
           <li>

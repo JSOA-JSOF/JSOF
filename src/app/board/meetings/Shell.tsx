@@ -1,15 +1,22 @@
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 
+import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import type { Entity } from "@/lib/authz/model";
 import type { Persona } from "@/lib/authz/session";
 import { ENTITY_LONG_NAME, ENTITY_SUBSECTION } from "@/lib/meetings/distribution";
+import { WORKSPACE_TABS, type WorkspaceTab } from "@/lib/workspace/types";
 import styles from "./meetings.module.css";
 
 /**
  * The shell every Secretary page sits in. Entity is set here as `--hue` and
  * `--hueTint` on the outer wrapper so no page beneath ever names a colour, and
  * so the entity is visible from any screenshot of any page in the module.
+ *
+ * The tab strip is the shared `RoleTabs` from the workspace spine, not this
+ * module's own nav: five spine tabs, then this office's function tabs. See
+ * `docs/ROLE-WORKSPACE.md`. The function tabs kept the routes they already
+ * had, so every link anywhere else in the platform still lands.
  */
 
 export function hueFor(entity: Entity | null): CSSProperties {
@@ -20,8 +27,11 @@ export function hueFor(entity: Entity | null): CSSProperties {
   } as CSSProperties;
 }
 
+export const WORKSPACE_BASE = "/board/meetings";
+
+/** A spine tab, or one of this office's function tabs. */
 export type NavKey =
-  | "meetings"
+  | WorkspaceTab
   | "agenda"
   | "distribute"
   | "minutes"
@@ -29,32 +39,41 @@ export type NavKey =
   | "decisions"
   | "calendar";
 
-function navFor(meetingId: string | null): { key: NavKey; href: string; label: string }[] {
-  const base = [
-    { key: "meetings" as NavKey, href: "/board/meetings", label: "Meetings" },
-  ];
-  const perMeeting = meetingId
+type FunctionKey = Exclude<NavKey, WorkspaceTab>;
+
+/**
+ * The function tabs, with the routes they already had. The per-meeting four
+ * only appear once a meeting is in hand — a link to another meeting's agenda
+ * from a list of meetings is not a tab.
+ */
+function functionTabsFor(
+  meetingId: string | null,
+): { key: FunctionKey; href: string; label: string }[] {
+  const perMeeting: { key: FunctionKey; href: string; label: string }[] = meetingId
     ? [
-        { key: "agenda" as NavKey, href: `/board/meetings/${meetingId}/agenda`, label: "Agenda" },
+        { key: "agenda", href: `${WORKSPACE_BASE}/${meetingId}/agenda`, label: "Agenda" },
         {
-          key: "distribute" as NavKey,
-          href: `/board/meetings/${meetingId}/distribute`,
+          key: "distribute",
+          href: `${WORKSPACE_BASE}/${meetingId}/distribute`,
           label: "Send agenda",
         },
-        { key: "minutes" as NavKey, href: `/board/meetings/${meetingId}/minutes`, label: "Minutes" },
+        { key: "minutes", href: `${WORKSPACE_BASE}/${meetingId}/minutes`, label: "Minutes" },
         {
-          key: "transcript" as NavKey,
-          href: `/board/meetings/${meetingId}/transcript`,
+          key: "transcript",
+          href: `${WORKSPACE_BASE}/${meetingId}/transcript`,
           label: "Transcript",
         },
       ]
     : [];
   return [
-    ...base,
     ...perMeeting,
-    { key: "decisions" as NavKey, href: "/board/meetings/decisions", label: "Decisions" },
-    { key: "calendar" as NavKey, href: "/board/meetings/calendar", label: "Compliance" },
+    { key: "decisions", href: `${WORKSPACE_BASE}/decisions`, label: "Decisions" },
+    { key: "calendar", href: `${WORKSPACE_BASE}/calendar`, label: "Compliance" },
   ];
+}
+
+function isSpineTab(key: NavKey): key is WorkspaceTab {
+  return (WORKSPACE_TABS as readonly string[]).includes(key);
 }
 
 export function EntityBanner({ entity }: { entity: Entity }) {
@@ -101,17 +120,17 @@ export function Shell({
         <span className={styles.rowMeta}>Viewing as {persona.label}</span>
       </header>
 
-      <nav className={styles.nav}>
-        {navFor(meetingId).map((link) => (
-          <Link
-            key={link.key}
-            href={link.href}
-            className={`${styles.navLink} ${link.key === active ? styles.navLinkActive : ""}`}
-          >
-            {link.label}
-          </Link>
-        ))}
-      </nav>
+      <div className={styles.tabStrip}>
+        <RoleTabs
+          base={WORKSPACE_BASE}
+          current={
+            isSpineTab(active)
+              ? active
+              : (functionTabsFor(meetingId).find((tab) => tab.key === active)?.href ?? active)
+          }
+          functionTabs={functionTabsFor(meetingId).map(({ href, label }) => ({ href, label }))}
+        />
+      </div>
 
       <div className={styles.body}>{children}</div>
     </div>

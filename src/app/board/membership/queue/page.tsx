@@ -34,7 +34,7 @@ export default async function ApplicationQueuePage() {
   }
 
   return (
-    <MembershipShell current="queue">
+    <MembershipShell current="/board/membership/queue">
       <h1 className={styles.title}>Application queue</h1>
       <p className={styles.lede}>
         Applications waiting on a sponsor, and applications waiting on dues. Anything a sponsor

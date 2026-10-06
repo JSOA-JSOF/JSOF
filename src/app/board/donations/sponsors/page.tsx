@@ -1,6 +1,12 @@
 import Link from "next/link";
 
+import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import { AuthzError } from "@/lib/authz/policy";
+import {
+  functionTabHref,
+  functionTabs,
+  WORKSPACE_BASE,
+} from "@/lib/donations/workspace";
 import {
   readSponsorAcknowledgments,
   readSponsorRegister,
@@ -85,15 +91,13 @@ export default async function SponsorsPage({
           return, and where it appears.
         </p>
 
-        <nav className={styles.nav}>
-          <Link href={`/board/donations${qs}`} className={styles.navLink}>
-            Gifts
-          </Link>
-          <Link href={`/board/donations/funds${qs}`} className={styles.navLink}>
-            Funds
-          </Link>
-          <span className={`${styles.navLink} ${styles.navLinkCurrent}`}>Sponsors</span>
-        </nav>
+        {/* The workspace spine, with this module's three function screens
+            appended. Sponsors keeps its own route. */}
+        <RoleTabs
+          base={WORKSPACE_BASE}
+          current={functionTabHref("sponsors", qs)}
+          functionTabs={functionTabs(qs)}
+        />
 
 
         {denial && (

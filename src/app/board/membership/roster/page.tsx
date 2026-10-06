@@ -44,7 +44,7 @@ export default async function RosterPage() {
   const log = await loadMembershipAudit(repo, subject, 14);
 
   return (
-    <MembershipShell current="roster">
+    <MembershipShell current="/board/membership/roster">
       <h1 className={styles.title}>Roster</h1>
       <p className={styles.lede}>
         Every member record on the Association. Opening this page is logged against your name.

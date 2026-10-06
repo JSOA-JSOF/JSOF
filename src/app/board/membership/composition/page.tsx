@@ -39,7 +39,7 @@ export default async function CompositionPage() {
   }
 
   return (
-    <MembershipShell current="composition">
+    <MembershipShell current="/board/membership/composition">
       <h1 className={styles.title}>Membership composition</h1>
       <p className={styles.lede}>
         Three tests. Two of them decide whether the Association is exempt at all; the third

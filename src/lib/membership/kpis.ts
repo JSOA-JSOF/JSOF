@@ -33,6 +33,7 @@
 import { type Level } from "../authz/model";
 import { authorize, can, type Subject } from "../authz/policy";
 import type { Kpi } from "../../components/dashboard/Kpi";
+import type { TaskUrgency } from "../workspace/types";
 import { buildCompositionReport, formatPercent, formatThreshold } from "./composition";
 import type { MembershipRepository } from "./repository";
 import { grantsMemberAccess, VOUCH_WINDOW_HOURS } from "./state";
@@ -117,6 +118,23 @@ export type DashboardAction = {
   count: string;
   href: string | null;
   urgent: boolean;
+  /**
+   * What it blocks, in one line, for the Overview's task list.
+   *
+   * The Overview does not keep a task store of its own: these actions ARE the
+   * tasks, lifted by `membershipTasks` in `workspace.ts`. A second list would
+   * be a second source of truth that drifts from the figures above it.
+   */
+  because: string;
+  /**
+   * The count as an integer, or null when the viewer's grant withholds it.
+   * `count` is the same figure as prose; this is the one a task sorts on, and
+   * null is never 0.
+   */
+  n: number | null;
+  urgency: TaskUrgency;
+  /** Set only where a real date drives the urgency. Never an invented one. */
+  dueOn?: string;
 };
 
 /** A second-tier figure: real, but not one of the seven. */
@@ -126,9 +144,58 @@ export type DashboardRow = {
   detail: string;
 };
 
+/**
+ * The three tiles a volunteer actually reads, by key.
+ *
+ * `docs/ROLE-WORKSPACE.md` caps the Dashboard at one to three figures: a
+ * person looking at seven numbers has none. Seven are still computed, because
+ * the other four are real and the board asked for them; they move behind a
+ * disclosure rather than going away.
+ *
+ * Why these three.
+ *
+ *   The 90% war-veteran test is failing at 33 of 40, and it governs whether a
+ *   gift to the Association is deductible to the giver. The public pages
+ *   assert deductibility with no qualification, so this is the one figure on
+ *   the screen that contradicts something the organization is currently
+ *   telling the outside world.
+ *
+ *   The 97.5% test sits exactly on the line with nothing to spare, and unlike
+ *   the 90% it governs the exemption itself. One more non-qualifying
+ *   admission ends it. That makes it the figure that changes the next
+ *   admission decision, which is a decision this role makes.
+ *
+ *   The oldest undecided application is the only figure here measured against
+ *   a promise made to a person outside the organization — four days, in the
+ *   acknowledgment — and it is the one that changes what the chair does
+ *   tonight.
+ *
+ * What did not make it, and why. The 75% armed-forces test passes with five
+ * records of margin, and good is unremarkable. The vouch expiry rate is the
+ * health of the flow that replaced chair-invoice-confirm, but it reads as a
+ * rate only after a cycle of settled requests. Record defects and
+ * contactability are work rather than verdicts, and both are already in the
+ * Overview's task list where work belongs.
+ */
+export const HEADLINE_KPI_KEYS = [
+  "composition-war-veterans",
+  "composition-members-cadets-relatives",
+  "oldest-undecided",
+] as const;
+
 export type MembershipDashboard = {
   asOf: string;
+  /**
+   * Every tile, in report order. Kept as the whole set because the partition
+   * below is a view of it, not a second list, and because a reader of this
+   * type should not have to concatenate two fields to ask "what does this
+   * dashboard measure".
+   */
   kpis: Kpi[];
+  /** The three that lead, in the order they are read. */
+  headline: Kpi[];
+  /** The rest, behind the "more figures" disclosure. Never deleted. */
+  more: Kpi[];
   actions: DashboardAction[];
   rows: DashboardRow[];
   /** What the viewer's grant allowed. Surfaced so the page can say so. */
@@ -207,7 +274,8 @@ export async function loadMembershipDashboard(
     return {
       asOf: report.asOf,
       kpis,
-      actions: actionsFor({ records, decide, failing }),
+      ...partition(kpis),
+      actions: actionsFor({ records, decide, failing, report }),
       rows: aggregateRows(report, members.length),
       scope: { aggregate: true, records, decide },
     };
@@ -239,9 +307,29 @@ export async function loadMembershipDashboard(
   return {
     asOf: report.asOf,
     kpis,
-    actions: actionsFor({ records, decide, failing, intake, vouch, roster }),
+    ...partition(kpis),
+    actions: actionsFor({ records, decide, failing, report, intake, vouch, roster }),
     rows: [...recordRows(intake, vouch, roster), ...aggregateRows(report, members.length)],
     scope: { aggregate: true, records, decide },
+  };
+}
+
+/**
+ * Split the tiles into the three that lead and the rest.
+ *
+ * A view over one array rather than two arrays built separately: the headline
+ * is a choice about emphasis, and a choice about emphasis should not be able to
+ * disagree with the figures it emphasises. A key in `HEADLINE_KPI_KEYS` that
+ * no tile carries is simply absent, which is what happens if a tile is renamed
+ * and is better than rendering an empty box.
+ */
+function partition(kpis: Kpi[]): { headline: Kpi[]; more: Kpi[] } {
+  const wanted = new Set<string>(HEADLINE_KPI_KEYS);
+  return {
+    headline: HEADLINE_KPI_KEYS.map((key) => kpis.find((kpi) => kpi.key === key)).filter(
+      (kpi): kpi is Kpi => kpi !== undefined,
+    ),
+    more: kpis.filter((kpi) => !wanted.has(kpi.key)),
   };
 }
 
@@ -327,10 +415,20 @@ function marginSentence(slack: number): string {
 
 const WITHHELD_NEEDS =
   "READ on member records for the Association. This role holds aggregate, which " +
-  "is enough for the three tests above and not for the records behind them.";
+  "is enough for the three composition tests and not for the records behind them.";
 
+/**
+ * `withheld`, not `unmeasured`, and the distinction is the reader's.
+ *
+ * Both carry `value: null` because neither is a number, and both must be
+ * distinguishable from zero. But "nobody can measure this yet" and "this
+ * exists and is not yours to see" are different facts about the world, and a
+ * reader deciding whether to go and find the figure needs to know which one
+ * they are looking at. The shared tile renders them differently for that
+ * reason, so using the wrong one here would throw the difference away.
+ */
 function withheld(key: string, label: string, from: string): Kpi {
-  return { key, label, value: null, status: "unmeasured", from, needs: WITHHELD_NEEDS };
+  return { key, label, value: null, status: "withheld", from, needs: WITHHELD_NEEDS };
 }
 
 function withheldKpis(): Kpi[] {
@@ -374,6 +472,11 @@ type IntakeSummary = {
 function windowClosed(application: Application, now: Date): boolean {
   if (!application.vouchExpiresAt) return false;
   return new Date(application.vouchExpiresAt).getTime() <= now.getTime();
+}
+
+/** ISO date, days later, as `YYYY-MM-DD`. Integer arithmetic on the instant. */
+function addDays(iso: string, days: number): string {
+  return new Date(new Date(iso).getTime() + days * DAY_MS).toISOString().slice(0, 10);
 }
 
 function ageDays(iso: string, now: Date): number {
@@ -450,6 +553,8 @@ function oldestUndecidedKpi(intake: IntakeSummary): Kpi {
 
 type VouchSummary = {
   total: number;
+  /** The soonest window still open. A real date or nothing. */
+  nextCloseOn: string | null;
   confirmed: number;
   declined: number;
   doNotKnow: number;
@@ -489,8 +594,14 @@ function summariseVouch(requests: VouchRequest[], now: Date): VouchSummary {
   const declined = answered.filter((r) => r.outcome === "DECLINED").length;
   const doNotKnow = answered.filter((r) => r.outcome === "DO_NOT_KNOW").length;
 
+  const stillOpen = unanswered
+    .filter((r) => new Date(r.expiresAt).getTime() > now.getTime())
+    .map((r) => r.expiresAt)
+    .sort();
+
   return {
     total: requests.length,
+    nextCloseOn: stillOpen[0] ?? null,
     confirmed,
     declined,
     doNotKnow,
@@ -557,6 +668,8 @@ function vouchExpiryKpi(vouch: VouchSummary): Kpi {
 
 type RosterSummary = {
   counted: number;
+  /** When the next 30-day record audit falls due. A real date or nothing. */
+  nextAuditDueOn: string | null;
   defective: number;
   withEmail: number;
   probationary: number;
@@ -586,8 +699,18 @@ function summariseRoster(members: Member[], now: Date): RosterSummary {
   );
   const probationary = counted.filter((m) => m.state === "PROBATIONARY");
 
+  // The window runs from the day dues cleared, so the due date is a fact about
+  // the record rather than a date anyone chose. A member whose payment date is
+  // missing has no due date, and inventing one would put an obligation on the
+  // calendar that nothing supports.
+  const dueDates = probationary
+    .filter((m) => m.paymentClearedAt !== null && m.lastAuditedAt === null)
+    .map((m) => addDays(m.paymentClearedAt!, AUDIT_WINDOW_DAYS))
+    .sort();
+
   return {
     counted: counted.length,
+    nextAuditDueOn: dueDates[0] ?? null,
     defective: counted.filter(recordIsDefective).length,
     withEmail: counted.filter((m) => m.email.trim() !== "").length,
     probationary: probationary.length,
@@ -657,11 +780,12 @@ function actionsFor(input: {
   records: boolean;
   decide: boolean;
   failing: number;
+  report: CompositionReport;
   intake?: IntakeSummary;
   vouch?: VouchSummary;
   roster?: RosterSummary;
 }): DashboardAction[] {
-  const { records, decide, failing, intake, vouch, roster } = input;
+  const { records, decide, failing, report, intake, vouch, roster } = input;
   const count = (n: number | undefined, suffix: string): string =>
     n === undefined ? WITHHELD_COUNT : `${n} ${suffix}`;
 
@@ -672,6 +796,16 @@ function actionsFor(input: {
    */
   const note = (own: string): string =>
     !records ? WITHHELD_NOTE : decide ? own : READ_ONLY_NOTE;
+
+  /** Withheld is null, not zero: a reader must not act on a figure they lack. */
+  const n = (value: number | undefined): number | null => (value === undefined ? null : value);
+
+  const oldestOverdue = (intake?.oldestDays ?? 0) > PROMISED_OUTCOME_DAYS;
+  const line = report.tests.find((test) => test.key === "MEMBERS_CADETS_RELATIVES");
+  const onTheLine =
+    line !== undefined &&
+    line.passes &&
+    line.numerator - requiredNumerator(line.thresholdPermille, line.denominator) === 0;
 
   return [
     {
@@ -685,6 +819,20 @@ function actionsFor(input: {
       count: `${failing} of 3 failing`,
       href: "/board/membership/composition",
       urgent: failing > 0,
+      because:
+        failing > 0
+          ? "It blocks what the Association may tell a donor. The 90% test governs whether a " +
+            "gift to the Association is deductible, the public pages say gifts are deductible " +
+            "with no qualification, and only the board can decide which of the two changes." +
+            (onTheLine
+              ? " The 97.5% test is also sitting on the line, so the next non-qualifying " +
+                "admission ends the exemption itself."
+              : "")
+          : "Nothing is blocked. The three tests pass and the report is the record of that.",
+      // Overdue rather than soon: the claim is already published, so the
+      // obligation is already unmet. Nothing about it is upcoming.
+      n: failing,
+      urgency: failing > 0 ? "overdue" : "open",
     },
     {
       key: "exceptions",
@@ -696,6 +844,13 @@ function actionsFor(input: {
       count: count(intake?.withChair, "waiting"),
       href: records ? "/board/membership/exceptions" : null,
       urgent: (intake?.withChair ?? 0) > 0,
+      because:
+        "Each one is a person waiting, and the acknowledgment promised them an outcome within " +
+        `${PROMISED_OUTCOME_DAYS} days. It blocks the applicant: dues cannot be asked for until ` +
+        "someone decides, and nothing else in the flow will move on its own." +
+        (oldestOverdue ? " The oldest has already passed the promised day." : ""),
+      n: n(intake?.withChair),
+      urgency: oldestOverdue ? "overdue" : (intake?.withChair ?? 0) > 0 ? "soon" : "open",
     },
     {
       key: "audit",
@@ -710,6 +865,15 @@ function actionsFor(input: {
           : `${roster.auditDue} of ${roster.probationary} in the cohort`,
       href: records ? "/board/membership/audit" : null,
       urgent: (roster?.auditDue ?? 0) > 0,
+      because:
+        "It blocks the record, not the member: probationary and good standing grant identical " +
+        "access, so nobody is waiting on this. What an unaudited record blocks is the claim " +
+        "that the exemption tests counted anything checked.",
+      n: n(roster?.auditDue),
+      // The window has already closed on anything counted here, so a count
+      // above zero is late by definition.
+      urgency: (roster?.auditDue ?? 0) > 0 ? "overdue" : "open",
+      dueOn: roster?.nextAuditDueOn ?? undefined,
     },
     {
       key: "roster",
@@ -721,6 +885,12 @@ function actionsFor(input: {
       count: count(roster?.defective, roster?.defective === 1 ? "record" : "records"),
       href: records ? "/board/membership/roster" : null,
       urgent: (roster?.defective ?? 0) > 0,
+      because:
+        "It blocks reading the failing test as settled. A record whose attestation and dates " +
+        "disagree is counted one way by the report and could be counted the other, so the " +
+        "margin on the 90% test is not yet a number anyone should take to the board.",
+      n: n(roster?.defective),
+      urgency: (roster?.defective ?? 0) > 0 ? "soon" : "open",
     },
     {
       key: "queue",
@@ -732,6 +902,13 @@ function actionsFor(input: {
       count: count(intake?.withSponsor, "open"),
       href: records ? "/board/membership/queue" : null,
       urgent: (vouch?.open ?? 0) > 0,
+      because:
+        `It blocks payment, which is the design: dues only follow a confirmed vouch. If the ` +
+        `${VOUCH_WINDOW_HOURS}-hour window closes unanswered the case lands on the chair, ` +
+        "which is the manual step the sponsor vouch exists to remove.",
+      n: n(intake?.withSponsor),
+      urgency: (intake?.withSponsor ?? 0) > 0 ? "soon" : "open",
+      dueOn: vouch?.nextCloseOn?.slice(0, 10),
     },
   ];
 }

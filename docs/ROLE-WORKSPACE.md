@@ -35,6 +35,23 @@ motion. If you cannot derive it, it is not a task, it is a note.
 Most of this already exists as the `actions` lists on the dashboards. Lift them
 here. The Dashboard keeps its figures; the Overview takes the doing.
 
+### Known gap: there is no shared calendar yet
+
+This file says there is one compliance calendar to filter. There is a calendar,
+but it lives inside the Secretary's module and no module in this repo imports
+another module's library, so the other roles cannot read it.
+
+Every role that has tried has done the same correct thing: derive the dates it
+can from its own data, say where the real calendar lives, and refuse to keep a
+local copy of compliance items. That is right, and it is still drift waiting to
+happen — six roles each deriving locally is what the filters-not-copies rule
+exists to prevent.
+
+Lifting the calendar into a shared module is integration work, not a role's
+work. Until it lands, derive locally and say so. Do not fabricate a date to
+fill the tab: a guessed event date becomes a stock decision or a filing
+deadline made against a number somebody invented.
+
 ## Dashboard — how we know it is working
 
 **One to three figures.** Not seven. A volunteer looking at seven numbers has

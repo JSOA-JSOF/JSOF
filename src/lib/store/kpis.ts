@@ -108,7 +108,7 @@ function lacksTaxRecord(order: Order): boolean {
  * The facts the tiles and the actions are both built from
  * ------------------------------------------------------------------ */
 
-type StoreFacts = {
+export type StoreFacts = {
   period: Period;
   orders: Order[];
   receiptedInPeriod: Order[];
@@ -250,60 +250,131 @@ function collect(subject: Subject, now: Date): StoreFacts {
   };
 }
 
+/**
+ * The derived state, behind one authorized read.
+ *
+ * Exported so `workspace.ts` can build the Overview's tasks and calendar from
+ * the same facts the tiles are built from, rather than deriving them a second
+ * time and drifting. The guard is here and not in `collect`, so there is no
+ * unauthorized path to any of it.
+ */
+export function storeFacts(subject: Subject, now: Date = new Date()): StoreFacts {
+  authorize({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "AGGREGATE" });
+  return collect(subject, now);
+}
+
 /* ------------------------------------------------------------------ *
  * The tiles
  * ------------------------------------------------------------------ */
 
 /**
- * The dashboard figures. One authorized read: AGGREGATE on FINANCIAL for JSOA,
- * which is what the Store Chair holds. Throws AuthzError for a role that does
- * not reach the store's financial records, and the screen says so rather than
- * showing zeros.
+ * The three headline figures. One authorized read: AGGREGATE on FINANCIAL for
+ * JSOA, which is what the Store Chair holds. Throws AuthzError for a role that
+ * does not reach the store's financial records, and the screen says so rather
+ * than showing zeros.
+ *
+ * Three, not seven. `docs/ROLE-WORKSPACE.md` caps the Dashboard tab at one to
+ * three, and the cut is not arbitrary:
+ *
+ *   1. The member and non-member split is ONE tile, not two. It is a single
+ *      compliance artefact — the separate records Pub. 3386 ch. 9 requires of
+ *      an activity open to the public — and splitting it across two tiles read
+ *      as a marketing segmentation of the customer base, which it is not. One
+ *      tile, two halves, one reason.
+ *   2. The quarterly physical count, because it is the compensating control
+ *      for the Treasurer also chairing the store and it is the only figure
+ *      here that is currently failing. It is also the one that changes who
+ *      does what: somebody other than the chair has to walk the shelves.
+ *   3. Sales tax collected and held in trust, because it has to be visible
+ *      BESIDE the split and never inside it. It is the state's money, it is
+ *      not a receipt of the Association, and a chair who cannot see it cannot
+ *      tell how much of the bank balance is not theirs.
+ *
+ * What came off the headline and moved behind `storeMoreFigures`: the
+ * jurisdiction-and-rate gap count (currently clean, so unremarkable), the
+ * refund queue, and stock cover. All three are real; none would change a
+ * decision this quarter. Gross sales never had a tile and still does not: it
+ * tells the chair nothing they can act on and it hides the split.
  */
 export function storeKpis(subject: Subject, now: Date = new Date()): Kpi[] {
   authorize({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "AGGREGATE" });
   const f = collect(subject, now);
 
+  const uncounted = f.uncountedThisQuarter.length;
+  const stocked = f.stockedRows.length;
+  const counters = f.lastClosedQuarterCounters.map(personName);
+  const lastQuarterShort = f.countedLastClosedQuarter < stocked;
+
+  return [
+    /* --- 1. The compliance artefact. One tile, both sides, because it is one
+           record and not two audiences. --- */
+    {
+      key: "receipts-member-split",
+      label: "Gross receipts, members and non-members",
+      value:
+        `${formatCents(f.memberGrossCents)} member · ` +
+        `${formatCents(f.nonMemberGrossCents)} non-member`,
+      status: f.nonMemberOrderCount === 0 && f.nonMemberGrossCents > 0 ? "problem" : "good",
+      from:
+        `${f.memberOrderCount} member and ${f.nonMemberOrderCount} non-member orders in ` +
+        `${f.period.label}, by the buyer's status recorded at the sale and never recomputed. ` +
+        `Non-members are ${f.nonMemberSharePercent}% of ` +
+        `${formatCents(f.report.totalGrossReceiptsCents)} gross. Sales price and delivery, ` +
+        `before tax and before refunds. Kept as separate records because inadequate ` +
+        `non-member records make all income from a public activity taxable, not just this share.`,
+    },
+
+    /* --- 2. The compensating control, and the only figure here that is
+           currently failing. --- */
+    {
+      key: "quarterly-count",
+      label: `Stocked lines counted in ${f.quarter}`,
+      value: ofTotal(stocked - uncounted, stocked),
+      target: `${stocked} of ${stocked}`,
+      status: uncounted === 0 && !lastQuarterShort && !f.viewerHoldsBothRoles ? "good" : "problem",
+      from:
+        `Counts recorded for ${f.quarter} against ${stocked} active stocked lines; ` +
+        `${f.lastClosedQuarter} closed at ${ofTotal(f.countedLastClosedQuarter, stocked)}` +
+        (counters.length > 0 ? `, counted by ${counters.join(" and ")}` : `, counted by nobody`) +
+        `. ${f.countsByStoreChair} of ${f.totalCounts} counts on record were entered by the ` +
+        `store chair` +
+        (f.viewerHoldsBothRoles
+          ? `, and you hold Treasurer and Store Chair together, so you cannot enter one either.`
+          : `; the recorded chair is ${f.recordedChairName}.`) +
+        ` ${f.podRows.length} print-on-demand lines hold no stock and are not counted here.`,
+    },
+
+    /* --- 3. Beside the split, never inside it. --- */
+    {
+      key: "sales-tax-held-in-trust",
+      label: "Sales tax collected, held in trust",
+      value: formatCents(f.salesTaxCents),
+      status: "good",
+      from:
+        `Collected on ${f.receiptedInPeriod.length} receipted orders in ${f.period.label} at the ` +
+        `ship-to county's rate. The state's money, not a receipt of the Association: it is no ` +
+        `part of either figure in the split above and the two are never added.`,
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------ *
+ * More figures: real, but they would not change a decision this quarter
+ * ------------------------------------------------------------------ */
+
+/**
+ * The figures that came off the headline. Same guard, same level. They live
+ * behind a disclosure on the Dashboard tab rather than being deleted, because
+ * each one is the evidence behind a task on the Overview.
+ */
+export function storeMoreFigures(subject: Subject, now: Date = new Date()): Kpi[] {
+  authorize({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "AGGREGATE" });
+  const f = collect(subject, now);
+
   const kpis: Kpi[] = [];
+  const stocked = f.stockedRows.length;
 
-  /* --- 1. The compliance artefact, member side. --- */
-  kpis.push({
-    key: "receipts-member",
-    label: "Gross receipts from members",
-    value: formatCents(f.memberGrossCents),
-    status: "good",
-    from:
-      `${f.memberOrderCount} member orders in ${f.period.label}, by the buyer's status ` +
-      `recorded at the sale. Sales price and delivery, before tax and before refunds.`,
-  });
-
-  /* --- 2. The compliance artefact, non-member side. This is the record whose
-         adequacy decides the tax treatment of the whole activity. --- */
-  kpis.push({
-    key: "receipts-non-member",
-    label: "Gross receipts from non-members",
-    value: formatCents(f.nonMemberGrossCents),
-    status: f.nonMemberOrderCount === 0 && f.nonMemberGrossCents > 0 ? "problem" : "good",
-    from:
-      `${f.nonMemberOrderCount} non-member orders in ${f.period.label}, ` +
-      `${f.nonMemberSharePercent}% of ${formatCents(f.report.totalGrossReceiptsCents)} gross. ` +
-      `Kept separately because inadequate non-member records make all income from a ` +
-      `public activity taxable, not just this share.`,
-  });
-
-  /* --- 3. Beside the split, never inside it. --- */
-  kpis.push({
-    key: "sales-tax-held-in-trust",
-    label: "Sales tax collected, held in trust",
-    value: formatCents(f.salesTaxCents),
-    status: "good",
-    from:
-      `Collected on ${f.receiptedInPeriod.length} receipted orders in ${f.period.label} at the ` +
-      `ship-to county's rate. The state's money, not a receipt: it is not part of either ` +
-      `figure above and the two are never added.`,
-  });
-
-  /* --- 4. A gap here is a hole in a period that gets filed. --- */
+  /* --- A gap here is a hole in a period that gets filed. --- */
   const gaps = f.taxRecordGaps.length;
   const outOfState = f.receiptedInPeriod.filter(
     (o) => !o.taxJurisdictionCode.startsWith("NC-"),
@@ -322,29 +393,7 @@ export function storeKpis(subject: Subject, now: Date = new Date()): Kpi[] {
         : `.`),
   });
 
-  /* --- 5. The second-counter control, which is the compensating control for
-         the Treasurer also chairing the store. --- */
-  const uncounted = f.uncountedThisQuarter.length;
-  const stocked = f.stockedRows.length;
-  const counters = f.lastClosedQuarterCounters.map(personName);
-  const lastQuarterShort = f.countedLastClosedQuarter < stocked;
-  kpis.push({
-    key: "quarterly-count",
-    label: `Stocked lines counted in ${f.quarter}`,
-    value: ofTotal(stocked - uncounted, stocked),
-    target: `${stocked} of ${stocked}`,
-    status: uncounted === 0 && !lastQuarterShort && !f.viewerHoldsBothRoles ? "good" : "problem",
-    from:
-      `Counts recorded for ${f.quarter} against ${stocked} active stocked lines; ` +
-      `${f.lastClosedQuarter} closed at ${ofTotal(f.countedLastClosedQuarter, stocked)}` +
-      (counters.length > 0 ? `, counted by ${counters.join(" and ")}` : `, counted by nobody`) +
-      `. ${f.countsByStoreChair} of ${f.totalCounts} counts on record were entered by the store chair` +
-      (f.viewerHoldsBothRoles
-        ? `, and you hold Treasurer and Store Chair together, so you cannot enter one either.`
-        : `; the recorded chair is ${f.recordedChairName}.`),
-  });
-
-  /* --- 6. A refund is a cash-equivalent credit against a receipt the same
+  /* --- A refund is a cash-equivalent credit against a receipt the same
          person may have recorded. The threshold is $50, not $1,000. --- */
   const pending = f.pendingSecondApproval.length;
   const oldestDays = f.oldestPendingDays;
@@ -385,106 +434,14 @@ export function storeKpis(subject: Subject, now: Date = new Date()): Kpi[] {
 
 /* ------------------------------------------------------------------ *
  * What to do about them
- * ------------------------------------------------------------------ */
-
-export type StoreAction = {
-  key: string;
-  label: string;
-  note: string;
-  /** The figure the action is sized by. */
-  count: string;
-  href: string;
-  urgent: boolean;
-};
-
-/**
- * The actions that follow from the figures. Same guard, same level. A link is
- * only offered when the signed-in role can open what is on the other end of
- * it: the order list needs READ, which the Store Chair does not hold, so the
- * chair is not sent to a screen that will refuse them.
+ * ------------------------------------------------------------------ *
+ *
+ * It is not here any more. The actions that used to sit under these figures
+ * are the Overview tab's derived task list, in `./workspace.ts`, built from
+ * the same `storeFacts`. `docs/ROLE-WORKSPACE.md` puts the figures on the
+ * Dashboard and the doing on the Overview, and a second copy of the list on
+ * this tab would be a second thing to keep in step.
  */
-export function storeActions(subject: Subject, now: Date = new Date()): StoreAction[] {
-  authorize({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "AGGREGATE" });
-  const f = collect(subject, now);
-  const actions: StoreAction[] = [];
-
-  if (f.uncountedThisQuarter.length > 0) {
-    actions.push({
-      key: "record-count",
-      label: `Get ${f.quarter}'s physical count recorded`,
-      note: f.viewerHoldsBothRoles
-        ? "You hold both Treasurer and Store Chair, so you cannot enter it. Ask the assistant treasurer or the Finance Review Officer to count and record it."
-        : "It has to be entered by somebody other than the store chair. That is the whole control.",
-      count: `${f.uncountedThisQuarter.length} lines uncounted`,
-      href: "/board/store/inventory",
-      urgent: true,
-    });
-  }
-
-  if (f.pendingSecondApproval.length > 0) {
-    actions.push({
-      key: "approve-refunds",
-      label: "Approve or refuse the refunds waiting on a second approver",
-      note: `Above $50 a refund needs a second person, and not the person who raised it.`,
-      count: `${f.pendingSecondApproval.length} waiting, oldest ${days(f.oldestPendingDays ?? 0)}`,
-      href: "/board/store/refunds",
-      urgent: true,
-    });
-  }
-
-  if (f.taxRecordGaps.length > 0) {
-    actions.push({
-      key: "fix-tax-records",
-      label: "Put a jurisdiction and rate on the orders that have none",
-      note: "A filed period cannot be reconstructed from an order that does not say which county it was sourced to.",
-      count: `${f.taxRecordGaps.length} orders`,
-      href: "/board/store/tax",
-      urgent: true,
-    });
-  }
-
-  actions.push({
-    key: "receipts-report",
-    label: "Export the member and non-member receipts for the CPA",
-    note: "The separate records the public-activity rule asks for, as filed figures rather than a retyped summary.",
-    count: `${f.period.label}, ${f.nonMemberSharePercent}% non-member`,
-    href: "/board/store/receipts",
-    urgent: false,
-  });
-
-  actions.push({
-    key: "tax-periods",
-    label: "Reconcile the sales tax periods before remitting",
-    note: "Collected tax is held in trust. The rate and jurisdiction on each order are what the period is filed from.",
-    count: `${f.taxMonths} periods, ${formatCents(f.salesTaxCents)} held`,
-    href: "/board/store/tax",
-    urgent: false,
-  });
-
-  actions.push({
-    key: "inventory",
-    label: "Review stock on hand against what has sold",
-    note: `${f.podRows.length} of the catalogue's lines are printed to order and hold no stock.`,
-    count: `${f.stockedRows.length + f.podRows.length} active lines`,
-    href: "/board/store/inventory",
-    urgent: false,
-  });
-
-  // READ, which the Store Chair does not hold. The link is withheld rather
-  // than offered and then refused on arrival.
-  if (can({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "READ" })) {
-    actions.push({
-      key: "orders",
-      label: "Work the order list",
-      note: "Row-level orders need read on financial records, which this role holds.",
-      count: `${f.orders.length} orders, ${f.awaitingPaymentCount} awaiting payment`,
-      href: "/board/store/orders",
-      urgent: false,
-    });
-  }
-
-  return actions;
-}
 
 /* ------------------------------------------------------------------ *
  * The second tier: real, but not worth a tile

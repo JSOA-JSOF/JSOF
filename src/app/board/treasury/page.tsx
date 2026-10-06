@@ -1,352 +1,154 @@
-import Link from "next/link";
-
-import { KpiGrid } from "@/components/dashboard/Kpi";
+import { CalendarStrip, TaskList } from "@/components/workspace-shell/RoleTabs";
 import { getCurrentSubject } from "@/lib/authz/session";
-import { treasuryDashboard } from "@/lib/treasury/kpis";
-import { treasurySubject, treasuryRepository } from "@/lib/treasury/repository";
-import { RESTRICTION_LABELS } from "@/lib/treasury/types";
-
+import { treasuryRepository, treasurySubject } from "@/lib/treasury/repository";
 import {
-  ENTITY_LABELS,
-  EntityTag,
-  Money,
-  TreasuryHeader,
-  Withheld,
-  entityClass,
-} from "./_components/chrome";
+  FICTIONAL_DATA_NOTE,
+  entitiesInScope,
+  treasurerCalendar,
+  treasurerTasks,
+} from "@/lib/treasury/workspace";
+
+import { ENTITY_LABELS, TreasuryHeader } from "./_components/chrome";
 import styles from "./treasury.module.css";
 
 export const metadata = {
-  title: "Dashboard — Treasury — JSOA / JSOF",
+  title: "Overview — Treasury — JSOA / JSOF",
   robots: { index: false, follow: false },
 };
 
 /**
- * The Treasurer's dashboard, sitting above the two-column position statement.
+ * The Treasurer's Overview: what needs doing, and what is dated.
  *
- * The position statement is the point of this module and it has not moved. The
- * Association and the Foundation are separate legal persons with separate
- * boards' worth of duty attached to them, separate returns, and separate
- * donors' restrictions. A combined figure is not a summary of this page; it is
- * a statement about an entity that does not exist.
+ * This is the landing tab now, and the Dashboard's figures have moved to their
+ * own tab. The split is deliberate: a volunteer with forty minutes tonight
+ * needs the doing, and the figures are what you open when somebody asks how it
+ * is going. Mixing them produced a screen where neither was first.
  *
- * So there is no total row anywhere on this screen. `PositionStatement` has no
- * field one could go in, `RenewalCommitment` has none either, and
- * `assertUnblended` in the repository and in `kpis.ts` refuses to return a view
- * carrying a money figure that names no entity. The tiles obey the same rule
- * the hard way: net assets and annual operating cost are each a pair of tiles,
- * one per entity, and nothing on the dashboard adds across them.
+ * Every task here is DERIVED. Nobody types one. A task list a volunteer board
+ * must populate by hand is dead inside a cycle, which is the same failure as
+ * the spreadsheet this platform replaces, so each row below is a function of
+ * the data: a claim counted from the day it was incurred, a renewal with no
+ * second administrator, a transfer sitting on an unmet condition. If it cannot
+ * be computed it is a note, and notes do not go here.
  *
- * Figures the reader holds no scope for are withheld, never zero. Zero is a
- * claim about the entity; withheld is a claim about the reader.
+ * The calendar is a FILTER over the one compliance calendar in the Secretary's
+ * module, not a treasury copy of it. When a filing date moves there it moves
+ * here, because there is only one of it.
+ *
+ * Two entities, and still two entities on this tab. A tool whose invoice is
+ * shared renews once and commits two different sums, so it appears as two
+ * dated rows carrying two labelled figures. There is no row anywhere on this
+ * screen holding an invoice total, and a dated item on an entity the reader
+ * holds no scope for is counted as withheld rather than dropped.
  */
-export default async function TreasuryDashboardPage() {
+export default async function TreasuryOverviewPage() {
   const subject = treasurySubject(await getCurrentSubject());
   const repo = treasuryRepository();
-  const dashboard = treasuryDashboard(subject, repo);
-  const statement = repo.positionStatement(subject);
-  const visibleCount = statement.columns.filter((c) => c.visible).length;
+
+  const scope = entitiesInScope(subject);
+  const tasks = treasurerTasks(subject, repo);
+  const calendar = treasurerCalendar(subject, repo);
+
+  const overdue = tasks.filter((task) => task.urgency === "overdue").length;
 
   return (
     <div>
       <TreasuryHeader
-        current="/board/treasury"
-        title="Treasury, both entities"
-        period={statement.period.label}
+        current="overview"
+        title="What needs doing"
+        period={`As of ${repo.asOfDate()}`}
         lede={
-          "What the two treasuries look like this period, what is outstanding, and " +
-          "what needs deciding. Two entities, two columns, never one figure: the " +
-          "Association and the Foundation file separately, hold separate " +
-          "restrictions and answer to separate donors, so nothing on this screen " +
-          "adds across them."
+          "Everything below is computed from the data rather than entered by hand, " +
+          "so this list fills and empties itself as the work arrives and gets done. " +
+          "Each row says what it blocks, because a count on its own does not tell " +
+          "you whether to open it tonight."
         }
       />
 
-      {visibleCount === 0 ? (
+      {scope.length === 0 ? (
         <p className={styles.refusal} role="status">
-          You hold no financial scope on either entity, so there is no position to
-          show you. If you should be able to see this, the President can grant the
-          scope; nothing on this screen is available on request.
+          You hold no financial scope on either entity, so there is no treasury
+          work to show you. If you should be able to see this, the President can
+          grant the scope; nothing on this screen is available on request.
         </p>
       ) : null}
 
-      <KpiGrid kpis={dashboard.kpis} />
-
-      <p className={styles.note}>
-        Every tile says what it was computed from. A figure the reader holds no
-        scope for reads <strong>Withheld</strong> rather than zero: the figure
-        exists, and it is not theirs to see. Figures measured to{" "}
-        {dashboard.asOf}.
-      </p>
-
-      <h2 className={styles.sectionHead}>What needs doing</h2>
-
-      {dashboard.actions.length === 0 ? (
+      <h2 className={styles.sectionHead}>Waiting on you</h2>
+      {/* With no scope at all, the shared empty state would read "nothing is
+          waiting on you", which is a claim about the work rather than about the
+          reader. Those are the two things this platform never lets look alike,
+          so the refusal above stands alone and the list is not rendered. */}
+      {scope.length === 0 ? (
         <p className={styles.note}>
-          Nothing is outstanding in the scope you hold. That is a result of the
-          checks above, not an absence of them.
+          Nothing can be shown here, which is not the same as nothing being
+          outstanding. There is treasury work on both entities; none of it is
+          yours.
         </p>
       ) : (
-        <ul className={styles.rules}>
-          {dashboard.actions.map((action) => (
-            <li key={action.key} className={styles.rule}>
-              <span
-                className={`${styles.ruleState} ${
-                  action.urgent ? styles.ruleStateUnmet : styles.ruleStateMet
-                }`}
-              >
-                {action.count}
-              </span>
-              <span className={styles.ruleRequirement}>
-                <Link href={action.href}>{action.label}</Link>
-              </span>
-              <p className={styles.ruleWhy}>{action.note}</p>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className={styles.note}>
+            Derived from state, not a to-do list. Overdue first, then soonest.
+            {overdue > 0 ? (
+              <>
+                {" "}
+                {overdue === 1
+                  ? "One item has run past the tolerance it had"
+                  : `${overdue} items have run past the tolerance they had`}
+                , which on this screen means a person has been waiting, or a
+                control has stood open long enough to be a finding.
+              </>
+            ) : null}
+          </p>
+
+          <TaskList tasks={tasks} />
+        </>
       )}
 
       <h2 className={styles.sectionHead}>
-        Renewals inside {dashboard.renewalWindowDays} days
+        Dated, to {calendar.horizonEndDate}
       </h2>
       <p className={styles.note}>
-        The cash each entity commits for the following year if these lines renew,
-        per entity, as two figures. A renewal nobody decides on renews by default,
-        which is how a register stops being a decision and becomes a direct debit.
+        The filings that are the Treasurer&rsquo;s own, the renewals and the
+        cash each one commits, and the monthly close. Twelve months, not a
+        quarter, because this office&rsquo;s duties are annual and the two 990s
+        fall further out than a quarter can see. Filing dates come from the one
+        compliance calendar the whole board uses; this is a filter over it, so a
+        date corrected there is corrected here.
       </p>
 
-      <div className={styles.panelPlain}>
-        <ul className={styles.figures}>
-          {dashboard.renewals.map((row) => (
-            <li key={`renewal-${row.entity}`} className={entityClass(row.entity)}>
-              <span className={styles.figureLabel}>
-                <EntityTag entity={row.entity} />{" "}
-                {row.visible ? (
-                  <>
-                    {row.lineCount}{" "}
-                    {row.lineCount === 1 ? "line renews" : "lines renew"} by{" "}
-                    {dashboard.renewalWindowEndDate}
-                    <span className={styles.memo}>
-                      {row.soonestRenewalDate
-                        ? `Soonest ${row.soonestRenewalDate}. ` +
-                          `${ENTITY_LABELS[row.entity].short} share of the annual cost, apportioned on the stated basis.`
-                        : `No ${ENTITY_LABELS[row.entity].short} line renews inside the window.`}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    Withheld
-                    <span className={styles.memo}>{row.withheldReason}</span>
-                  </>
-                )}
-              </span>
-              {row.visible ? (
-                <Money amountCents={row.committedAnnualCents} lead showCurrency />
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <CalendarStrip items={calendar.items} />
 
-      <h2 className={styles.sectionHead}>Position, both entities</h2>
+      {calendar.withheldCount > 0 ? (
+        <p className={styles.note}>
+          <strong>
+            {calendar.withheldCount}{" "}
+            {calendar.withheldCount === 1 ? "dated item is" : "dated items are"}{" "}
+            withheld
+          </strong>{" "}
+          rather than hidden
+          {calendar.withheldEntities.length > 0 ? (
+            <>
+              {" "}
+              ·{" "}
+              {calendar.withheldEntities
+                .map((entity) => ENTITY_LABELS[entity].short)
+                .join(" and ")}
+            </>
+          ) : null}
+          . Those dates exist and somebody owes them; you hold no financial
+          scope on the entity that does. Withheld is not none.
+        </p>
+      ) : null}
+
+      <h2 className={styles.sectionHead}>What this tab does not hold</h2>
       <p className={styles.note}>
-        The statement below is the module&rsquo;s point and it has not moved. There
-        is no total row and no field one could go in: a combined figure would be a
-        statement about an entity that does not exist.
+        No figures. They are on the Dashboard, cut to three. No agenda items
+        either: what the Treasurer wants the board to decide is on Planning,
+        where the Secretary&rsquo;s agenda builder reads it rather than asking
+        for it to be retyped.
       </p>
 
-      <div className={styles.twoUp}>
-        {statement.columns.map((column) => {
-          if (!column.visible) {
-            return (
-              <Withheld
-                key={column.entity}
-                entity={column.entity}
-                what="Position"
-                reason={column.withheldReason}
-              />
-            );
-          }
-          const labels = ENTITY_LABELS[column.entity];
-          return (
-            <section
-              key={column.entity}
-              className={`${entityClass(column.entity)} ${styles.panel}`}
-              aria-labelledby={`pos-${column.entity}`}
-            >
-              <div className={styles.panelHead}>
-                <div>
-                  <span className={styles.eyebrow}>{labels.subsection}</span>
-                  <h3 id={`pos-${column.entity}`} className={styles.panelTitle}>
-                    <span className={styles.entityName}>{labels.short}</span>{" "}
-                    <span className={styles.quiet}>{labels.long}</span>
-                  </h3>
-                </div>
-              </div>
-
-              <ul className={styles.figures}>
-                <li>
-                  <span className={styles.figureLabel}>Revenue, period to date</span>
-                  <Money amountCents={column.revenueCents} lead showCurrency />
-                </li>
-                <li>
-                  <span className={styles.figureLabel}>Expenses, period to date</span>
-                  <Money amountCents={column.expenseCents} lead showCurrency />
-                </li>
-                <li>
-                  <span className={styles.figureLabel}>
-                    Change over the period
-                    <span className={styles.memo}>Revenue less expenses, this entity only</span>
-                  </span>
-                  <Money amountCents={column.changeCents} lead showCurrency />
-                </li>
-                <li>
-                  <span className={styles.figureLabel}>Net assets, opening</span>
-                  <Money amountCents={column.openingNetAssetsCents} />
-                </li>
-                <li>
-                  <span className={styles.figureLabel}>Net assets, closing</span>
-                  <Money amountCents={column.closingNetAssetsCents} lead showCurrency />
-                </li>
-                <li>
-                  <span className={styles.figureLabel}>
-                    of which unrestricted
-                    <span className={styles.memo}>Available for general operating use</span>
-                  </span>
-                  <Money amountCents={column.unrestrictedClosingCents} />
-                </li>
-                <li>
-                  <span className={styles.figureLabel}>
-                    of which restricted
-                    <span className={styles.memo}>
-                      Held to the donors&rsquo; terms, not spendable at the board&rsquo;s
-                      discretion
-                    </span>
-                  </span>
-                  <Money amountCents={column.restrictedClosingCents} />
-                </li>
-              </ul>
-
-              <div className={styles.actions}>
-                <Link
-                  className={styles.actionLink}
-                  href={`/board/treasury/ledger/${column.entity}`}
-                >
-                  Open the {labels.short} ledger
-                </Link>
-              </div>
-            </section>
-          );
-        })}
-      </div>
-
-      <h2 className={styles.sectionHead}>By fund</h2>
-      <p className={styles.note}>
-        Funds do not cross entities either. A restricted balance on one side is not
-        a resource of the other, whatever the two boards decide, until an
-        inter-entity transfer is minuted on both sides.
-      </p>
-
-      <div className={styles.stack}>
-        {statement.columns.map((column) => {
-          if (!column.visible) return null;
-          return (
-            <section
-              key={`funds-${column.entity}`}
-              className={entityClass(column.entity)}
-              aria-labelledby={`funds-h-${column.entity}`}
-              /* A grid item defaults to min-width:auto, so this section was
-                 sized by the fund table's intrinsic width and pushed the whole
-                 page sideways at 375px instead of letting `.scroller` scroll.
-                 This belongs in `.stack` in treasury.module.css, which is not
-                 this change's to edit; noted in the report. */
-              style={{ minWidth: 0 }}
-            >
-              <div className={styles.panelHead}>
-                <h3 id={`funds-h-${column.entity}`} className={styles.panelTitle}>
-                  <EntityTag entity={column.entity} />{" "}
-                  <span className={styles.entityName}>
-                    {ENTITY_LABELS[column.entity].long}
-                  </span>
-                </h3>
-              </div>
-              <div className={styles.scroller}>
-                <table className={styles.table}>
-                  <caption>
-                    {ENTITY_LABELS[column.entity].short} funds, {statement.period.label}.
-                    Closing equals opening plus revenue less expenses, per fund.
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Fund</th>
-                      <th scope="col">Restriction</th>
-                      <th scope="col" className={styles.thNum}>
-                        Opening
-                      </th>
-                      <th scope="col" className={styles.thNum}>
-                        Revenue
-                      </th>
-                      <th scope="col" className={styles.thNum}>
-                        Expenses
-                      </th>
-                      <th scope="col" className={styles.thNum}>
-                        Closing
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {column.fundBalances.map((balance) => (
-                      <tr key={balance.fundId}>
-                        <th scope="row" className={styles.wrapCell}>
-                          {balance.fundName}
-                        </th>
-                        <td>{RESTRICTION_LABELS[balance.restriction]}</td>
-                        <td className={styles.tdNum}>
-                          <Money amountCents={balance.openingCents} />
-                        </td>
-                        <td className={styles.tdNum}>
-                          <Money amountCents={balance.revenueCents} />
-                        </td>
-                        <td className={styles.tdNum}>
-                          <Money amountCents={balance.expenseCents} />
-                        </td>
-                        <td className={styles.tdNum}>
-                          <Money amountCents={balance.closingCents} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className={styles.tfoot}>
-                    <tr>
-                      <th scope="row" colSpan={2}>
-                        {ENTITY_LABELS[column.entity].short} only
-                      </th>
-                      <td className={styles.tdNum}>
-                        <Money amountCents={column.openingNetAssetsCents} />
-                      </td>
-                      <td className={styles.tdNum}>
-                        <Money amountCents={column.revenueCents} />
-                      </td>
-                      <td className={styles.tdNum}>
-                        <Money amountCents={column.expenseCents} />
-                      </td>
-                      <td className={styles.tdNum}>
-                        <Money amountCents={column.closingNetAssetsCents} />
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </section>
-          );
-        })}
-      </div>
-
-      <p className={styles.note}>
-        Figures in this build are fictional demo data. They are not either
-        organization&rsquo;s filed numbers and should not be quoted to the board as
-        fact.
-      </p>
+      <p className={styles.note}>{FICTIONAL_DATA_NOTE}</p>
     </div>
   );
 }
