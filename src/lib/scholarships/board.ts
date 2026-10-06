@@ -15,11 +15,18 @@ import type { Subject } from "../authz/policy";
 import { ELIGIBILITY_RULE } from "./eligibility";
 import { guard } from "./guard";
 import type { ScholarshipRepository } from "./repository";
-import { committeeScore, meritBandFor } from "./scoring";
+import {
+  MERIT_BANDS,
+  MERIT_FLOOR_SCORE,
+  SPREAD_WORTH_A_LOOK,
+  committeeScore,
+  meritBandFor,
+} from "./scoring";
 import {
   FLAG_LABELS,
   type Cycle,
   type IntakeFlag,
+  type Program,
   type ScholarshipAuditEntry,
 } from "./types";
 
@@ -191,6 +198,189 @@ export async function loadChairRows(
   }
 
   return rows;
+}
+
+/* ------------------------------------------------------------------ *
+ * Exceptions
+ * ------------------------------------------------------------------ */
+
+/** Within this many points of a band line is close enough to want a second look. */
+export const BAND_BOUNDARY_MARGIN = 3;
+
+export type CycleExceptions = {
+  cycleId: string;
+  /**
+   * Any applicant whose sponsoring member holds a board seat. These go to the
+   * full board with that member recused, and nothing here approves one.
+   */
+  boardMemberDependents: {
+    applicationId: string;
+    reference: string;
+    applicantName: string;
+    recusedPersonId: string;
+    awards: { awardId: string; program: Program; amountCents: number; status: string }[];
+    boardDecisionRecorded: boolean;
+  }[];
+  /**
+   * Scores sitting within a few points of a band line, where one reviewer's
+   * sheet is the difference between two amounts.
+   */
+  nearBandBoundary: {
+    applicationId: string;
+    reference: string;
+    applicantName: string;
+    average: number;
+    bandLabel: string;
+    /** The band immediately above, and how far away it is. */
+    nextBandLabel: string | null;
+    pointsToNextBand: number | null;
+    /** Negative when the score is below the Merit floor. */
+    pointsAboveFloor: number;
+  }[];
+  /** Committees that disagreed widely. The average hides this. */
+  wideSpread: {
+    applicationId: string;
+    reference: string;
+    applicantName: string;
+    average: number;
+    spread: number;
+    high: number;
+    low: number;
+  }[];
+  /** Sponsor checks that came back wrong. The chair's spreadsheet, automated. */
+  sponsorProblems: {
+    applicationId: string;
+    reference: string;
+    applicantName: string;
+    sponsorMemberId: string;
+    onRoster: boolean;
+    inGoodStanding: boolean;
+  }[];
+  /** Under-18 applicants with no guardian consent record. These cannot submit. */
+  minorsWithoutConsent: {
+    applicationId: string;
+    reference: string;
+    applicantName: string;
+    state: string;
+  }[];
+  /** Wounded Patriot applications the chair has not yet verified. */
+  verificationsOutstanding: {
+    applicationId: string;
+    reference: string;
+    applicantName: string;
+  }[];
+};
+
+/**
+ * Everything in the cycle that wants a person's attention, in one read.
+ *
+ * Requires APPLICANT at READ, because every list here names an applicant.
+ */
+export async function loadCycleExceptions(
+  repo: ScholarshipRepository,
+  subject: Subject,
+  cycleId?: string,
+): Promise<CycleExceptions> {
+  await guard(repo, subject, {
+    action: "READ_CYCLE_EXCEPTIONS",
+    dataClass: "APPLICANT",
+    required: "READ",
+    rowLevel: true,
+  });
+
+  const cycle = cycleId ?? (await repo.currentCycle()).id;
+  const applications = await repo.listApplications({ cycleId: cycle });
+  const awards = await repo.listAwards({ cycleId: cycle });
+
+  const result: CycleExceptions = {
+    cycleId: cycle,
+    boardMemberDependents: [],
+    nearBandBoundary: [],
+    wideSpread: [],
+    sponsorProblems: [],
+    minorsWithoutConsent: [],
+    verificationsOutstanding: [],
+  };
+
+  for (const application of applications) {
+    const base = {
+      applicationId: application.id,
+      reference: application.reference,
+      applicantName: application.applicant.fullName,
+    };
+
+    if (application.boardMemberPersonId) {
+      const theirs = awards.filter((a) => a.applicationId === application.id);
+      result.boardMemberDependents.push({
+        ...base,
+        recusedPersonId: application.boardMemberPersonId,
+        awards: theirs.map((a) => ({
+          awardId: a.id,
+          program: a.program,
+          amountCents: a.amountCents,
+          status: a.status,
+        })),
+        boardDecisionRecorded: theirs.every((a) => a.boardReview?.outcome !== null),
+      });
+    }
+
+    if (
+      application.sponsor &&
+      (!application.sponsor.onRoster || !application.sponsor.inGoodStanding)
+    ) {
+      result.sponsorProblems.push({
+        ...base,
+        sponsorMemberId: application.sponsor.sponsorMemberId,
+        onRoster: application.sponsor.onRoster,
+        inGoodStanding: application.sponsor.inGoodStanding,
+      });
+    }
+
+    if (application.flags.includes("APPLICANT_IS_A_MINOR") && !application.guardianConsentId) {
+      result.minorsWithoutConsent.push({ ...base, state: application.state });
+    }
+
+    if (application.state === "WITHDRAWN") continue;
+
+    if (application.woundedPatriot && !(await repo.getVerification(application.id))) {
+      result.verificationsOutstanding.push({ ...base });
+    }
+
+    const sheets = await repo.listScoreSheets(application.id);
+    const score = committeeScore(sheets);
+    if (!score) continue;
+
+    if (score.spread >= SPREAD_WORTH_A_LOOK) {
+      result.wideSpread.push({
+        ...base,
+        average: score.average,
+        spread: score.spread,
+        high: score.high,
+        low: score.low,
+      });
+    }
+
+    const band = meritBandFor(score.average);
+    const above = MERIT_BANDS.filter((b) => b.minScore > score.average).sort(
+      (a, b) => a.minScore - b.minScore,
+    )[0];
+    const toNext = above ? above.minScore - score.average : null;
+    const nearFloor = Math.abs(score.average - MERIT_FLOOR_SCORE) <= BAND_BOUNDARY_MARGIN;
+    if ((toNext !== null && toNext <= BAND_BOUNDARY_MARGIN) || nearFloor) {
+      result.nearBandBoundary.push({
+        ...base,
+        average: score.average,
+        bandLabel: band?.label ?? "No Merit award",
+        nextBandLabel: above?.label ?? null,
+        pointsToNextBand: toNext,
+        pointsAboveFloor: score.average - MERIT_FLOOR_SCORE,
+      });
+    }
+  }
+
+  result.nearBandBoundary.sort((a, b) => b.average - a.average);
+  result.wideSpread.sort((a, b) => b.spread - a.spread);
+  return result;
 }
 
 /* ------------------------------------------------------------------ *

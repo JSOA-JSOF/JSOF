@@ -84,6 +84,14 @@ export type ScholarshipRepository = {
 
   /* Scoring ------------------------------------------------------ */
   listScoreSheets(applicationId: string): Promise<ScoreSheet[]>;
+  /**
+   * Every sheet for a set of applications, in one read.
+   *
+   * Exists so a cycle-wide figure (a reviewer's running average against the
+   * committee's) is one call rather than one call per application. A score
+   * sheet carries no cycle of its own, so the caller passes the ids.
+   */
+  listScoreSheetsForApplications(applicationIds: string[]): Promise<ScoreSheet[]>;
   getScoreSheet(applicationId: string, reviewerPersonId: string): Promise<ScoreSheet | null>;
   upsertScoreSheet(sheet: ScoreSheet): Promise<ScoreSheet>;
 
@@ -290,6 +298,13 @@ export class InMemoryScholarshipRepository implements ScholarshipRepository {
   async listScoreSheets(applicationId: string): Promise<ScoreSheet[]> {
     return this.sheets
       .filter((s) => s.applicationId === applicationId)
+      .map((s) => structuredClone(s));
+  }
+
+  async listScoreSheetsForApplications(applicationIds: string[]): Promise<ScoreSheet[]> {
+    const wanted = new Set(applicationIds);
+    return this.sheets
+      .filter((s) => wanted.has(s.applicationId))
       .map((s) => structuredClone(s));
   }
 

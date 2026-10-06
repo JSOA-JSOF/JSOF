@@ -1,62 +1,79 @@
 :root {
-  --ground: #F4F3EE;
+  /* Black, gold and white, the JSOC-family palette.
+     Ground and ink are warm rather than neutral: cold grey beside gold reads
+     as a spreadsheet, warm grey reads as paper and brass. */
+  --ground: #FAF8F3;
   --panel: #FFFFFF;
-  --ink: #16191D;
-  --ink-2: #474C54;
-  --mute: #767B74;
-  --line: #D6D3C8;
-  --line-2: #E8E6DE;
+  --ink: #141310;
+  --ink-2: #4A463C;
+  --mute: #7B7667;
+  --line: #DCD5C4;
+  --line-2: #EDE8DB;
 
-  /* The two entities are differentiated by hue everywhere in the product.
-     Steel for the Association, field green for the Foundation. */
-  --jsoa: #2F4C73;
-  --jsoa-tint: #E5EBF3;
-  --jsof: #2C5647;
-  --jsof-tint: #E2EDE7;
+  /* The two entities are drawn from the same three colours rather than from
+     invented hues: the Association takes the gold, the Foundation takes the
+     ink. They differ in warmth AND in lightness, so they survive greyscale, a
+     colour-vision deficiency, and a bad projector. Entity is always labelled
+     in text too; colour reinforces the split, it never carries it alone. */
+  --jsoa: #8A6A12;
+  --jsoa-tint: #F6EFD7;
+  --jsof: #2B2A24;
+  --jsof-tint: #E9E5D9;
 
-  --warn: #855415;
-  --warn-tint: #F6EBD8;
-  --focus: #5B8FD9;
+  /* Warnings are rust, deliberately not amber. Amber beside brand gold reads
+     as a slightly louder brand colour, which is the wrong signal for a control
+     that means stop. */
+  --warn: #8C3A1E;
+  --warn-tint: #F7E7DF;
+  --critical: #7E2D18;
+
+  /* Focus is ink, not a hue, so one ring stays visible on gold, on bone and on
+     black instead of disappearing into whatever it is outlining. */
+  --focus: #141310;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground: #13161A;
-    --panel: #1B1F24;
-    --ink: #E8E6DF;
-    --ink-2: #B4B2AA;
-    --mute: #888C85;
-    --line: #313740;
-    --line-2: #262B31;
+    --ground: #0F0E0C;
+    --panel: #1A1815;
+    --ink: #F2EEE3;
+    --ink-2: #B9B3A4;
+    --mute: #867F71;
+    --line: #35312A;
+    --line-2: #26231E;
 
-    --jsoa: #8DACD6;
-    --jsoa-tint: #1C2530;
-    --jsof: #7BB99D;
-    --jsof-tint: #1B2A24;
+    --jsoa: #D9B451;
+    --jsoa-tint: #2A2415;
+    --jsof: #E8E3D6;
+    --jsof-tint: #24221C;
 
-    --warn: #DEB069;
-    --warn-tint: #2C2517;
-    --focus: #7FA9E8;
+    --warn: #E09070;
+    --warn-tint: #2E1F18;
+    --critical: #F0A08A;
+
+    --focus: #F2EEE3;
   }
 }
 
 :root[data-theme="dark"] {
-  --ground: #13161A;
-  --panel: #1B1F24;
-  --ink: #E8E6DF;
-  --ink-2: #B4B2AA;
-  --mute: #888C85;
-  --line: #313740;
-  --line-2: #262B31;
+  --ground: #0F0E0C;
+  --panel: #1A1815;
+  --ink: #F2EEE3;
+  --ink-2: #B9B3A4;
+  --mute: #867F71;
+  --line: #35312A;
+  --line-2: #26231E;
 
-  --jsoa: #8DACD6;
-  --jsoa-tint: #1C2530;
-  --jsof: #7BB99D;
-  --jsof-tint: #1B2A24;
+  --jsoa: #D9B451;
+  --jsoa-tint: #2A2415;
+  --jsof: #E8E3D6;
+  --jsof-tint: #24221C;
 
-  --warn: #DEB069;
-  --warn-tint: #2C2517;
-  --focus: #7FA9E8;
+  --warn: #E09070;
+  --warn-tint: #2E1F18;
+  --critical: #F0A08A;
+
+  --focus: #F2EEE3;
 }
 
 * {

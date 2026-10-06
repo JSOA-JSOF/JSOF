@@ -412,3 +412,77 @@ export async function committeeScoreFor(
 ): Promise<CommitteeScore | null> {
   return committeeScore(await repo.listScoreSheets(applicationId));
 }
+
+/* ------------------------------------------------------------------ *
+ * Calibration
+ * ------------------------------------------------------------------ */
+
+/**
+ * A reviewer's running average against the cycle's.
+ *
+ * Four people score, and a reviewer who is consistently ten points below the
+ * others is not wrong but is worth knowing about: the band is arithmetic on
+ * the mean, so a systematic drift moves money. This is the figure that makes
+ * that visible without anyone having to export sheets to a spreadsheet.
+ *
+ * Carries no applicant identity, so it can be shown anywhere.
+ */
+export type ReviewerCalibration = {
+  cycleId: string;
+  reviewerPersonId: string;
+  /** Mean of this reviewer's sheets. Null when they have scored nothing. */
+  reviewerAverage: number | null;
+  reviewerSheets: number;
+  /** Mean of every sheet in the cycle, this reviewer's included. */
+  cycleAverage: number | null;
+  cycleSheets: number;
+  /** Reviewer minus cycle, in whole points. Null when either is unknown. */
+  delta: number | null;
+  /** Mean of the other reviewers' sheets on the files this reviewer scored. */
+  peerAverageOnSharedFiles: number | null;
+  sharedFiles: number;
+};
+
+export async function reviewerCalibration(
+  repo: ScholarshipRepository,
+  subject: Subject,
+  cycleId?: string,
+  reviewerPersonId?: string,
+): Promise<ReviewerCalibration> {
+  await guard(repo, subject, {
+    action: "READ_REVIEWER_CALIBRATION",
+    dataClass: "APPLICANT",
+    required: "AGGREGATE",
+    rowLevel: false,
+  });
+
+  const cycle = cycleId ?? (await repo.currentCycle()).id;
+  const reviewer = reviewerPersonId ?? subject.personId;
+  const applications = await repo.listApplications({ cycleId: cycle });
+  const sheets = await repo.listScoreSheetsForApplications(applications.map((a) => a.id));
+
+  const mine = sheets.filter((s) => s.reviewerPersonId === reviewer);
+  const mineFiles = new Set(mine.map((s) => s.applicationId));
+  const peers = sheets.filter(
+    (s) => s.reviewerPersonId !== reviewer && mineFiles.has(s.applicationId),
+  );
+
+  const mean = (values: number[]): number | null =>
+    values.length === 0 ? null : Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+
+  const reviewerAverage = mean(mine.map((s) => s.total));
+  const cycleAverage = mean(sheets.map((s) => s.total));
+
+  return {
+    cycleId: cycle,
+    reviewerPersonId: reviewer,
+    reviewerAverage,
+    reviewerSheets: mine.length,
+    cycleAverage,
+    cycleSheets: sheets.length,
+    delta:
+      reviewerAverage !== null && cycleAverage !== null ? reviewerAverage - cycleAverage : null,
+    peerAverageOnSharedFiles: mean(peers.map((s) => s.total)),
+    sharedFiles: mineFiles.size,
+  };
+}

@@ -407,6 +407,45 @@ export function buildAwardNotification(input: {
   };
 }
 
+/**
+ * The notification as data, without sending anything.
+ *
+ * For a screen that wants to show the chair exactly what will go out, to whom,
+ * and with which figure merged, before she commits to it. Reads only: nothing
+ * is queued and no award status changes. `sendAwardNotification` is what sends.
+ */
+export async function awardNotificationFor(
+  repo: ScholarshipRepository,
+  subject: Subject,
+  awardId: string,
+  now: Date = new Date(),
+): Promise<AwardNotification> {
+  await guard(repo, subject, {
+    action: "PREVIEW_AWARD_NOTIFICATION",
+    dataClass: "APPLICANT",
+    required: "READ",
+    rowLevel: true,
+    subjectRef: awardId,
+  });
+
+  const award = await repo.getAward(awardId);
+  if (!award) throw new Error(`No award ${awardId}`);
+  const application = await repo.getApplication(award.applicationId);
+  if (!application) throw new Error(`No application ${award.applicationId}`);
+  const consent = await repo.getGuardianConsentForApplication(application.id);
+  const school = application.enrolment
+    ? await repo.getSchool(application.enrolment.schoolId)
+    : null;
+
+  return buildAwardNotification({
+    award,
+    application,
+    consent,
+    schoolName: school?.name ?? null,
+    now,
+  });
+}
+
 export class AwardNotApprovedError extends Error {
   constructor(readonly awardId: string) {
     super(`Award ${awardId} has not been approved, so nothing is sent about it`);
