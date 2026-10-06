@@ -1,0 +1,320 @@
+/* Board store screens. Tokens only, no colour literals.
+   The brand bar, platform nav and dev persona switcher come from the shared
+   board shell; the entity hue is set on .screen and read as var(--hue). */
+
+.screen {
+  display: block;
+}
+
+.status {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hue);
+}
+
+.nav {
+  border-bottom: 1px solid var(--line-2);
+  padding: 10px 0;
+  margin-bottom: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 0.9rem;
+}
+
+.navLink {
+  color: var(--ink-2);
+  text-decoration: none;
+  padding-bottom: 2px;
+}
+
+.navLink:hover {
+  color: var(--ink);
+}
+
+.navOn {
+  color: var(--hue);
+  font-weight: 600;
+  border-bottom: 2px solid var(--hue);
+}
+
+.title {
+  font-size: clamp(1.6rem, 3.2vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.08;
+  max-width: 28ch;
+}
+
+.lede {
+  color: var(--ink-2);
+  max-width: 66ch;
+  font-size: 1rem;
+}
+
+.sectionHead {
+  margin-top: 34px;
+  font-size: 1.12rem;
+  font-weight: 600;
+}
+
+.subHead {
+  margin-top: 24px;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+/* --- separation of duties banner --- */
+
+.finding {
+  margin-top: 20px;
+  border: 1px solid var(--warn);
+  background: var(--warn-tint);
+  padding: 14px 16px;
+  max-width: 74ch;
+}
+
+.findingHead {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.findingBody {
+  margin: 6px 0 0;
+  font-size: 0.93rem;
+}
+
+.findingMitigation {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+
+/* --- tables --- */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 0.9rem;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-2);
+  vertical-align: top;
+}
+
+.table th {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+  font-weight: 500;
+  border-bottom: 1px solid var(--line);
+}
+
+.num {
+  text-align: right;
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.totalRow td {
+  border-top: 1px solid var(--line);
+  font-weight: 600;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+/* --- figures --- */
+
+.figures {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin-top: 16px;
+}
+
+.figure {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 12px 14px;
+}
+
+.figureKey {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.figureValue {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.35rem;
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.figureNote {
+  color: var(--ink-2);
+  font-size: 0.82rem;
+  margin-top: 4px;
+}
+
+/* --- chips, filters, controls --- */
+
+.chip {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  color: var(--mute);
+  white-space: nowrap;
+}
+
+.chipHue {
+  border-color: var(--hue);
+  color: var(--hue);
+}
+
+.chipWarn {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: var(--warn-tint);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  align-items: center;
+}
+
+.action {
+  font-family: "Source Sans 3", sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border: 1px solid var(--hue);
+  background: var(--panel);
+  color: var(--hue);
+  padding: 7px 13px;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--hue);
+  color: var(--panel);
+}
+
+.actionQuiet {
+  border-color: var(--line);
+  color: var(--ink-2);
+}
+
+.actionQuiet:hover {
+  background: var(--line-2);
+  color: var(--ink);
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+  align-items: flex-end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.85rem;
+}
+
+.field input,
+.field select {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.88rem;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+/* --- notes --- */
+
+.note {
+  margin-top: 26px;
+  border-left: 3px solid var(--hue);
+  padding: 4px 0 4px 14px;
+  color: var(--ink-2);
+  max-width: 72ch;
+  font-size: 0.92rem;
+}
+
+.whyNote {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 14px 16px;
+  max-width: 76ch;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+}
+
+.whyNote strong {
+  color: var(--ink);
+}
+
+.refused {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 16px 18px;
+  max-width: 68ch;
+}
+
+.refusedHead {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.empty {
+  margin-top: 18px;
+  border: 1px dashed var(--line);
+  padding: 18px;
+  color: var(--ink-2);
+  font-size: 0.93rem;
+}
+
+@media (max-width: 480px) {
+  .nav {
+    gap: 6px 12px;
+  }
+
+  .figures {
+    grid-template-columns: 1fr;
+  }
+}

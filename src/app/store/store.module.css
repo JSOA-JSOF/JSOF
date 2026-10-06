@@ -1,0 +1,373 @@
+/* Storefront. Colours come from the tokens in globals.css only; the entity hue
+   is set once on .page and read as var(--hue) below it. */
+
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bar {
+  border-bottom: 1px solid var(--line);
+  border-top: 4px solid var(--hue);
+  padding: 14px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.back {
+  color: var(--mute);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+.status {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hue);
+}
+
+.body {
+  flex: 1;
+  width: 100%;
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 32px 20px 72px;
+}
+
+.title {
+  font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+  font-weight: 700;
+  line-height: 1.05;
+  max-width: 26ch;
+}
+
+.lede {
+  color: var(--ink-2);
+  max-width: 62ch;
+  font-size: 1.02rem;
+}
+
+.sectionHead {
+  margin-top: 36px;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.subHead {
+  margin-top: 28px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* --- product grid --- */
+
+.grid {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+
+.card {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cardTop {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.cardName {
+  font-family: "Barlow Semi Condensed", "Source Sans 3", sans-serif;
+  font-size: 1.12rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-decoration: none;
+}
+
+.cardName:hover {
+  color: var(--hue);
+}
+
+.price {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.blurb {
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  flex: 1;
+  margin: 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  color: var(--mute);
+  white-space: nowrap;
+}
+
+.chipHue {
+  border-color: var(--hue);
+  color: var(--hue);
+}
+
+.chipWarn {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: var(--warn-tint);
+}
+
+/* --- controls --- */
+
+.action {
+  font-family: "Source Sans 3", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid var(--hue);
+  background: var(--panel);
+  color: var(--hue);
+  padding: 8px 14px;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--hue);
+  color: var(--panel);
+}
+
+.actionQuiet {
+  border-color: var(--line);
+  color: var(--ink-2);
+}
+
+.actionQuiet:hover {
+  background: var(--line-2);
+  color: var(--ink);
+}
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+  align-items: center;
+}
+
+/* --- totals table --- */
+
+.lines {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+  font-size: 0.93rem;
+}
+
+.lines th,
+.lines td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line-2);
+  vertical-align: top;
+}
+
+.lines th {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+  font-weight: 500;
+  border-bottom: 1px solid var(--line);
+}
+
+.num {
+  text-align: right;
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.totalRow td {
+  border-top: 1px solid var(--line);
+  border-bottom: none;
+  font-weight: 600;
+}
+
+.taxRow td {
+  color: var(--ink-2);
+}
+
+/* --- notes and banners --- */
+
+.note {
+  margin-top: 28px;
+  border-left: 3px solid var(--hue);
+  padding: 4px 0 4px 14px;
+  color: var(--ink-2);
+  max-width: 64ch;
+  font-size: 0.93rem;
+}
+
+.warnNote {
+  margin-top: 24px;
+  border: 1px solid var(--warn);
+  background: var(--warn-tint);
+  padding: 12px 14px;
+  color: var(--ink);
+  max-width: 64ch;
+  font-size: 0.93rem;
+}
+
+.empty {
+  margin-top: 20px;
+  border: 1px dashed var(--line);
+  padding: 20px;
+  color: var(--ink-2);
+  font-size: 0.95rem;
+}
+
+/* --- dev switcher --- */
+
+.dev {
+  border-bottom: 1px solid var(--line);
+  background: var(--warn-tint);
+  padding: 8px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.devLabel {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.devLink {
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.devLink:hover {
+  color: var(--ink);
+}
+
+.devOn {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom: 2px solid var(--warn);
+}
+
+.devNote {
+  color: var(--ink-2);
+  flex: 1 1 24ch;
+  font-size: 0.78rem;
+}
+
+/* --- hosted payment step: deliberately bare --- */
+
+.payment {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 22px;
+  max-width: 52ch;
+}
+
+.paymentFigure {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.6rem;
+  font-weight: 500;
+}
+
+.receipt {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 18px 20px;
+  max-width: 60ch;
+}
+
+.receiptRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+  font-size: 0.93rem;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.receiptRow:last-child {
+  border-bottom: none;
+}
+
+.receiptKey {
+  color: var(--mute);
+}
+
+.receiptValue {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 480px) {
+  .bar,
+  .dev {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
