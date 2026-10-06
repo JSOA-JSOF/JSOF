@@ -1,0 +1,248 @@
+/* The shared public shell. Both entities use it; only --hue differs. */
+
+.shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.jsoaHue {
+  --hue: var(--jsoa);
+  --hue-tint: var(--jsoa-tint);
+}
+
+.jsofHue {
+  --hue: var(--jsof);
+  --hue-tint: var(--jsof-tint);
+}
+
+/* ---- header ---- */
+
+.masthead {
+  border-top: 4px solid var(--hue);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.identity {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 12px 20px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.wordmark {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.wordmarkLong {
+  color: var(--ink-2);
+  font-family: "Source Sans 3", sans-serif;
+  font-weight: 400;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 560px) {
+  .wordmarkLong {
+    display: none;
+  }
+}
+
+.subsection {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hue);
+  white-space: nowrap;
+}
+
+.nav {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 20px 10px;
+}
+
+.navList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 18px;
+}
+
+.navLink {
+  display: inline-block;
+  padding: 4px 0;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.navLink:hover {
+  color: var(--ink);
+  border-bottom-color: var(--hue);
+}
+
+.navLinkCurrent {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--hue);
+}
+
+/* ---- breadcrumb ---- */
+
+.crumbs {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 14px 20px 0;
+  font-size: 0.84rem;
+  color: var(--mute);
+}
+
+.crumbs ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.crumbs a {
+  color: var(--mute);
+  text-decoration: none;
+}
+
+.crumbs a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.crumbs li + li::before {
+  content: "/";
+  color: var(--line);
+  margin-right: 6px;
+}
+
+/* ---- body ---- */
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+/* ---- footer ---- */
+
+.foot {
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.footInner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 20px 32px;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.footHead {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin: 0 0 8px;
+}
+
+.footList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.9rem;
+}
+
+.footList a {
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.footList a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.crossover {
+  border-left: 3px solid var(--hue);
+  padding-left: 12px;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+
+.crossoverSpaced {
+  margin-top: 12px;
+}
+
+.crossoverLink {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--hue);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.crossoverLink:hover {
+  text-decoration: underline;
+}
+
+.legal {
+  border-top: 1px solid var(--line-2);
+}
+
+.legalInner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 12px 20px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--mute);
+}
+
+.address {
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--warn-tint);
+  color: var(--warn);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
