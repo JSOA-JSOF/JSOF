@@ -1,0 +1,166 @@
+/* Role dashboards. Reasoning in docs/DASHBOARD-BRIEF.md. */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* Hairline dividers rather than floating cards: these figures belong to one
+   reading, and twelve separate rounded boxes read as twelve separate things. */
+.tile {
+  background: var(--panel);
+  padding: 16px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 132px;
+}
+
+.label {
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  line-height: 1.3;
+}
+
+.value {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.target {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--mute);
+}
+
+/* Not measured is a state, not a zero. It reads as deliberately blank. */
+.notMeasured {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--mute);
+  margin-top: 6px;
+}
+
+.needs {
+  font-size: 0.76rem;
+  color: var(--mute);
+  font-style: italic;
+}
+
+/* Provenance. Pinned to the bottom so the tiles align however long it runs. */
+.from {
+  font-size: 0.73rem;
+  color: var(--mute);
+  line-height: 1.35;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+/* Good takes no colour. Only a problem is coloured, so colour still means
+   something by the twelfth tile. */
+.watch .value {
+  color: var(--warn);
+}
+
+.problem .value {
+  color: var(--critical);
+}
+
+.unmeasured {
+  background: color-mix(in srgb, var(--panel) 94%, var(--mute));
+}
+
+.heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.title {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.asOf {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--mute);
+}
+
+.lede {
+  color: var(--ink-2);
+  max-width: 70ch;
+  margin: 0 0 18px;
+}
+
+/* What needs doing, under the figures. A dashboard that only reports is a
+   report; the point is the next action. */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 18px;
+}
+
+.action {
+  background: var(--panel);
+  padding: 12px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: baseline;
+  justify-content: space-between;
+  text-decoration: none;
+  color: inherit;
+}
+
+.action:hover {
+  background: var(--ground);
+}
+
+.actionLabel {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.actionNote {
+  color: var(--mute);
+  font-size: 0.85rem;
+  flex: 1 1 24ch;
+}
+
+.actionCount {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.actionUrgent .actionCount {
+  color: var(--warn);
+  font-weight: 600;
+}
