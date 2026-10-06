@@ -220,7 +220,9 @@ export async function loadRetentionSchedule(
   await guard(repo, subject, {
     action: "READ_RETENTION_SCHEDULE",
     dataClass: "APPLICANT",
-    required: "READ",
+    // WRITE: named applicants across cycles, including ones this reader never
+    // scored and a closed cycle they had nothing to do with.
+    required: "WRITE",
     rowLevel: true,
   });
 

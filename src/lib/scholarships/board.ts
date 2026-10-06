@@ -159,7 +159,9 @@ export async function loadChairRows(
   await guard(repo, subject, {
     action: "READ_CHAIR_FILE_LIST",
     dataClass: "APPLICANT",
-    required: "READ",
+    // WRITE: every file in the cycle with its outcome, not only the ones this
+    // reader is scoring. A reviewer has their own queue for that.
+    required: "WRITE",
     rowLevel: true,
   });
 

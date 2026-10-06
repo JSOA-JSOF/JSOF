@@ -433,7 +433,9 @@ export async function awardNotificationFor(
   await guard(repo, subject, {
     action: "PREVIEW_AWARD_NOTIFICATION",
     dataClass: "APPLICANT",
-    required: "READ",
+    // WRITE: the preview is the whole message, with the merged amount and
+    // every recipient on it.
+    required: "WRITE",
     rowLevel: true,
     subjectRef: awardId,
   });
@@ -649,7 +651,9 @@ export async function loadAwardRows(
   await guard(repo, subject, {
     action: "READ_AWARD_ROWS",
     dataClass: "APPLICANT",
-    required: "READ",
+    // WRITE: these rows carry the amount and the recipient addresses. See
+    // tests/reviewer-boundary.test.ts for the line this sits on.
+    required: "WRITE",
     rowLevel: true,
   });
 
