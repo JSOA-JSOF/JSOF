@@ -228,6 +228,43 @@ Two things about 131F still open, both COUNSEL:
   Support splitting a ticket into fair-market-value admission plus a separately
   stated donation; the donation portion is exempt.
 
+### Scholarships — build the machinery, keep the rule as configuration
+
+REPRIORITISED after the Scholarships Chair's intake response (2026-09-27).
+This is no longer a deferred module: the next cycle opens mid-December 2026
+and it is the organization's most expensive workflow in volunteer time
+(~40 hours a month, January to June; ~240 hours a cycle).
+
+Confirmed scale, last cycle: 150 applications, 119 merit awards ($500-$2,500,
+occasionally $5,000), 64 Wounded Patriot awards (flat amount). An applicant may
+receive both, one, or neither.
+
+The eligibility RULE is under legal review; the machinery around it is not.
+Build intake, membership verification, scoring, notification and disbursement
+so that the definition of the eligible class is a configuration value, not a
+branch in code. When counsel reports, one rule changes.
+
+Required by the chair's own account of the work:
+
+- **Automatic membership check on application.** Today she opens a spreadsheet.
+  This was her single biggest automation ask.
+- **Copy the sponsoring member on every message to an applicant.** Students
+  frequently do not read or answer email; she currently leaves the system to
+  reach the sponsor.
+- **An award-amount field on the record, merged into the notification.** She
+  retypes 183 award amounts into emails by hand each cycle. This is the single
+  most time-consuming task in the role.
+- **Patriot Foundation routing, at the front of the form.** NC residents
+  attending NC schools now apply directly to Patriot Foundation; everyone else
+  applies here. Ask the three questions that decide it and route before the
+  applicant fills anything in, instead of emailing them afterwards.
+- **US-hosted. Explicitly required for scholarship applications.**
+
+Access split, which they already enforce by hand and the platform must keep:
+scorers see the transcript and application; scorers do NOT see disability
+documentation. Checking disability status is named as the one step that must
+never run without a person.
+
 ### Scholarships — do not build eligibility as currently published (COUNSEL)
 
 The published rule is "dependent child of a current JSOA member." That is the
