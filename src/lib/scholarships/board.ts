@@ -281,10 +281,13 @@ export async function loadCycleExceptions(
   subject: Subject,
   cycleId?: string,
 ): Promise<CycleExceptions> {
+  // WRITE for the same reason as the awards board: these lists name board
+  // members' dependents and failed sponsor checks, and a scorer does not need
+  // either to score an essay.
   await guard(repo, subject, {
     action: "READ_CYCLE_EXCEPTIONS",
     dataClass: "APPLICANT",
-    required: "READ",
+    required: "WRITE",
     rowLevel: true,
   });
 

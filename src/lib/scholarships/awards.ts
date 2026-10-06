@@ -276,12 +276,22 @@ export async function recordFullBoardDecision(
   if (approvers.includes(award.boardReview.recusedPersonId)) {
     throw new RecusedApproverError(award.boardReview.recusedPersonId);
   }
-  // The person who asked for the review is not also the person who grants it.
-  assertNotSelfApproval(subject.personId, {
-    id: award.id,
-    createdById: award.boardReview.requestedByPersonId,
-    entity: award.entity,
-  });
+  // The person who proposed the award is not one of the people who approve it.
+  //
+  // The check is against the APPROVERS, not against whoever is typing. The
+  // chair proposes these and the chair keeps the records, so pointing the
+  // no-self-approval invariant at the recorder would mean nobody could write
+  // down what the board decided: the only other roles holding APPLICANT WRITE
+  // on JSOF have no business in a scholarship file at all. What the invariant
+  // is actually for is that the proposer does not vote on her own proposal,
+  // and that is what this asserts.
+  for (const approver of approvers) {
+    assertNotSelfApproval(approver, {
+      id: award.id,
+      createdById: award.boardReview.requestedByPersonId,
+      entity: award.entity,
+    });
+  }
 
   return repo.updateAward(input.awardId, {
     status: input.outcome === "APPROVED" ? "APPROVED" : "DECLINED",
@@ -541,10 +551,16 @@ export async function loadAwardsBoard(
   subject: Subject,
   cycleId?: string,
 ): Promise<AwardsBoard> {
+  // WRITE, not READ. A scholarship reviewer holds APPLICANT READ so they can
+  // score, and the awards board carries every amount. A scorer who can see
+  // that three points is worth $1,000 is a scorer whose scores are no longer
+  // independent of the money — the same reasoning that keeps the disability
+  // evidence away from them. Deciding awards is the chair's function, and the
+  // role table already spells that as APPLICANT WRITE.
   await guard(repo, subject, {
     action: "READ_AWARDS_BOARD",
     dataClass: "APPLICANT",
-    required: "READ",
+    required: "WRITE",
     rowLevel: true,
   });
 

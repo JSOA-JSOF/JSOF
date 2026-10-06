@@ -8,11 +8,12 @@
  * relationship to a member.
  *
  * Why it is built this way, from docs/ARCHITECTURE.md: the rule as published
- * defines the class by membership in the Association. That is the fact pattern
- * the IRS uses to deny or revoke 501(c)(3) exemption, because dues collected
- * from members and awards paid to members' children is private benefit. The
- * rule is with counsel. The machinery around it is not, and the next cycle
- * opens in the middle of December 2026 whatever counsel says.
+ * defines the eligible class by membership in the Association. That is the
+ * fact pattern the IRS uses to deny or revoke 501(c)(3) exemption, because
+ * dues collected from a membership and awards paid back into the same
+ * membership is private benefit. The rule is with counsel. The machinery
+ * around it is not, and the next cycle opens in the middle of December 2026
+ * whatever counsel says.
  *
  * So the rule is a placeholder with a status flag, and the placeholder returns
  * UNDETERMINED for every applicant. UNDETERMINED is not a denial and not an

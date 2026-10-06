@@ -13,7 +13,8 @@ lane will be lost or will break someone else.
 | Module | Owns |
 | --- | --- |
 | public | `src/app/(public)/**`, `src/app/jsoa/**`, `src/app/jsof/**` |
-| membership | `src/app/apply/**`, `src/app/board/membership/**`, `src/lib/membership/**` (except `state.ts`) |
+| membership | `src/app/apply/**` EXCEPT `src/app/apply/scholarship/**`, `src/app/board/membership/**`, `src/lib/membership/**` (except `state.ts`) |
+| scholarships | `src/app/apply/scholarship/**`, `src/lib/scholarships/**`. Its board screens at `src/app/board/scholarships/**` are the integration lane, not this module's. |
 | secretary | `src/app/board/meetings/**`, `src/lib/meetings/**` |
 | treasury | `src/app/board/treasury/**`, `src/lib/treasury/**` |
 | foundation | `src/app/donate/**`, `src/app/board/donations/**`, `src/lib/donations/**` |

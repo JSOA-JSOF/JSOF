@@ -25,10 +25,19 @@ export function ReviewQueue({
   application,
   state,
   onScore,
+  scoring,
 }: {
   application: QueueApplication | null;
   state: QueueState;
   onScore?: (id: string, score: number) => void;
+  /**
+   * The scoring control itself. The chrome around it — resumption, honest
+   * progress, the session meter, the drift indicator, the pause — is the same
+   * whatever is being judged, but the judgement is domain-specific. Scholarship
+   * scoring is per-criterion with point weights, not a single 1 to 5, so the
+   * real form slots in here and the built-in scale is only a fallback.
+   */
+  scoring?: React.ReactNode;
 }) {
   const [picked, setPicked] = useState<number | null>(null);
   const [pauseDismissed, setPauseDismissed] = useState(false);
@@ -51,6 +60,9 @@ export function ReviewQueue({
   // Keyboard scoring. The point is flow: at 150 applications, reaching for a
   // mouse for every one is most of the friction.
   useEffect(() => {
+    // Only for the fallback scale. With a domain form present, digits belong to
+    // its fields and hijacking them would score the wrong thing.
+    if (scoring) return;
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -62,7 +74,7 @@ export function ReviewQueue({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [commit]);
+  }, [commit, scoring]);
 
   const drift = useMemo(() => {
     if (state.sessionAverage === null || state.cycleAverage === null) return null;
@@ -158,23 +170,25 @@ export function ReviewQueue({
           </p>
         ) : null}
 
-        <div className={styles.scoreRow}>
-          <span className={styles.scoreLabel}>Score</span>
-          {SCORES.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={`${styles.score} ${picked === n ? styles.scoreOn : ""}`}
-              aria-pressed={picked === n}
-              onClick={() => commit(n)}
-            >
-              {n}
-            </button>
-          ))}
-          <span className={styles.keys}>
-            press <kbd>1</kbd>–<kbd>5</kbd>
-          </span>
-        </div>
+        {scoring ?? (
+          <div className={styles.scoreRow}>
+            <span className={styles.scoreLabel}>Score</span>
+            {SCORES.map((n) => (
+              <button
+                key={n}
+                type="button"
+                className={`${styles.score} ${picked === n ? styles.scoreOn : ""}`}
+                aria-pressed={picked === n}
+                onClick={() => commit(n)}
+              >
+                {n}
+              </button>
+            ))}
+            <span className={styles.keys}>
+              press <kbd>1</kbd>–<kbd>5</kbd>
+            </span>
+          </div>
+        )}
 
         {/* Session meter and drift. Informational, never corrective: the
             system does not adjust her scores, it tells her what they look

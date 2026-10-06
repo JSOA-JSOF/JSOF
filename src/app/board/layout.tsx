@@ -13,6 +13,7 @@ export const metadata = {
 const NAV = [
   { href: "/board", label: "Overview" },
   { href: "/board/membership", label: "Membership" },
+  { href: "/board/scholarships", label: "Scholarships" },
   { href: "/board/treasury", label: "Treasury" },
   { href: "/board/meetings", label: "Meetings" },
   { href: "/board/donations", label: "Donations" },

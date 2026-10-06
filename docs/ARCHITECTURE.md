@@ -24,11 +24,14 @@ into one figure.
     donor           auth + MFA, JSOF donors and sponsors
     board           auth + MFA, scoped per role per data class per entity
 
-## The five data classes
+## The six data classes
 
     MEMBER_PII       roster, contact, service history, good-standing status
     FINANCIAL        ledgers, donations, dues, sales, reimbursements, budgets
     APPLICANT        scholarship applicants, family-support cases, dependents
+    APPLICANT_SENSITIVE  medical and disability evidence inside an application,
+                     and family-support case detail. Scorers read the
+                     application and never this.
     PUBLIC_CONTENT   anything that will become publicly visible
     AUDIT_LOG        who saw and changed what
 

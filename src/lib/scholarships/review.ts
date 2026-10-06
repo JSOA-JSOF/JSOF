@@ -215,7 +215,23 @@ export type ReviewQueue = {
   blocked: { reference: string; kind: RelationshipKind }[];
 };
 
-const REVIEWABLE_STATES = ["SUBMITTED", "IN_REVIEW", "SCORED"] as const;
+/**
+ * Everything a scorer may be given in a cycle: every submitted application
+ * except the ones that were withdrawn or never finished.
+ *
+ * Note what is NOT a filter here. A decided file stays in the list, because
+ * the split a reviewer cares about is whether THEY have scored it, not what
+ * the chair has done since. Filtering on the award decision would empty the
+ * queue the moment the chair started deciding, which is the middle of the
+ * cycle and exactly when the committee is still working.
+ */
+const REVIEWABLE_STATES = [
+  "SUBMITTED",
+  "IN_REVIEW",
+  "SCORED",
+  "AWARDED",
+  "NOT_AWARDED",
+] as const;
 
 export async function loadReviewQueue(
   repo: ScholarshipRepository,
