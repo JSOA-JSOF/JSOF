@@ -1,0 +1,371 @@
+/**
+ * The reads and writes the membership module needs, and an in-memory
+ * implementation backed by seed data.
+ *
+ * Persistence is deliberately deferred: swapping to Prisma later should be one
+ * new file implementing this interface, with no route or service change.
+ *
+ * Two shapes worth noting:
+ *
+ *   - There is no delete method anywhere, and none for the audit log in
+ *     particular. Append-only is enforced by the absence of a code path.
+ *   - Nothing here authorizes. Authorization happens in the service layer
+ *     above (board.ts, intake.ts, vouch.ts, payment.ts) so the decision sits
+ *     in one place per workflow rather than inside the data access.
+ */
+
+import type { Entity } from "../authz/model";
+import type { MembershipState } from "./state";
+import { formatMemberId } from "./state";
+import {
+  type Application,
+  type ApplicationFields,
+  type CheckoutHandoff,
+  type ChairDecision,
+  type IntakeFlag,
+  type Member,
+  type MembershipAuditEntry,
+  type VouchOutcome,
+  type VouchRequest,
+  MEMBERSHIP_ENTITY,
+} from "./types";
+import { seedApplications, seedMembers, seedVouchRequests } from "./seed";
+
+export type MembershipRepository = {
+  /* Applications ------------------------------------------------- */
+  createDraft(fields: Partial<ApplicationFields>): Promise<Application>;
+  getApplication(id: string): Promise<Application | null>;
+  getApplicationByReference(reference: string): Promise<Application | null>;
+  updateDraft(id: string, patch: Partial<ApplicationFields> & { step?: number }): Promise<Application>;
+  /** Records the submission. Does not decide the next state; the caller does. */
+  markSubmitted(
+    id: string,
+    input: { state: MembershipState; flags: IntakeFlag[]; vouchExpiresAt: string | null; at: string },
+  ): Promise<Application>;
+  setApplicationState(id: string, state: MembershipState): Promise<Application>;
+  recordChairDecision(id: string, decision: ChairDecision, state: MembershipState): Promise<Application>;
+  listApplications(states?: MembershipState[]): Promise<Application[]>;
+  countApplicationsByEmail(email: string): Promise<number>;
+
+  /* Vouch -------------------------------------------------------- */
+  createVouchRequest(request: VouchRequest): Promise<VouchRequest>;
+  getVouchRequest(token: string): Promise<VouchRequest | null>;
+  getVouchRequestForApplication(applicationId: string): Promise<VouchRequest | null>;
+  answerVouchRequest(token: string, outcome: VouchOutcome, at: string): Promise<VouchRequest>;
+  /** Every request whose window has closed without an answer. */
+  listLapsedVouchRequests(now: string): Promise<VouchRequest[]>;
+
+  /* Roster ------------------------------------------------------- */
+  listMembers(): Promise<Member[]>;
+  getMember(id: string): Promise<Member | null>;
+  getMemberByMemberId(memberId: string): Promise<Member | null>;
+  createMember(member: Omit<Member, "id" | "memberId"> & { memberId?: string }): Promise<Member>;
+  setMemberState(id: string, state: MembershipState, auditedAt?: string): Promise<Member>;
+  nextMemberId(year: number): Promise<string>;
+
+  /* Payment handoff --------------------------------------------- */
+  createCheckoutHandoff(handoff: CheckoutHandoff): Promise<CheckoutHandoff>;
+  getCheckoutHandoff(id: string): Promise<CheckoutHandoff | null>;
+  getCheckoutHandoffForApplication(applicationId: string): Promise<CheckoutHandoff | null>;
+  markCheckoutCleared(id: string): Promise<CheckoutHandoff>;
+
+  /* Audit log (append-only; no delete exists) -------------------- */
+  appendAudit(entry: Omit<MembershipAuditEntry, "id">): Promise<MembershipAuditEntry>;
+  listAudit(limit?: number): Promise<MembershipAuditEntry[]>;
+};
+
+/* ------------------------------------------------------------------ *
+ * In-memory implementation
+ * ------------------------------------------------------------------ */
+
+let idCounter = 0;
+function nextId(prefix: string): string {
+  idCounter += 1;
+  return `${prefix}_${idCounter.toString(36).padStart(4, "0")}${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+}
+
+/**
+ * Applicant-facing reference. Random, so nothing about it is derived from what
+ * was submitted: a reference that encoded the sponsor's validity would be the
+ * leak the identical acknowledgment exists to prevent.
+ */
+export function newReference(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 8; i += 1) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return `${out.slice(0, 4)}-${out.slice(4)}`;
+}
+
+export function newVouchToken(): string {
+  // 32 hex characters. Unguessable, and it is the whole authentication for the
+  // vouch page, so nothing shorter will do.
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const EMPTY_FIELDS: ApplicationFields = {
+  applicantName: "",
+  email: "",
+  phone: "",
+  membershipCategory: null,
+  qualifyingRelationship: null,
+  serviceFrom: null,
+  serviceTo: null,
+  attestedWarVeteran: false,
+  isAugmentee: false,
+  sponsorMemberId: "",
+};
+
+export class InMemoryMembershipRepository implements MembershipRepository {
+  private applications: Application[];
+  private vouchRequests: VouchRequest[];
+  private members: Member[];
+  private handoffs: CheckoutHandoff[] = [];
+  private audit: MembershipAuditEntry[] = [];
+
+  constructor(options?: { seed?: boolean }) {
+    const seeded = options?.seed ?? true;
+    this.members = seeded ? seedMembers().map((m) => ({ ...m })) : [];
+    this.applications = seeded ? seedApplications().map((a) => ({ ...a })) : [];
+    this.vouchRequests = seeded ? seedVouchRequests().map((v) => ({ ...v })) : [];
+  }
+
+  private requireApplication(id: string): Application {
+    const found = this.applications.find((a) => a.id === id);
+    if (!found) throw new Error(`No application ${id}`);
+    return found;
+  }
+
+  async createDraft(fields: Partial<ApplicationFields>): Promise<Application> {
+    const now = new Date().toISOString();
+    const application: Application = {
+      ...EMPTY_FIELDS,
+      ...fields,
+      id: nextId("app"),
+      entity: MEMBERSHIP_ENTITY,
+      state: "DRAFT",
+      reference: newReference(),
+      createdAt: now,
+      submittedAt: null,
+      step: 1,
+      vouchExpiresAt: null,
+      flags: [],
+      chairDecision: null,
+      convertedMemberId: null,
+    };
+    this.applications.push(application);
+    return { ...application };
+  }
+
+  async getApplication(id: string): Promise<Application | null> {
+    const found = this.applications.find((a) => a.id === id);
+    return found ? { ...found } : null;
+  }
+
+  async getApplicationByReference(reference: string): Promise<Application | null> {
+    const found = this.applications.find((a) => a.reference === reference);
+    return found ? { ...found } : null;
+  }
+
+  async updateDraft(
+    id: string,
+    patch: Partial<ApplicationFields> & { step?: number },
+  ): Promise<Application> {
+    const application = this.requireApplication(id);
+    Object.assign(application, patch);
+    return { ...application };
+  }
+
+  async markSubmitted(
+    id: string,
+    input: { state: MembershipState; flags: IntakeFlag[]; vouchExpiresAt: string | null; at: string },
+  ): Promise<Application> {
+    const application = this.requireApplication(id);
+    application.state = input.state;
+    application.flags = [...input.flags];
+    application.vouchExpiresAt = input.vouchExpiresAt;
+    application.submittedAt = input.at;
+    return { ...application };
+  }
+
+  async setApplicationState(id: string, state: MembershipState): Promise<Application> {
+    const application = this.requireApplication(id);
+    application.state = state;
+    return { ...application };
+  }
+
+  async recordChairDecision(
+    id: string,
+    decision: ChairDecision,
+    state: MembershipState,
+  ): Promise<Application> {
+    const application = this.requireApplication(id);
+    application.chairDecision = decision;
+    application.state = state;
+    return { ...application };
+  }
+
+  async listApplications(states?: MembershipState[]): Promise<Application[]> {
+    const rows = states
+      ? this.applications.filter((a) => states.includes(a.state))
+      : [...this.applications];
+    return rows
+      .map((a) => ({ ...a }))
+      .sort((a, b) => (a.submittedAt ?? a.createdAt).localeCompare(b.submittedAt ?? b.createdAt));
+  }
+
+  async countApplicationsByEmail(email: string): Promise<number> {
+    const needle = email.trim().toLowerCase();
+    if (!needle) return 0;
+    return this.applications.filter(
+      (a) => a.email.trim().toLowerCase() === needle && a.state !== "DRAFT",
+    ).length;
+  }
+
+  async createVouchRequest(request: VouchRequest): Promise<VouchRequest> {
+    this.vouchRequests.push({ ...request });
+    return { ...request };
+  }
+
+  async getVouchRequest(token: string): Promise<VouchRequest | null> {
+    const found = this.vouchRequests.find((v) => v.token === token);
+    return found ? { ...found } : null;
+  }
+
+  async getVouchRequestForApplication(applicationId: string): Promise<VouchRequest | null> {
+    const found = this.vouchRequests.find((v) => v.applicationId === applicationId);
+    return found ? { ...found } : null;
+  }
+
+  async answerVouchRequest(token: string, outcome: VouchOutcome, at: string): Promise<VouchRequest> {
+    const found = this.vouchRequests.find((v) => v.token === token);
+    if (!found) throw new Error("No vouch request for that token");
+    found.outcome = outcome;
+    found.answeredAt = at;
+    return { ...found };
+  }
+
+  async listLapsedVouchRequests(now: string): Promise<VouchRequest[]> {
+    return this.vouchRequests
+      .filter((v) => v.answeredAt === null && v.expiresAt <= now)
+      .map((v) => ({ ...v }));
+  }
+
+  async listMembers(): Promise<Member[]> {
+    return this.members.map((m) => ({ ...m }));
+  }
+
+  async getMember(id: string): Promise<Member | null> {
+    const found = this.members.find((m) => m.id === id);
+    return found ? { ...found } : null;
+  }
+
+  async getMemberByMemberId(memberId: string): Promise<Member | null> {
+    const needle = memberId.trim().toUpperCase();
+    const found = this.members.find((m) => m.memberId === needle);
+    return found ? { ...found } : null;
+  }
+
+  async nextMemberId(year: number): Promise<string> {
+    const prefix = `JSOA-${year}-`;
+    const used = this.members
+      .filter((m) => m.memberId.startsWith(prefix))
+      .map((m) => Number(m.memberId.slice(prefix.length)))
+      .filter((n) => Number.isFinite(n));
+    const sequence = (used.length ? Math.max(...used) : 0) + 1;
+    return formatMemberId(year, sequence);
+  }
+
+  async createMember(
+    member: Omit<Member, "id" | "memberId"> & { memberId?: string },
+  ): Promise<Member> {
+    const year = Number(member.joinedAt.slice(0, 4));
+    const record: Member = {
+      ...member,
+      id: nextId("mbr"),
+      memberId: member.memberId ?? (await this.nextMemberId(year)),
+    };
+    this.members.push(record);
+    if (record.applicationId) {
+      const application = this.applications.find((a) => a.id === record.applicationId);
+      if (application) application.convertedMemberId = record.id;
+    }
+    return { ...record };
+  }
+
+  async setMemberState(id: string, state: MembershipState, auditedAt?: string): Promise<Member> {
+    const found = this.members.find((m) => m.id === id);
+    if (!found) throw new Error(`No member ${id}`);
+    found.state = state;
+    if (auditedAt) found.lastAuditedAt = auditedAt;
+    if (found.applicationId) {
+      const application = this.applications.find((a) => a.id === found.applicationId);
+      if (application) application.state = state;
+    }
+    return { ...found };
+  }
+
+  async createCheckoutHandoff(handoff: CheckoutHandoff): Promise<CheckoutHandoff> {
+    this.handoffs.push({ ...handoff });
+    return { ...handoff };
+  }
+
+  async getCheckoutHandoff(id: string): Promise<CheckoutHandoff | null> {
+    const found = this.handoffs.find((h) => h.id === id);
+    return found ? { ...found } : null;
+  }
+
+  async getCheckoutHandoffForApplication(applicationId: string): Promise<CheckoutHandoff | null> {
+    const found = [...this.handoffs]
+      .reverse()
+      .find((h) => h.applicationId === applicationId);
+    return found ? { ...found } : null;
+  }
+
+  async markCheckoutCleared(id: string): Promise<CheckoutHandoff> {
+    const found = this.handoffs.find((h) => h.id === id);
+    if (!found) throw new Error(`No checkout handoff ${id}`);
+    found.status = "CLEARED";
+    return { ...found };
+  }
+
+  async appendAudit(entry: Omit<MembershipAuditEntry, "id">): Promise<MembershipAuditEntry> {
+    const record: MembershipAuditEntry = { ...entry, id: nextId("aud") };
+    this.audit.push(record);
+    return { ...record };
+  }
+
+  async listAudit(limit = 200): Promise<MembershipAuditEntry[]> {
+    return this.audit.slice(-limit).reverse().map((e) => ({ ...e }));
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Process-wide instance for the demo.
+ *
+ * Held on globalThis so a dev-server hot reload does not silently reset the
+ * roster mid-demo. A request-scoped Prisma client replaces this wholesale.
+ * ------------------------------------------------------------------ */
+
+const REPO_KEY = "__jsoa_membership_repo__";
+
+type RepoGlobal = typeof globalThis & { [REPO_KEY]?: MembershipRepository };
+
+export function membershipRepository(): MembershipRepository {
+  const store = globalThis as RepoGlobal;
+  store[REPO_KEY] ??= new InMemoryMembershipRepository();
+  return store[REPO_KEY];
+}
+
+export function newMembershipRepository(options?: { seed?: boolean }): MembershipRepository {
+  return new InMemoryMembershipRepository(options);
+}
+
+export function newMembershipEntityRef(): Entity {
+  return MEMBERSHIP_ENTITY;
+}

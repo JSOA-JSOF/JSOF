@@ -1,0 +1,421 @@
+/* Public application. Association hue, set on the wrapper. */
+
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bar {
+  border-bottom: 1px solid var(--line);
+  border-top: 4px solid var(--hue);
+  padding: 14px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.back {
+  color: var(--mute);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+.status {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hue);
+}
+
+.body {
+  flex: 1;
+  width: 100%;
+  max-width: 660px;
+  margin: 0 auto;
+  padding: 32px 20px 72px;
+}
+
+.title {
+  font-size: clamp(1.6rem, 3.2vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.lede {
+  color: var(--ink-2);
+  max-width: 58ch;
+}
+
+/* Step rail ------------------------------------------------------- */
+
+.rail {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 24px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line-2);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.railItem {
+  flex: 1 1 7rem;
+  padding: 10px 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+  border-top: 2px solid transparent;
+}
+
+.railDone {
+  color: var(--ink-2);
+  border-top-color: var(--line);
+}
+
+.railHere {
+  color: var(--hue);
+  border-top-color: var(--hue);
+}
+
+.railNumber {
+  display: block;
+  font-size: 0.62rem;
+  opacity: 0.8;
+}
+
+/* Form ------------------------------------------------------------ */
+
+.form {
+  margin-top: 28px;
+}
+
+.stepTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.stepNote {
+  color: var(--ink-2);
+  font-size: 0.95rem;
+  max-width: 58ch;
+  margin: 6px 0 0;
+}
+
+.field {
+  margin-top: 22px;
+}
+
+.label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.hint {
+  display: block;
+  color: var(--mute);
+  font-size: 0.85rem;
+  margin-top: 2px;
+  max-width: 58ch;
+}
+
+.input,
+.select {
+  margin-top: 8px;
+  width: 100%;
+  max-width: 28rem;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.04em;
+}
+
+.dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dates > div {
+  flex: 1 1 11rem;
+}
+
+.inputError {
+  border-color: var(--warn);
+}
+
+.error {
+  display: block;
+  margin-top: 6px;
+  color: var(--warn);
+  font-size: 0.88rem;
+  max-width: 58ch;
+}
+
+.choices {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.choice {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  margin-top: 8px;
+  background: var(--panel);
+}
+
+.choice input {
+  margin-top: 4px;
+  flex: none;
+}
+
+.choiceLabel {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.choiceNote {
+  display: block;
+  color: var(--mute);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.actions {
+  margin-top: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.primary {
+  font: inherit;
+  font-weight: 600;
+  padding: 11px 20px;
+  border-radius: 4px;
+  border: 1px solid var(--hue);
+  background: var(--hue);
+  color: var(--panel);
+  cursor: pointer;
+}
+
+.secondary {
+  font: inherit;
+  padding: 11px 18px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.destructive {
+  font: inherit;
+  padding: 11px 18px;
+  border-radius: 4px;
+  border: 1px solid var(--warn);
+  background: transparent;
+  color: var(--warn);
+  cursor: pointer;
+}
+
+/* Review and acknowledgment -------------------------------------- */
+
+.review {
+  margin: 16px 0 0;
+  border-top: 1px solid var(--line-2);
+}
+
+.reviewRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.reviewLabel {
+  color: var(--mute);
+  font-size: 0.9rem;
+}
+
+.reviewValue {
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  margin-top: 28px;
+  border-left: 3px solid var(--hue);
+  padding: 4px 0 4px 14px;
+  color: var(--ink-2);
+  max-width: 58ch;
+  font-size: 0.92rem;
+}
+
+.caution {
+  margin-top: 24px;
+  border: 1px solid var(--warn);
+  background: var(--warn-tint);
+  border-radius: 4px;
+  padding: 14px 16px;
+  color: var(--ink);
+  max-width: 58ch;
+  font-size: 0.92rem;
+}
+
+.caution strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.reference {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 1.3rem;
+  letter-spacing: 0.1em;
+  margin-top: 8px;
+  color: var(--hue);
+}
+
+/* Vouch ---------------------------------------------------------- */
+
+.applicant {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--hue);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: 16px 18px;
+}
+
+.applicantName {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.window {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+  font-variant-numeric: tabular-nums;
+}
+
+.vouchActions {
+  margin-top: 26px;
+  display: grid;
+  gap: 12px;
+}
+
+.vouchAction {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: 14px 16px;
+}
+
+.vouchAction p {
+  margin: 6px 0 12px;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+}
+
+/* Payment -------------------------------------------------------- */
+
+.amount {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: clamp(2rem, 7vw, 2.8rem);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  margin-top: 12px;
+}
+
+.amountNote {
+  color: var(--mute);
+  font-size: 0.85rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lines {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line-2);
+}
+
+.lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 0.95rem;
+}
+
+.lines span:last-child {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.dev {
+  margin-top: 40px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  padding: 14px 16px;
+  color: var(--mute);
+  font-size: 0.88rem;
+}
+
+.devLabel {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--warn);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.devUrl {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.8rem;
+  word-break: break-all;
+  color: var(--ink-2);
+  display: block;
+  margin: 8px 0;
+}
