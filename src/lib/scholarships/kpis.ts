@@ -242,7 +242,13 @@ export async function loadScholarshipsDashboard(
     adminCostPerDollar(awards, cycle.label),
   ];
 
-  const cumulative = cumulativeFigures(cycles, everyAward, selectionRecords);
+  const cumulative = cumulativeFigures(
+    cycles,
+    everyAward,
+    selectionRecords,
+    everyApplication,
+    schools,
+  );
   const distribution = awardDistribution(everyAward, everyApplication, schools);
 
   return {
@@ -571,6 +577,8 @@ function cumulativeFigures(
   cycles: { id: string; state: string }[],
   everyAward: Award[],
   selectionRecords: SelectionRecord[],
+  everyApplication: Application[],
+  schools: { id: string; state: string }[],
 ): { kpis: Kpi[]; basis: string } {
   const perCycle = cycles.map((cycle) =>
     totalsForCycle(cycle.id, cycle.state === "CLOSED", everyAward, selectionRecords),
@@ -656,26 +664,59 @@ function cumulativeFigures(
         `an unconfirmed placeholder, which is why this is not a finding.`,
       status: "watch",
     }),
-    {
-      // Deliberately unmeasured rather than quietly answered with the open
-      // cycle's figure. Retention strips the school from a cycle when its
-      // applicant data is purged, which is correct and also means the spread
-      // of a closed cycle cannot be reconstructed afterwards. The ranked list
-      // under these tiles shows the cycles that still hold the join.
-      key: "cumulative-spread",
-      label: "Schools and states reached, every cycle on file",
-      value: null,
-      status: "unmeasured",
-      from:
-        "Would need the school on the record that survives a purge. A " +
-        "selection record carries the programme and the amount and nothing " +
-        "that identifies a person or a place, so a closed cycle's spread is " +
-        "gone once its applications are purged.",
-      needs: "a school or state on the selection record, which retention currently removes",
-    },
+    cumulativeStatesTile(selectionRecords, everyApplication, new Map(schools.map((s) => [s.id, s]))),
   ];
 
   return { kpis, basis };
+}
+
+/**
+ * States reached across every cycle on file, including purged ones.
+ *
+ * This tile was unmeasurable until `schoolState` was added to the selection
+ * record: the purge deletes the application and with it the only route from an
+ * award to a place, so a closed cycle's spread used to be gone for good.
+ *
+ * It counts STATES and not schools, because that is all a surviving record
+ * keeps. The school is deliberately absent — a school narrows a cycle to one
+ * institution's applicants, which in a small school is a person, and this
+ * record is retained five years precisely because there is nobody in it. The
+ * ranked list below the tiles still names schools for the cycles that have not
+ * been purged yet, and says so.
+ */
+function cumulativeStatesTile(
+  selectionRecords: SelectionRecord[],
+  applications: Application[],
+  schoolsById: Map<string, { state: string }>,
+): Kpi {
+  const fromRecords = new Set(
+    selectionRecords.map((record) => record.schoolState).filter((s): s is string => Boolean(s)),
+  );
+  const fromOpen = new Set(
+    applications
+      .map((application) => application.enrolment?.schoolId)
+      .filter((id): id is string => Boolean(id))
+      .map((id) => schoolsById.get(id)?.state)
+      .filter((s): s is string => Boolean(s)),
+  );
+  const all = new Set([...fromRecords, ...fromOpen]);
+  const recordsMissing = selectionRecords.filter((record) => record.schoolState === null).length;
+
+  return {
+    key: "cumulative-spread",
+    label: "States reached, every cycle on file",
+    value: plural(all.size, "state", "states"),
+    status: "good",
+    from:
+      `${fromRecords.size} from selection records that outlived their ` +
+      `applications, ${fromOpen.size} from cycles still holding them. ` +
+      (recordsMissing > 0
+        ? `${recordsMissing} older ${plural(recordsMissing, "record", "records")} ` +
+          `predate the field and know no state. `
+        : "") +
+      `States, not schools: a purged record keeps the state deliberately and ` +
+      `nothing finer.`,
+  };
 }
 
 function averageAward(

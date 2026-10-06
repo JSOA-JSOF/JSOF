@@ -660,6 +660,24 @@ export type SelectionRecord = {
   scoresRecorded: number;
   awards: { program: Program; amountCents: number }[];
   eligibilityRuleVersion: string;
+  /**
+   * The state of the school the award was paid to, as a two-letter code, or
+   * null where the application never reached an enrolment.
+   *
+   * It is here because the purge deletes the application, and with it the only
+   * link from an award to a place. Without this field, the moment a cycle is
+   * purged, where its awards went becomes unreconstructable permanently — so
+   * the question "which states have we reached" could only ever be answered
+   * about cycles recent enough to still hold their applicants.
+   *
+   * A STATE and not a school id, deliberately. This record is retained for
+   * five years precisely because it has no person in it, and it already
+   * carries a score, an amount and an outcome. A school narrows the field to
+   * one institution's applicants in one cycle, which in a small school is a
+   * person. A state does not, and a state is what a reach question is actually
+   * asking.
+   */
+  schoolState: string | null;
   decidedAt: string;
   /** ISO date. The five-year clock. */
   retainUntil: string;

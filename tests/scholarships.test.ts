@@ -1703,11 +1703,21 @@ describe("retention is enforced by a purge, not by intention", () => {
     const serialized = JSON.stringify(kept);
     expect(serialized).not.toContain(name);
     expect(serialized).not.toContain(email);
+    // `schoolState` is the one place field deliberately kept. The purge takes
+    // the application, and with it the only route from an award to a place, so
+    // without this the spread of a closed cycle would be unreconstructable
+    // forever. A STATE survives and a school does not: a school narrows a
+    // cycle to one institution's applicants, which in a small school is a
+    // person, and this record exists for five years precisely because there is
+    // nobody in it.
     for (const visit of visitAll(kept)) {
+      if (visit.key === "schoolState") continue;
       expect(/name|email|phone|essay|school|dateofbirth/i.test(visit.key), visit.keyPath).toBe(
         false,
       );
     }
+    expect(kept.schoolState, "the state should survive the purge").toMatch(/^[A-Z]{2}$/);
+    expect(JSON.stringify(kept)).not.toContain(victim.enrolment?.schoolId ?? "@@none@@");
   });
 
   it("leaves applicants inside the retention window alone", async () => {
@@ -1757,6 +1767,7 @@ describe("retention is enforced by a purge, not by intention", () => {
       scoresRecorded: 4,
       awards: [{ program: "MERIT", amountCents: 150_000 }],
       eligibilityRuleVersion: "0-placeholder",
+      schoolState: "NC",
       decidedAt: "2019-04-01T00:00:00.000Z",
       retainUntil: "2024-04-01",
     });

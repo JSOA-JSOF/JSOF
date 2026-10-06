@@ -82,6 +82,13 @@ async function selectionRecordFor(
   const sheets = await repo.listScoreSheets(application.id);
   const score = committeeScore(sheets);
   const awards = await repo.listAwards({ applicationId: application.id });
+
+  // Captured here because this is the last moment it exists: the application
+  // is deleted immediately after, taking the enrolment and therefore the only
+  // route from an award to a place with it.
+  const schoolId = application.enrolment?.schoolId ?? null;
+  const school = schoolId ? await repo.getSchool(schoolId) : null;
+
   return {
     id: nextId("schsel"),
     entity: SCHOLARSHIP_ENTITY,
@@ -92,6 +99,7 @@ async function selectionRecordFor(
     scoresRecorded: sheets.length,
     awards: awards.map((a) => ({ program: a.program, amountCents: a.amountCents })),
     eligibilityRuleVersion: application.eligibilityRuleVersion,
+    schoolState: school?.state ?? null,
     decidedAt: clockStartedAt(application),
     retainUntil: retainSelectionRecordUntil(clockStartedAt(application)),
   };

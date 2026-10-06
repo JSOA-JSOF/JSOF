@@ -743,6 +743,10 @@ function generate(): Generated {
         scoresRecorded: 4,
         awards: [{ program: "MERIT", amountCents: 150_000 }],
         eligibilityRuleVersion: ELIGIBILITY_RULE.version,
+        // The school's state, captured before the application was purged.
+        // Spread across the seeded schools so the closed cycle contributes a
+        // real geographic spread rather than one state repeated.
+        schoolState: schools[i % schools.length].state,
         decidedAt,
         retainUntil: dateOnly(daysAgo(620 - 1826)),
       });
