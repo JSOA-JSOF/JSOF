@@ -108,7 +108,11 @@ export const SCHOLARSHIP_PROGRAMS: ScholarshipProgram[] = [
         "at all, and the block is logged.",
     ],
     administeredBy: "Joint Special Operations Foundation",
-    applyVia: null,
+    applyVia: {
+      href: "/apply/scholarship",
+      label: "Start an application",
+      ownedBy: "scholarships",
+    },
     eligibility: ELIGIBILITY_PLACEHOLDER,
   },
   {
@@ -124,7 +128,11 @@ export const SCHOLARSHIP_PROGRAMS: ScholarshipProgram[] = [
         "moved on.",
     ],
     administeredBy: "Joint Special Operations Foundation",
-    applyVia: null,
+    applyVia: {
+      href: "/apply/scholarship",
+      label: "Start an application",
+      ownedBy: "scholarships",
+    },
     eligibility: ELIGIBILITY_PLACEHOLDER,
   },
   {

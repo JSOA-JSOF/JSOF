@@ -21,9 +21,24 @@ const AREAS = [
     blurb: "One application at a time, with your calibration against the committee.",
   },
   {
+    href: "/board/scholarships/verify",
+    title: "Verify",
+    blurb: "Wounded Patriot claims. Yours alone, and never automatic.",
+  },
+  {
     href: "/board/scholarships/awards",
     title: "Awards",
     blurb: "Banding, and the exceptions a rule should not decide.",
+  },
+  {
+    href: "/board/scholarships/notify",
+    title: "Notify",
+    blurb: "The amount merged from the record, the sponsor copied in.",
+  },
+  {
+    href: "/board/scholarships/disbursement",
+    title: "Disbursement",
+    blurb: "Cheques to schools, grouped into one envelope each.",
   },
 ];
 

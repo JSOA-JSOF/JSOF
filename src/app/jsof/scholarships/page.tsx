@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 
 import {
@@ -94,7 +95,11 @@ export default function ScholarshipsPage() {
                         {program.applyVia.label}
                       </a>
                     ) : (
-                      program.applyVia.label
+                      // An internal route used to fall through to plain text,
+                      // because the only route here was the partner's. It now
+                      // has to be a link, or the application is unreachable
+                      // from the public site.
+                      <Link href={program.applyVia.href}>{program.applyVia.label}</Link>
                     )
                   ) : (
                     "The application is not open. It opens with the criteria."

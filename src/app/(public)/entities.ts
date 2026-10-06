@@ -19,7 +19,13 @@ export type OutboundRoute = {
   href: string;
   label: string;
   /** The module that builds this route. See docs/MODULE-BRIEF.md. */
-  ownedBy: "membership" | "foundation" | "store" | "treasury" | "secretary";
+  ownedBy:
+    | "membership"
+    | "scholarships"
+    | "foundation"
+    | "store"
+    | "treasury"
+    | "secretary";
 };
 
 export type NavItem = {

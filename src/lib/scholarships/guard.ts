@@ -141,10 +141,18 @@ export async function guardChequeRun(
     return "FINANCIAL";
   }
   // Falls through to the applicant grant, which throws on its own if absent.
+  //
+  // Always WRITE on this arm, never the caller's level. A scholarship reviewer
+  // holds APPLICANT READ so they can score, and a cheque run read at READ
+  // handed the whole disbursement to one of the volunteers scoring the
+  // applications. The only applicant-side reader with a reason to see it is
+  // the chair, who holds WRITE. The financial arm above keeps the caller's
+  // level, so the Finance Review Officer still reads it at READ, which is the
+  // independent review this control exists for.
   await guard(repo, subject, {
     action: `${options.action}:VIA_APPLICANT`,
     dataClass: "APPLICANT",
-    required: options.required,
+    required: "WRITE",
     rowLevel: false,
   });
   return "APPLICANT";

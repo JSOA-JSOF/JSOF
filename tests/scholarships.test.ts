@@ -1351,6 +1351,19 @@ describe("the award amount is a field on the record, merged into the notificatio
     ).rejects.toThrow(/not been approved/);
   });
 
+  it("keeps the cheque run away from the people scoring the applications", async () => {
+    // A reviewer holds APPLICANT READ in order to score. Reading the cheque
+    // run on that grant handed the whole disbursement to a volunteer scorer.
+    // The financial arm is unchanged, so the Finance Review Officer still
+    // reads it at READ, which is the independent review it exists for.
+    const repository = repo();
+    await expect(
+      loadChequeRun(repository, actor("scholarship-reviewer")),
+    ).rejects.toBeInstanceOf(AuthzError);
+    await expect(loadChequeRun(repository, actor("scholarships"))).resolves.toBeTruthy();
+    await expect(loadChequeRun(repository, actor("treasurer-jsof"))).resolves.toBeTruthy();
+  });
+
   it("keeps the awards board away from the people scoring the applications", async () => {
     // A reviewer holds APPLICANT READ so they can score. The board carries
     // every amount, and a scorer who knows three points is worth $1,000 is no
