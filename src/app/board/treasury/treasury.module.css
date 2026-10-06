@@ -1,0 +1,713 @@
+/* Shared treasury styles. Tokens only: no colour literal appears in this file.
+   Entity hue arrives as --hue on a wrapper, the way entity.module.css does it. */
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.lede {
+  color: var(--ink-2);
+  max-width: 68ch;
+  margin: 10px 0 0;
+}
+
+.period {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+  white-space: nowrap;
+}
+
+/* --- Sub-navigation across the six treasury screens --- */
+
+.subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 20px 0 28px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0;
+}
+
+.subnavLink {
+  font-size: 0.9rem;
+  text-decoration: none;
+  color: var(--ink-2);
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  margin-bottom: -1px;
+}
+
+.subnavLink:hover {
+  color: var(--ink);
+  background: var(--line-2);
+}
+
+.subnavOn {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--panel);
+  border-color: var(--line);
+  border-bottom: 1px solid var(--panel);
+}
+
+/* --- Panels --- */
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--hue, var(--line));
+  padding: 18px 20px 20px;
+}
+
+.panelPlain {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 18px 20px 20px;
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panelTitle {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.panelNote {
+  color: var(--mute);
+  font-size: 0.85rem;
+}
+
+.sectionHead {
+  margin: 36px 0 12px;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  display: block;
+}
+
+/* --- Entity identity --- */
+
+.jsoa {
+  --hue: var(--jsoa);
+  --hue-tint: var(--jsoa-tint);
+}
+
+.jsof {
+  --hue: var(--jsof);
+  --hue-tint: var(--jsof-tint);
+}
+
+.entityTag {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--hue);
+  border: 1px solid var(--hue);
+  border-radius: 3px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.entityName {
+  color: var(--hue);
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-weight: 600;
+}
+
+/* --- Figures --- */
+
+.figures {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.figures li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.figures li:last-child {
+  border-bottom: none;
+}
+
+.figureLabel {
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
+
+.num {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.numLead {
+  font-size: 1.35rem;
+  font-weight: 500;
+}
+
+.numMute {
+  color: var(--mute);
+}
+
+.currency {
+  color: var(--mute);
+  font-size: 0.72em;
+  margin-right: 2px;
+}
+
+/* --- Tables --- */
+
+.scroller {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+/* Eleven columns do not fit a laptop. Rather than crush every cell, the
+   register gets a floor width and the wrapper scrolls horizontally. The page
+   itself never scrolls sideways. */
+.tableWide {
+  min-width: 1240px;
+}
+
+.table caption {
+  text-align: left;
+  padding: 12px 14px;
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Column headers only. A `th` in the body is a row header, not a column
+   header, and must not inherit the uppercase mono treatment or the nowrap:
+   row headers carry tool names and memo text that have to wrap. */
+.table thead th {
+  text-align: left;
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+  font-weight: 500;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.table td,
+.table tbody th,
+.table tfoot th {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line-2);
+  vertical-align: top;
+}
+
+.table tbody th,
+.table tfoot th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: normal;
+}
+
+.table tbody tr:last-child td,
+.table tbody tr:last-child th {
+  border-bottom: none;
+}
+
+.thNum,
+.tdNum {
+  text-align: right;
+}
+
+.tdNum {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  white-space: nowrap;
+}
+
+.tfoot td,
+.tfoot th {
+  border-top: 1px solid var(--line);
+  border-bottom: none;
+  font-weight: 600;
+}
+
+.wrapCell {
+  min-width: 18ch;
+}
+
+.memo {
+  color: var(--mute);
+  font-size: 0.82rem;
+  display: block;
+  margin-top: 3px;
+  max-width: 46ch;
+}
+
+/* --- Chips, severities, findings --- */
+
+.chip {
+  display: inline-block;
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: var(--mute);
+  white-space: nowrap;
+}
+
+.chipHue {
+  border-color: var(--hue);
+  color: var(--hue);
+}
+
+.chipWarn {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: var(--warn-tint);
+}
+
+.sev {
+  display: inline-block;
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  border: 1px solid var(--warn);
+  color: var(--warn);
+}
+
+.sevCritical {
+  background: var(--warn);
+  color: var(--panel);
+  border-color: var(--warn);
+}
+
+.sevHigh {
+  background: var(--warn-tint);
+  color: var(--warn);
+}
+
+.sevModerate {
+  background: transparent;
+  color: var(--mute);
+  border-color: var(--line);
+}
+
+.findingList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.findingItem {
+  border-left: 3px solid var(--warn);
+  background: var(--panel);
+  padding: 12px 14px;
+}
+
+.findingItemModerate {
+  border-left-color: var(--line);
+}
+
+.findingHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.findingText {
+  margin: 0;
+  max-width: 78ch;
+}
+
+.mitigation {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  max-width: 78ch;
+}
+
+.mitigationLabel {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-right: 6px;
+}
+
+/* --- Withheld state. Not zero, not empty. --- */
+
+.withheld {
+  border: 1px dashed var(--line);
+  background: transparent;
+  padding: 18px 20px;
+  color: var(--ink-2);
+}
+
+.withheldTitle {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mute);
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* --- Notes and callouts --- */
+
+.note {
+  border-left: 3px solid var(--line);
+  padding: 2px 0 2px 14px;
+  color: var(--ink-2);
+  max-width: 74ch;
+  font-size: 0.92rem;
+  margin: 16px 0 0;
+}
+
+.noteHue {
+  border-left-color: var(--hue);
+}
+
+.refusal {
+  border: 1px solid var(--warn);
+  background: var(--warn-tint);
+  color: var(--ink);
+  padding: 12px 14px;
+  max-width: 78ch;
+  margin: 0 0 16px;
+}
+
+.confirm {
+  border: 1px solid var(--hue, var(--line));
+  background: var(--panel);
+  padding: 12px 14px;
+  max-width: 78ch;
+  margin: 0 0 16px;
+}
+
+/* --- Controls --- */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 16px;
+}
+
+.filterLink {
+  font-size: 0.85rem;
+  text-decoration: none;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 5px 10px;
+}
+
+.filterLink:hover {
+  border-color: var(--hue, var(--ink-2));
+  color: var(--ink);
+}
+
+.filterOn {
+  border-color: var(--hue, var(--ink));
+  color: var(--hue, var(--ink));
+  font-weight: 600;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.fieldLabel {
+  display: block;
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-bottom: 5px;
+}
+
+.fieldHint {
+  display: block;
+  color: var(--mute);
+  font-size: 0.82rem;
+  margin-top: 4px;
+  max-width: 62ch;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  max-width: 46ch;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 8px 10px;
+}
+
+.textarea {
+  min-height: 5.5em;
+  resize: vertical;
+}
+
+/* Placeholders are examples, not values. Without this they sit at the same
+   weight as typed text and a reader takes the example for an entry. */
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--mute);
+  opacity: 1;
+}
+
+.inputNum {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  max-width: 22ch;
+}
+
+.checkRow {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  max-width: 68ch;
+}
+
+.checkRow input {
+  margin-top: 4px;
+  flex: none;
+  accent-color: var(--hue, var(--focus));
+}
+
+.checkLabel {
+  font-size: 0.92rem;
+}
+
+.checkNote {
+  display: block;
+  color: var(--mute);
+  font-size: 0.82rem;
+}
+
+.button {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--panel);
+  background: var(--hue, var(--ink));
+  border: 1px solid var(--hue, var(--ink));
+  border-radius: 3px;
+  padding: 9px 18px;
+  cursor: pointer;
+}
+
+.buttonQuiet {
+  color: var(--ink);
+  background: transparent;
+  border-color: var(--line);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  color: var(--mute);
+  background: transparent;
+  border-color: var(--line);
+  border-style: dashed;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+}
+
+.actionLink {
+  font-size: 0.88rem;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 6px 12px;
+}
+
+.actionLink:hover {
+  border-color: var(--hue, var(--ink));
+}
+
+/* --- Rule checklist --- */
+
+.rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--line-2);
+  border: 1px solid var(--line);
+}
+
+.rule {
+  background: var(--panel);
+  padding: 11px 14px;
+  display: grid;
+  grid-template-columns: 4.6rem 1fr;
+  gap: 4px 12px;
+  align-items: baseline;
+}
+
+.ruleState {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ruleStateMet {
+  color: var(--hue, var(--ink-2));
+}
+
+.ruleStateUnmet {
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.ruleRequirement {
+  font-size: 0.93rem;
+}
+
+.ruleWhy {
+  grid-column: 2;
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  max-width: 74ch;
+}
+
+.ruleSource {
+  grid-column: 2;
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-top: 4px;
+}
+
+/* --- Two columns, side by side, never summed --- */
+
+.twoUp {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .twoUp {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.stack {
+  display: grid;
+  gap: 16px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.kv dt {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+  padding-top: 2px;
+}
+
+.kv dd {
+  margin: 0;
+}
+
+.quiet {
+  color: var(--mute);
+}
+
+.dash {
+  color: var(--mute);
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
