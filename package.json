@@ -1,0 +1,33 @@
+{
+  "name": "jsoa-jsof-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push"
+  },
+  "dependencies": {
+    "next": "^15.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "@prisma/client": "^6.16.2",
+    "next-auth": "^5.0.0-beta.25",
+    "stripe": "^18.5.0",
+    "resend": "^6.0.1",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "prisma": "^6.16.2",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

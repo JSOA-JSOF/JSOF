@@ -1,0 +1,197 @@
+.shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.masthead {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.wordmark {
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-weight: 700;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+
+.effort {
+  color: var(--mute);
+  font-size: 0.85rem;
+}
+
+.effort span + span::before {
+  content: " · ";
+  color: var(--line);
+}
+
+.split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 800px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.door {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+  padding: 56px 40px;
+  text-decoration: none;
+  border: none;
+  background: var(--panel);
+  transition: background 160ms ease;
+}
+
+@media (max-width: 800px) {
+  .door {
+    padding: 40px 20px;
+    justify-content: flex-start;
+  }
+}
+
+.door + .door {
+  border-left: 1px solid var(--line);
+}
+
+@media (max-width: 800px) {
+  .door + .door {
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
+}
+
+/* The accent rail is the only place the entity's hue carries weight. */
+.door::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--hue);
+}
+
+.door:hover,
+.door:focus-visible {
+  background: var(--hue-tint);
+}
+
+.assoc {
+  --hue: var(--jsoa);
+  --hue-tint: var(--jsoa-tint);
+}
+
+.found {
+  --hue: var(--jsof);
+  --hue-tint: var(--jsof-tint);
+}
+
+.status {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hue);
+}
+
+.name {
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.02;
+  max-width: 22ch;
+}
+
+.purpose {
+  color: var(--ink-2);
+  max-width: 34ch;
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.paths {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 36ch;
+}
+
+.paths li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line-2);
+  font-size: 0.95rem;
+}
+
+.paths li:last-child {
+  border-bottom: 1px solid var(--line-2);
+}
+
+.paths .who {
+  color: var(--mute);
+  font-size: 0.85rem;
+  text-align: right;
+}
+
+.enter {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  margin-top: 6px;
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.01em;
+  color: var(--hue);
+}
+
+.enter::after {
+  content: "→";
+  transition: transform 160ms ease;
+}
+
+.door:hover .enter::after,
+.door:focus-visible .enter::after {
+  transform: translateX(3px);
+}
+
+.foot {
+  border-top: 1px solid var(--line);
+  padding: 12px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--mute);
+}
+
+.badge {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--warn-tint);
+  color: var(--warn);
+  border-radius: 4px;
+  padding: 3px 8px;
+}

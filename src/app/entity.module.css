@@ -1,0 +1,121 @@
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.bar {
+  border-bottom: 1px solid var(--line);
+  border-top: 4px solid var(--hue);
+  padding: 14px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.back {
+  color: var(--mute);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.back:hover {
+  color: var(--ink);
+}
+
+.status {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hue);
+}
+
+.body {
+  flex: 1;
+  width: 100%;
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 40px 24px 72px;
+}
+
+.title {
+  font-size: clamp(1.8rem, 3.6vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  max-width: 24ch;
+}
+
+.lede {
+  color: var(--ink-2);
+  max-width: 62ch;
+  font-size: 1.05rem;
+}
+
+.sectionHead {
+  margin-top: 40px;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.modules {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line-2);
+}
+
+.modules li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.moduleName {
+  font-weight: 600;
+}
+
+.moduleNote {
+  color: var(--mute);
+  font-size: 0.88rem;
+  flex: 1 1 22ch;
+}
+
+.chip {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  color: var(--mute);
+}
+
+.chipLive {
+  border-color: var(--hue);
+  color: var(--hue);
+}
+
+.chipHeld {
+  border-color: var(--warn);
+  color: var(--warn);
+  background: var(--warn-tint);
+}
+
+.note {
+  margin-top: 32px;
+  border-left: 3px solid var(--hue);
+  padding: 4px 0 4px 14px;
+  color: var(--ink-2);
+  max-width: 62ch;
+  font-size: 0.95rem;
+}

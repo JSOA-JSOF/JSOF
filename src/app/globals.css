@@ -1,0 +1,118 @@
+:root {
+  --ground: #F4F3EE;
+  --panel: #FFFFFF;
+  --ink: #16191D;
+  --ink-2: #474C54;
+  --mute: #767B74;
+  --line: #D6D3C8;
+  --line-2: #E8E6DE;
+
+  /* The two entities are differentiated by hue everywhere in the product.
+     Steel for the Association, field green for the Foundation. */
+  --jsoa: #2F4C73;
+  --jsoa-tint: #E5EBF3;
+  --jsof: #2C5647;
+  --jsof-tint: #E2EDE7;
+
+  --warn: #855415;
+  --warn-tint: #F6EBD8;
+  --focus: #5B8FD9;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #13161A;
+    --panel: #1B1F24;
+    --ink: #E8E6DF;
+    --ink-2: #B4B2AA;
+    --mute: #888C85;
+    --line: #313740;
+    --line-2: #262B31;
+
+    --jsoa: #8DACD6;
+    --jsoa-tint: #1C2530;
+    --jsof: #7BB99D;
+    --jsof-tint: #1B2A24;
+
+    --warn: #DEB069;
+    --warn-tint: #2C2517;
+    --focus: #7FA9E8;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #13161A;
+  --panel: #1B1F24;
+  --ink: #E8E6DF;
+  --ink-2: #B4B2AA;
+  --mute: #888C85;
+  --line: #313740;
+  --line-2: #262B31;
+
+  --jsoa: #8DACD6;
+  --jsoa-tint: #1C2530;
+  --jsof: #7BB99D;
+  --jsof-tint: #1B2A24;
+
+  --warn: #DEB069;
+  --warn-tint: #2C2517;
+  --focus: #7FA9E8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "Source Sans 3", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Barlow Semi Condensed", "Source Sans 3", sans-serif;
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: -0.005em;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.eyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--mute);
+}
+
+.mono {
+  font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
