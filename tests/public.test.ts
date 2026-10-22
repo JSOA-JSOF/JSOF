@@ -22,6 +22,8 @@ import { describe, expect, it } from "vitest";
 import { DATA_CLASSES, ROLES, type DataClass } from "../src/lib/authz/model";
 import * as membershipState from "../src/lib/membership/state";
 
+import { PUBLIC_IMAGES } from "../src/app/(public)/media";
+import { PROGRAMMES } from "../src/app/(public)/programmes";
 import { ENTITY_PROFILES, JSOA_PROFILE, JSOF_PROFILE } from "../src/app/(public)/entities";
 import {
   CONTACTS_BY_ENTITY,
@@ -218,13 +220,116 @@ describe("the public tier carries no member-identifying field", () => {
     }
   });
 
-  it("renders no photograph or image of any kind", () => {
-    // No member's face reaches the public tier, and the simplest guarantee is
-    // that the public tier renders no image element at all.
+  it("renders an image only through the reviewed manifest", () => {
+    // This rule used to be "no image at all", which was the simplest way to
+    // guarantee no member's face reaches a public page. The board now wants
+    // photography, so the guarantee moved rather than went away: the only
+    // component that may render an <img> is Banner, and Banner resolves its
+    // source from src/app/(public)/media.ts, where every entry carries an
+    // OPSEC review. A page cannot name a path of its own.
     for (const file of RENDERED_SOURCES) {
+      if (file.path.endsWith("blocks.tsx")) continue;
       expect(/<img\b/.test(file.text), file.path).toBe(false);
-      expect(/next\/image/.test(file.text), file.path).toBe(false);
       expect(/backgroundImage/.test(file.text), file.path).toBe(false);
+    }
+    // next/image is still barred everywhere: it would pull in the optimizer
+    // and a second way to put a picture on a public page.
+    for (const file of RENDERED_SOURCES) {
+      expect(/next\/image/.test(file.text), file.path).toBe(false);
+    }
+  });
+
+  it("holds every public impact figure to the dashboard's rules", () => {
+    // docs/DASHBOARD-BRIEF.md governs the board tiles. The same three rules
+    // apply in public, where the stakes are higher because a donor cannot
+    // check: an unmeasured figure says so rather than showing zero, every
+    // figure states its provenance, and nothing is a bare number.
+    for (const programme of PROGRAMMES) {
+      for (const figure of programme.impact) {
+        expect(figure.from.length, `${programme.slug}/${figure.label} has no provenance`)
+          .toBeGreaterThan(12);
+        expect(figure.from, `${programme.slug}/${figure.label} says "live data"`)
+          .not.toMatch(/^live data$/i);
+
+        if (figure.value === null) {
+          expect(
+            (figure.needs ?? "").length,
+            `${programme.slug}/${figure.label} is unmeasured and does not say what it needs`,
+          ).toBeGreaterThan(8);
+        } else {
+          // Never a confident zero standing in for "we have not counted".
+          expect(figure.value.trim(), `${programme.slug}/${figure.label} is a bare zero`)
+            .not.toBe("0");
+        }
+      }
+    }
+  });
+
+  it("never solicits a gift for something the Foundation may not fund", () => {
+    // The private benefit rule, enforced rather than remembered. A programme
+    // the Association funds is a member benefit, so it carries no ask: its
+    // "funds" sentence must be null, which is what stops ProgrammeCards
+    // rendering it on the Foundation side at all.
+    for (const programme of PROGRAMMES) {
+      if (programme.fundedBy === "JSOA") {
+        expect(
+          programme.funds,
+          `${programme.slug} is Association-funded but offers a gift framing`,
+        ).toBeNull();
+      } else {
+        expect(
+          programme.funds,
+          `${programme.slug} is Foundation-funded but has nothing to tell a donor`,
+        ).toBeTruthy();
+      }
+    }
+  });
+
+  it("explains any programme the Association runs and the Foundation funds", () => {
+    // The split cases are the ones a reader will query, so they may not pass
+    // without a stated reason.
+    for (const programme of PROGRAMMES) {
+      if (programme.runBy !== programme.fundedBy) {
+        expect(
+          (programme.fundingNote ?? "").length,
+          `${programme.slug} splits run and funding with no explanation`,
+        ).toBeGreaterThan(40);
+      }
+    }
+  });
+
+  it("gives every public image a dated OPSEC review", () => {
+    const manifest = PUBLIC_SOURCES.find((file) => file.path.endsWith("media.ts"));
+    expect(manifest, "src/app/(public)/media.ts is missing").toBeTruthy();
+
+    const keys = Object.keys(PUBLIC_IMAGES) as (keyof typeof PUBLIC_IMAGES)[];
+    expect(keys.length, "the manifest is empty").toBeGreaterThan(0);
+
+    for (const key of keys) {
+      const entry = PUBLIC_IMAGES[key];
+      expect(/^\d{4}-\d{2}-\d{2}$/.test(entry.reviewed), `${key} has no review date`).toBe(
+        true,
+      );
+      expect(entry.note.length, `${key} has no review note`).toBeGreaterThan(20);
+      expect(entry.src.startsWith("/media/"), `${key} is not a local asset`).toBe(true);
+      // The rule the whole manifest exists for. A recognisable face is
+      // permitted only when the person is not real; an actual member or
+      // member's family on a public page needs signed releases and a board
+      // decision, which is not something a manifest entry can stand in for.
+      expect(entry.depicts, `${key} depicts real identifiable members`).not.toBe("MEMBERS");
+    }
+  });
+
+  it("renders no image Banner cannot account for", () => {
+    // Every <img> in the one component allowed to have one must take its src
+    // from the manifest rather than from a literal.
+    const blocks = RENDERED_SOURCES.find((file) => file.path.endsWith("blocks.tsx"));
+    if (!blocks) throw new Error("blocks.tsx is missing from the public sources");
+    const imgTags = blocks.text.match(/<img\b[\s\S]*?\/>/g) ?? [];
+    expect(imgTags.length, "no img element in the public blocks").toBeGreaterThan(0);
+    // Each one must take its source from the manifest rather than a literal.
+    for (const tag of imgTags) {
+      expect(tag, "an img does not resolve through the manifest").toMatch(/PUBLIC_IMAGES[.[]/);
     }
   });
 
@@ -470,8 +575,15 @@ describe("the public tier ships no third-party tag", () => {
     }
   });
 
-  it("introduces no colour literal, so both themes follow the tokens", () => {
-    for (const file of PUBLIC_SOURCES) {
+  it("introduces no colour literal outside the pinned palette", () => {
+    // The public tier is a white site and stays one whatever the reader's
+    // operating system is set to, so public-shell.module.css defines a light
+    // palette rather than following the dual-theme tokens in globals.css.
+    // That one block is the only place in the tier allowed a colour literal;
+    // everywhere else still goes through the tokens, so a component cannot
+    // quietly introduce a colour the palette does not know about.
+    const PALETTE_FILE = "public-shell.module.css";
+    for (const file of PUBLIC_SOURCES.filter((f) => !f.path.endsWith(PALETTE_FILE))) {
       expect(/#[0-9a-fA-F]{3,8}\b/.test(file.text), `${file.path} has a hex colour`).toBe(
         false,
       );
@@ -605,10 +717,14 @@ describe("every public page is findable", () => {
         "/jsoa/events",
         "/jsoa/events/[event]",
         "/jsoa/family-support",
+        "/jsoa/membership",
         "/jsoa/mission",
+        "/jsoa/scholarships",
         "/jsof",
         "/jsof/contact",
+        "/jsof/events",
         "/jsof/memorial",
+        "/jsof/mission",
         "/jsof/partners",
         "/jsof/scholarships",
         "/jsof/why-the-foundation",
@@ -632,11 +748,15 @@ describe("every public page is findable", () => {
     }
   });
 
-  it("gives each page exactly one h1, through the shared PageHead", () => {
+  it("gives each page exactly one h1, through a shared component", () => {
+    // Two components render an h1: PageHead on a plain page, and Hero on the
+    // pages that open with the dark photographic band. The rule is unchanged,
+    // one h1 per page from shared code, so a page must use exactly one of
+    // them and may still never write the tag itself.
     for (const page of PAGES) {
       expect(/<h1\b/.test(page.text), `${page.path} writes its own h1`).toBe(false);
-      const pageHeads = page.text.match(/<PageHead\b/g) ?? [];
-      expect(pageHeads.length, `${page.path} PageHead count`).toBe(1);
+      const heads = page.text.match(/<(PageHead|Hero)\b/g) ?? [];
+      expect(heads.length, `${page.path} h1 source count`).toBe(1);
     }
   });
 

@@ -1,0 +1,675 @@
+<title>JSOA / JSOF Intake</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F5F4EF; --panel:#FFFFFF; --ink:#1B2027; --ink2:#4A5058; --mute:#7A7F77;
+  --line:#D8D5CA; --line2:#E9E7DF; --accent:#2E5B4E; --accent-ink:#FFFFFF; --accent-soft:#E3EFE9;
+  --jsoa:#33547F; --jsoa-soft:#E3EAF4; --jsof:#2E5B4E; --jsof-soft:#E3EFE9;
+  --warn:#8A5A16; --warn-soft:#F6EBD6; --ok:#2E5B4E; --focus:#5B8FD9;
+  --shadow:0 1px 2px rgba(20,25,30,.06),0 6px 20px rgba(20,25,30,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15181C; --panel:#1D2126; --ink:#E7E5DE; --ink2:#B9B7AF; --mute:#8B8F88;
+    --line:#333940; --line2:#282D33; --accent:#7CBBA0; --accent-ink:#0F1A16; --accent-soft:#1F2E29;
+    --jsoa:#8FB0E0; --jsoa-soft:#1E2733; --jsof:#7CBBA0; --jsof-soft:#1F2E29;
+    --warn:#E0B26A; --warn-soft:#2E2718; --ok:#7CBBA0; --focus:#7FA9E8;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15181C; --panel:#1D2126; --ink:#E7E5DE; --ink2:#B9B7AF; --mute:#8B8F88;
+  --line:#333940; --line2:#282D33; --accent:#7CBBA0; --accent-ink:#0F1A16; --accent-soft:#1F2E29;
+  --jsoa:#8FB0E0; --jsoa-soft:#1E2733; --jsof:#7CBBA0; --jsof-soft:#1F2E29;
+  --warn:#E0B26A; --warn-soft:#2E2718; --ok:#7CBBA0; --focus:#7FA9E8;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:"Source Sans 3",ui-sans-serif,system-ui,sans-serif;font-size:16px;line-height:1.5;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 80px}
+h1,h2,h3{font-family:"Barlow Semi Condensed","Source Sans 3",sans-serif;text-wrap:balance;margin:0}
+h1{font-size:2rem;font-weight:700;line-height:1.1;letter-spacing:-.01em}
+h2{font-size:1.45rem;font-weight:700;line-height:1.15}
+h3{font-size:1.05rem;font-weight:600;letter-spacing:.01em}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:.78rem;letter-spacing:.02em}
+.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mute)}
+header.top{display:flex;flex-wrap:wrap;gap:16px 32px;align-items:flex-end;justify-content:space-between;padding-bottom:18px;border-bottom:2px solid var(--ink)}
+header.top p{margin:6px 0 0;color:var(--ink2);max-width:60ch}
+.layout{display:grid;grid-template-columns:300px 1fr;gap:28px;margin-top:24px}
+@media (max-width:860px){.layout{grid-template-columns:1fr}}
+aside{position:sticky;top:env(safe-area-inset-top,0px);align-self:start;display:flex;flex-direction:column;gap:16px;max-height:calc(100vh - env(safe-area-inset-top,0px));overflow:auto}
+@media (max-width:860px){aside{position:static;max-height:none}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card.shadow{box-shadow:var(--shadow)}
+label.f{display:block;font-weight:600;font-size:.9rem;margin-bottom:4px}
+input[type=text],input[type=number],select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;min-height:38px}
+textarea{min-height:76px;resize:vertical}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.field+.field{margin-top:12px}
+.ents{display:flex;gap:8px;flex-wrap:wrap}
+.ent{flex:1 1 120px;display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;cursor:pointer;user-select:none}
+.ent input{margin:0}
+.ent.jsoa:has(input:checked){background:var(--jsoa-soft);border-color:var(--jsoa)}
+.ent.jsof:has(input:checked){background:var(--jsof-soft);border-color:var(--jsof)}
+.ent small{display:block;color:var(--mute);font-size:.75rem;line-height:1.2}
+.tag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.7rem;letter-spacing:.06em;padding:2px 7px;border-radius:4px;border:1px solid}
+.tag.jsoa{color:var(--jsoa);border-color:var(--jsoa);background:var(--jsoa-soft)}
+.tag.jsof{color:var(--jsof);border-color:var(--jsof);background:var(--jsof-soft)}
+nav.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav.toc a{display:flex;gap:10px;align-items:baseline;padding:6px 8px;border-radius:6px;color:var(--ink);text-decoration:none;font-size:.92rem}
+nav.toc a:hover{background:var(--line2)}
+nav.toc a .code{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--mute);min-width:1.4em}
+nav.toc a .n{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:.7rem;color:var(--mute)}
+nav.toc a.done .n{color:var(--ok)}
+.progress{height:6px;background:var(--line2);border-radius:3px;overflow:hidden;margin-top:8px}
+.progress i{display:block;height:100%;background:var(--accent);width:0}
+.btns{display:flex;flex-direction:column;gap:8px}
+button{font:inherit;font-weight:600;border-radius:6px;padding:9px 14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.small{padding:5px 10px;font-size:.85rem;font-weight:500}
+button.link{border:none;background:none;color:var(--accent);padding:0;font-weight:600}
+main{display:flex;flex-direction:column;gap:22px;min-width:0}
+section.sec{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px 22px 18px}
+section.sec .head{display:flex;gap:14px;align-items:flex-start;margin-bottom:6px}
+section.sec .code{font-family:"Barlow Semi Condensed",sans-serif;font-weight:700;font-size:1.6rem;line-height:1;color:var(--accent);min-width:1.6rem}
+section.sec .lead{color:var(--ink2);margin:0 0 6px;max-width:70ch}
+section.sec .who{font-size:.82rem;color:var(--mute);margin:0 0 16px}
+.q{padding:14px 0;border-top:1px solid var(--line2)}
+.q:first-of-type{border-top:none}
+.q .ql{display:flex;gap:10px;align-items:baseline;margin-bottom:8px}
+.q .qn{font-family:"IBM Plex Mono",monospace;font-size:.74rem;color:var(--mute);min-width:2.4em}
+.q .qt{font-weight:600;max-width:75ch}
+.q .hint{color:var(--mute);font-size:.86rem;margin:-4px 0 8px 2.9em;max-width:70ch}
+.ans{margin-left:2.9em}
+@media (max-width:600px){.ans{margin-left:0}.q .hint{margin-left:0}}
+.per{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.per .pe{border:1px solid var(--line);border-radius:8px;padding:8px}
+.per .pe.jsoa{border-color:var(--jsoa)}.per .pe.jsof{border-color:var(--jsof)}
+.per .pe .tag{margin-bottom:6px}
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table.grid{border-collapse:collapse;width:100%;font-size:.9rem}
+table.grid th,table.grid td{border-bottom:1px solid var(--line2);padding:6px 8px;text-align:left;vertical-align:top}
+table.grid th{background:var(--line2);font-weight:600;font-size:.8rem;white-space:nowrap}
+table.grid td input[type=text]{min-height:32px;padding:5px 7px;min-width:130px}
+table.grid td.first{font-weight:600;min-width:160px}
+table.grid td.c{text-align:center}
+table.grid tr:last-child td{border-bottom:none}
+table.grid td.rm{width:28px}
+table.grid td.rm button{padding:2px 6px;color:var(--mute)}
+.chk{display:flex;flex-direction:column;gap:6px}
+.chk label{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+.chk label input{margin-top:4px}
+.chk .other{display:flex;gap:8px;align-items:center}
+.chk .other input[type=text]{flex:1}
+.rank{display:grid;grid-template-columns:1fr;gap:6px}
+.rank .r{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center}
+.rank .r input[type=number]{min-height:32px;padding:4px 6px}
+.rank .r select{min-height:32px;padding:4px 6px;width:auto}
+.miss{margin-top:8px;padding:12px;border-radius:8px;background:var(--bg);border:1px dashed var(--line)}
+.miss .ql{margin-bottom:6px}
+.empty{color:var(--mute);font-style:italic;padding:22px;text-align:center;border:1px dashed var(--line);border-radius:10px}
+.note{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:.9rem}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;box-shadow:var(--shadow);opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);max-width:min(860px,94vw);width:100%;padding:0}
+dialog::backdrop{background:rgba(10,12,14,.5)}
+dialog .dh{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line)}
+dialog textarea{margin:0;border:none;border-radius:0 0 12px 12px;min-height:60vh;font-family:"IBM Plex Mono",monospace;font-size:.8rem;background:var(--panel)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+.kpi-note{font-size:.86rem;color:var(--mute);margin:0 0 8px}
+.tiny{font-size:.78rem;color:var(--mute);margin:2px 0 4px;line-height:1.35}
+.filebtn{display:block;position:relative;overflow:hidden;text-align:center;font-weight:600;border-radius:6px;padding:9px 14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.filebtn:focus-within{outline:2px solid var(--focus);outline-offset:1px}
+dialog textarea.edit{min-height:36vh}
+button.big{padding:12px 16px;font-size:1.02rem}
+.sbody{padding:18px;display:flex;flex-direction:column;gap:14px}
+.sbody ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px}
+.sbody ol li{padding-left:2px}
+.okline{display:flex;gap:10px;align-items:center;background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:10px 12px;font-weight:600}
+.sbody textarea{min-height:26vh;border:1px solid var(--line);border-radius:8px;font-family:"IBM Plex Mono",monospace;font-size:.78rem;background:var(--bg)}
+.srow{display:flex;gap:8px;flex-wrap:wrap}
+.warnline{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:.9rem}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Platform discovery · Joint Special Operations Association &amp; Foundation</div>
+      <h1>JSOA / JSOF Intake Survey</h1>
+      <p>Pick your role and the entities you serve; only the questions for you appear. Answers save in this browser as you type, so you can close the tab and come back. To finish on another computer, save the file and load it there. When you're done, hit Submit and follow the one step it gives you.</p>
+    </div>
+    <div class="mono" id="stamp">draft · not started</div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <div class="card shadow">
+        <div class="eyebrow" style="margin-bottom:10px">Respondent</div>
+        <div class="field"><label class="f" for="r_name">Your name</label><input type="text" id="r_name" placeholder="First and last name"></div>
+        <div class="field"><label class="f" for="r_role">Your role on the board</label>
+          <select id="r_role">
+            <option value="">Choose a role…</option>
+            <option>President</option>
+            <option>VP Membership</option>
+            <option>VP Operations</option>
+            <option>Secretary</option>
+            <option>Treasurer</option>
+            <option>Fundraising Chair</option>
+            <option>Scholarships Chair</option>
+            <option>Store &amp; Sales Chair</option>
+            <option>Memorial Chair</option>
+            <option>Webmaster</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="field" id="r_role_other_wrap" hidden><label class="f" for="r_role_other">Describe your role</label><input type="text" id="r_role_other" placeholder="e.g., Golf tournament lead"></div>
+        <div class="field"><label class="f">Which entity do you serve in this role?</label>
+          <div class="ents">
+            <label class="ent jsoa"><input type="checkbox" id="e_jsoa"><span>JSOA<small>Association · 501(c)(19)</small></span></label>
+            <label class="ent jsof"><input type="checkbox" id="e_jsof"><span>JSOF<small>Foundation · 501(c)(3)</small></span></label>
+          </div>
+        </div>
+        <div class="field"><label class="f" for="r_email">Best email for follow-up</label><input type="text" id="r_email" placeholder="role@theJSOA.org"></div>
+      </div>
+
+      <nav class="card toc" aria-label="Sections">
+        <div class="eyebrow">Your sections</div>
+        <ol id="toc"></ol>
+        <div class="progress"><i id="bar"></i></div>
+        <div class="mono" id="pct" style="margin-top:6px;color:var(--mute)">0% answered</div>
+      </nav>
+
+      <div class="card btns">
+        <div class="eyebrow" style="margin-bottom:2px">When you're done</div>
+        <button class="primary big" id="b_submit">Submit answers</button>
+        <button id="b_view">Preview answers</button>
+        <button class="small" id="b_copy">Copy answers only</button>
+        <div class="eyebrow" style="margin:8px 0 2px">Pause and continue later</div>
+        <button id="b_save">Save answers as a file</button>
+        <button id="b_code" hidden>Copy a resume code</button>
+        <label class="filebtn" id="b_load_wrap"><input type="file" id="b_load" accept=".md,.json,.txt,text/plain,text/markdown,application/json"><span>Load a saved file</span></label>
+        <button class="small" id="b_paste">Paste a resume code</button>
+        <p class="tiny" id="savehint">Your answers stay in this browser. Saving a file lets you finish on another computer.</p>
+        <button class="small" id="b_clear" style="color:var(--mute)">Clear this draft</button>
+      </div>
+    </aside>
+
+    <main id="main"></main>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <div class="dh"><strong>Your answers (Markdown)</strong><div style="display:flex;gap:8px"><button class="small" id="dlg_copy">Copy</button><button class="small" id="dlg_close">Close</button></div></div>
+  <textarea id="dlg_text" readonly></textarea>
+</dialog>
+<dialog id="sdlg">
+  <div class="dh"><strong id="sdlg_h">Your answers are copied</strong><button class="small" id="sdlg_close">Close</button></div>
+  <div class="sbody">
+    <div id="sdlg_state"></div>
+    <ol id="sdlg_steps"></ol>
+    <div class="srow"><button class="primary" id="sdlg_mail" hidden>Open an email</button><button id="sdlg_recopy">Copy again</button><button id="sdlg_file" hidden>Also save a file</button></div>
+    <textarea id="sdlg_text" readonly hidden aria-label="Your answers"></textarea>
+  </div>
+</dialog>
+<dialog id="pdlg">
+  <div class="dh"><strong>Paste a resume code or a saved file</strong><div style="display:flex;gap:8px"><button class="small" id="pdlg_go">Load answers</button><button class="small" id="pdlg_close">Cancel</button></div></div>
+  <textarea id="pdlg_text" class="edit" placeholder="Paste the whole saved file, or just the resume code block, here."></textarea>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Settings ----------
+   RETURN_TO: the address answers come back to. Leave "" and the page tells
+   respondents to reply to the email that sent them the link. */
+const RETURN_TO = "";
+
+/* ---------- Question bank ---------- */
+const ALL = 'all';
+const ROLES_ALL = ['President','VP Membership','VP Operations','Secretary','Treasurer','Fundraising Chair','Scholarships Chair','Store & Sales Chair','Memorial Chair','Webmaster','Other'];
+
+const KPI = (role) => ([
+  {id:'kpi1', t:'l', per:true, q:'KPI 1 this role should be measured on', hint:'Name the measure, its current value if known, and a 12-month target.'},
+  {id:'kpi2', t:'l', per:true, q:'KPI 2'},
+  {id:'kpi3', t:'l', per:true, q:'KPI 3'},
+  {id:'kpi_other', t:'l', q:'A measure we did not list that would show this role is working'},
+]);
+
+const SECTIONS = [
+{code:'A', id:'inv', title:'Tool & account inventory', who:ALL,
+ lead:'Every tool, account and subscription you touch for JSOA or JSOF work, even free ones and even if someone else owns it.',
+ qs:[
+  {id:'a_tbl', t:'table', q:'Accounts you use', hint:'One row per account. Never write a password here; write "in password manager" or "only [name] knows".',
+   cols:['Tool / account','Used for','Entity (JSOA / JSOF / both)','Login owner','Org-owned or personal?','Others with access','$/yr','Paid by','MFA on?','In password manager?'],
+   rows:['Wix (site + editor)','Domain registrar (thejsoa.org)','@theJSOA.org email (provider?)','jsoa.org@gmail.com','pavers.thejsoa@gmail.com','info.thejsoa@gmail.com','Submittable','Donation processor','Bank – JSOA','Bank – JSOF','Accounting','Store / point of sale','Zoom','Microsoft Teams','Outlook / Exchange','Shared file storage','Facebook','Instagram','LinkedIn','Newsletter tool','Event ticketing','Group chat / SMS','E-signature','State / IRS portals','Insurance portal','Canva / design','Print / merch vendors']},
+  {id:'a_monthly', t:'l', q:'Which of these do you open at least monthly? Which have you not opened in a year?'},
+  {id:'a_friction', t:'l', q:'Which two tools cause the most friction? Describe the last time each got in the way.'},
+  {id:'a_dupes', t:'l', q:'Which tools duplicate each other (two meeting tools, two file stores, two mailboxes for one job)?'},
+  {id:'a_personal', t:'l', q:'Is any tool tied to a personal phone, personal email, or personal card such that it breaks if that person leaves?'},
+  {id:'a_discount', t:'l', q:'Which paid tools could a nonprofit discount or free tier replace (Google for Nonprofits, Microsoft 365 Nonprofit, TechSoup, Zoom, Canva)? Has anyone applied?'},
+  {id:'a_master', t:'t', q:'Where does the master list of logins live today, if anywhere?'},
+ ]},
+{code:'B', id:'sec', title:'Security & account management', who:ALL,
+ lead:'A baseline, not blame: where would a lost phone, a departed volunteer, or a phishing email hurt the organization?',
+ qs:[
+  {id:'b_mailbox', t:'t', q:'Do you have an @theJSOA.org mailbox? Do you check it directly or forward it? Where does the forward go?'},
+  {id:'b_mfa', t:'l', q:'For each account you own, is multi-factor authentication on, and what kind (app, SMS, hardware key, email code)?'},
+  {id:'b_shared', t:'l', q:'Which logins are shared by more than one person with one username and password? (Tool names only.)'},
+  {id:'b_pass', t:'choice', q:'How are shared passwords passed around today?', opts:['Password manager','Text message','Email','Paper','Verbally','Not shared']},
+  {id:'b_pm', t:'t', q:'Do you use a password manager for org accounts? Which one, and is it a personal or org vault?'},
+  {id:'b_single', t:'l', q:'Which accounts have only one person who can get in? What happens if that person is unreachable for 30 days?'},
+  {id:'b_owner', t:'l', per:true, q:'Who holds owner or super-admin on Wix, the domain, email, the donation processor, Submittable, the bank, and social pages?'},
+  {id:'b_recovery', t:'t', q:'Recovery phone numbers and emails on critical accounts: personal or org? (Do not write the numbers.)'},
+  {id:'b_onboard', t:'l', q:'When a new board member starts, how do they get access? Who grants it? How long does it take?'},
+  {id:'b_offboard', t:'l', q:'When a board member leaves, how is access removed? Was it done for the last person who left? Who might still have access?'},
+  {id:'b_rotate', t:'t', q:'When did the board last change over, and were any credentials rotated afterward?'},
+  {id:'b_devices', t:'l', q:'What devices do you use for org work? Are they locked and encrypted? Are you allowed to use a government or employer device for JSOA work?'},
+  {id:'b_pii', t:'l', per:true, q:'Where is member and applicant personal data stored (names, addresses, service history, dependents, transcripts, disability ratings)? Who can open it?'},
+  {id:'b_pii_dev', t:'t', q:'Is any of that data on a personal device, personal cloud drive, or in email attachments?'},
+  {id:'b_cards', t:'t', q:'Does anyone hold member or donor card numbers, bank details, or checks outside the processor or bank?'},
+  {id:'b_incident', t:'l', q:'Has any org account ever been locked out, hijacked, or phished? Any fake-invoice or gift-card emails? What happened?'},
+  {id:'b_policy', t:'t', q:'Is there a written security or acceptable-use policy? Any cyber or D&O insurance requirement about it?'},
+  {id:'b_poll', t:'grid', q:'Self-assessment', opts:['Agree','Partly','Disagree','Don’t know'],
+   rows:['I could hand my role to a successor in one meeting with no loss of access','Every org account I use has MFA','I know who to call if an account is compromised','Member and donor data is only where it needs to be','We could recover the website and email if the current owners vanished']},
+ ]},
+{code:'C', id:'mig', title:'Accounts to migrate or consolidate', who:['President','Treasurer','VP Operations','Webmaster'],
+ lead:'Every account the organization depends on should end up org-owned, with two named administrators and a documented recovery path.',
+ qs:[
+  {id:'c_tbl', t:'table', q:'Ownership transfer', cols:['Account','Current owner (person)','Registered to org or person?','Transfer without downtime?','Data export available?','Contract / term end','Decision (keep / migrate / merge / cancel)'],
+   rows:['thejsoa.org domain','Wix site + billing','@theJSOA.org email provider','jsoa.org@gmail.com','pavers.thejsoa@gmail.com','info.thejsoa@gmail.com','Submittable','Donation processor','Store / POS','Facebook / Instagram / LinkedIn','Zoom / Teams','File storage','Accounting']},
+  {id:'c_tenants', t:'l', q:'Do JSOA and JSOF need separate tool accounts (tenants, processors, books), or one shared workspace with separate ledgers? What does your accountant or attorney say?'},
+  {id:'c_wix', t:'t', q:'Is the Wix plan paid annually? When does it renew? What is included (Stores, Events, Ascend email, domain)?'},
+  {id:'c_contracts', t:'t', q:'Any tools under contract or with a cancellation notice period?'},
+  {id:'c_export', t:'t', q:'How much member and donor history is inside Submittable and the donation processor? Has it ever been exported?'},
+  {id:'c_keep', t:'l', q:'Which tools does the board want to keep no matter what?'},
+  {id:'c_cancel', t:'l', q:'Which paid tools would you cancel tomorrow if something simpler did the same job?'},
+  {id:'c_cost', t:'table', q:'Cost justification, one row per paid tool', cols:['Tool','$/yr','Who uses it','Jobs it does','Jobs it could do but doesn’t','Nonprofit discount applied?','Keep / replace / cancel'], rows:['','','']},
+ ]},
+{code:'D', id:'pres', title:'President', who:['President'], kpi:true,
+ lead:'Your answers set the legal boundaries the platform must respect: which entity does what, who can sign, and what the board will never automate.',
+ qs:[
+  {id:'d_legal', t:'l', per:true, q:'Confirm the legal name, EIN, state of incorporation, and whether annual reports with the NC Secretary of State are current.'},
+  {id:'d_boards', t:'l', q:'Do JSOA and JSOF have separate boards or one board acting for both? Is there a written agreement between them (shared services, fund transfers)?'},
+  {id:'d_docs', t:'t', q:'Where are the bylaws, articles, IRS determination letters, and conflict-of-interest policy kept? When were the bylaws last amended?'},
+  {id:'d_terms', t:'l', q:'Officer terms, election process, quorum rules. Which decisions need a board vote versus an officer’s own authority?'},
+  {id:'d_thresholds', t:'t', q:'Dollar thresholds that need a second approval or a vote? Who can sign contracts?'},
+  {id:'d_policies', t:'check', q:'Written policies in place', opts:['Conflict of interest','Whistleblower','Document retention','Gift acceptance','Privacy','Security / acceptable use']},
+  {id:'d_solicit', t:'t', q:'Registered for charitable solicitation in NC and any other state where money is raised online?'},
+  {id:'d_insurance', t:'l', q:'Insurance carried (D&O, general liability, event liability, cyber): carrier, renewal date, who holds the policies.'},
+  {id:'d_insignia', t:'l', q:'Any restrictions from JSOC or DoD on unit names, insignia, logos, or photos on the site, merch, or sponsor materials? Confirmed in writing?'},
+  {id:'d_opsec', t:'l', q:'Rules about naming or listing members publicly given operational-security concerns? What can never appear on the website or in a directory?'},
+  {id:'d_counsel', t:'t', q:'Attorney or CPA of record? Any advice received on data privacy, donor privacy, or minors’ data?'},
+  {id:'d_raffles', t:'t', q:'Do events involve alcohol, raffles, auctions, or games of chance? Permits needed?'},
+  {id:'d_partners', t:'l', q:'Written agreements with Patriot Foundation, Patriot Military Family Foundation, and Force Network? What does each receive and provide?'},
+  {id:'d_authority', t:'t', q:'Who can approve tool changes, subscriptions, and website changes? Does moving email or the website need a board vote?'},
+  {id:'d_hitl', t:'rank', q:'Actions that must always have a person decide, ranked (1 = most critical)', items:['Approving a member','Approving a scholarship','Refunding a donor','Posting publicly','Spending money','Sending a mass email','Accepting a sponsor']},
+  {id:'d_fail', t:'l', q:'What would make this project a failure in your eyes a year from now?'},
+  {id:'d_hours', t:'t', q:'Hours per month on JSOA/JSOF work, and which tasks eat most of it?'},
+  {id:'d_break', t:'l', q:'If you stepped down next month, what would break first?'},
+ ]},
+{code:'E', id:'secy', title:'Secretary', who:['Secretary'], kpi:true,
+ lead:'You own the record, so these answers define the document system, retention rules, and the privacy practices the platform enforces.',
+ qs:[
+  {id:'e_meet', t:'t', q:'How often does the board meet and where (in person, Zoom, Teams, mixed)? Who schedules and sends the invite?'},
+  {id:'e_agenda', t:'t', q:'How are agendas built and circulated, and how far in advance?'},
+  {id:'e_minutes', t:'l', q:'How are minutes taken (typed live, recorded and transcribed, from memory)? Where stored, who can read them, approved at the next meeting?'},
+  {id:'e_record', t:'t', q:'Are meetings recorded? Where do recordings live and for how long?'},
+  {id:'e_votes', t:'t', q:'How are votes taken between meetings (email, text, poll)? Is there a written rule that email votes are valid?'},
+  {id:'e_docset', t:'l', per:true, q:'Where is the official document set (bylaws, minutes, policies, IRS letters, contracts, insurance, 990s)? One place or scattered? Paper or digital?'},
+  {id:'e_retention', t:'t', q:'Is there a records-retention schedule? What is kept forever, what is deleted, who deletes?'},
+  {id:'e_edit', t:'t', q:'Who can edit official documents? Version control, or "final_v3_REAL.docx"?'},
+  {id:'e_public', t:'t', q:'Which records must be available for public inspection (990s, determination letter) and where are they posted?'},
+  {id:'e_notices', t:'l', q:'What official notices go to members (annual meeting, elections, bylaw changes, dues)? By what channel? Required notice period?'},
+  {id:'e_sender', t:'t', q:'Who may send email on behalf of the org, and from which addresses?'},
+  {id:'e_privpol', t:'t', q:'Is there a written privacy policy on the website? Who wrote it and when?'},
+  {id:'e_data', t:'l', per:true, q:'What personal data is held on members, families, donors, applicants, and attendees? For each: where, who can access, how long kept.'},
+  {id:'e_opsec', t:'t', q:'Is there a rule that member names, units, photos, or locations are never published? Is it written down?'},
+  {id:'e_photo', t:'t', q:'How are photo and video permissions handled for events and the memorial?'},
+  {id:'e_delete', t:'t', q:'How are requests to be removed from lists or to delete data handled today?'},
+  {id:'e_minors', t:'t', q:'Are minors’ data (applicants’ dependents, youth at events) handled differently?'},
+  {id:'e_legal', t:'t', q:'Ever responded to a subpoena, records request, or a privacy complaint?'},
+  {id:'e_cal', t:'table', q:'Compliance calendar', cols:['Filing / renewal','Entity','Due date','Who files','Where the confirmation is stored'],
+   rows:['IRS Form 990 / 990-EZ / 990-N (JSOA)','IRS Form 990 / 990-EZ / 990-N (JSOF)','NC Secretary of State annual report','NC Charitable Solicitation License','Insurance renewals','Domain renewal','Wix / subscription renewals','Officer changes filed']},
+ ]},
+{code:'F', id:'treas', title:'Treasurer', who:['Treasurer'], kpi:true,
+ lead:'Two entities with different tax status share one board, so your answers decide how the platform separates funds and where controls stay human.',
+ qs:[
+  {id:'f_in', t:'table', q:'Every way money arrives', cols:['Source','Processor / account','Entity it belongs to','How it is recorded','Fees'],
+   rows:['Online donations','Checks by mail','Venmo / Zelle / Cash App','Event tickets','Sponsorships','Store sales','Paver purchases','Dues']},
+  {id:'f_processor', t:'t', per:true, q:'Which processor takes online donations? Fees? Nonprofit rate?'},
+  {id:'f_restricted', t:'t', q:'How are gifts to a specific line of effort tracked as restricted funds? Can you report totals per line today?'},
+  {id:'f_receipts', t:'l', per:true, q:'Are receipts automatic? Do they carry the entity name, EIN, the IRS "no goods or services" language, and the right entity for deductibility?'},
+  {id:'f_c19', t:'t', q:'Are gifts to JSOA marketed as tax-deductible? Has a CPA confirmed the (c)(19) rules (the 90% war-veterans test)?'},
+  {id:'f_matching', t:'t', q:'Employer matching gifts, DAF grants, or stock? How handled?'},
+  {id:'f_invoice', t:'t', q:'Do sponsors pay by invoice? Who issues it, from which tool, how is it chased?'},
+  {id:'f_spend', t:'l', per:true, q:'Who can spend money and how (debit card, checks, reimbursement, online)? How many cards exist and who holds them?'},
+  {id:'f_reimb', t:'t', q:'Reimbursement process, turnaround, and where receipts are stored?'},
+  {id:'f_dual', t:'t', q:'Are two approvals required above any amount? Enforced by the bank or by trust?'},
+  {id:'f_schol', t:'l', q:'How are scholarship payments made (to student, to school)? Who approves, who releases, what documentation is kept?'},
+  {id:'f_vendors', t:'t', q:'How are event vendors paid and contracted? Any deposits at risk?'},
+  {id:'f_books', t:'t', per:true, q:'What are the books kept in? Who has access? Is the JSOF ledger fully separate?'},
+  {id:'f_close', t:'t', q:'Monthly close and Treasurer’s report to the board? What does it contain?'},
+  {id:'f_990', t:'t', per:true, q:'Who prepares and files the 990? Which form? Any late or missing filings?'},
+  {id:'f_audit', t:'t', q:'Annual review or audit? Required by any grantor, partner, or the state?'},
+  {id:'f_banks', t:'l', per:true, q:'Bank accounts: how many, signers, online-banking MFA on? Signers updated after the last board change?'},
+  {id:'f_salestax', t:'t', q:'Sales tax on store sales? Registered with NC DOR, or exempt? Who decided?'},
+  {id:'f_ctrl', t:'grid', q:'Controls', opts:['In place','Partly','Not in place'],
+   rows:['Bank statements reviewed monthly by someone other than the Treasurer','Every online-payment account is org-owned with 2+ admins','Restricted funds tracked separately','Donor receipts automatic and compliant','Reimbursements approved before payment','Scholarship disbursement needs two approvals']},
+  {id:'f_reports', t:'l', q:'Financial reports you would want produced automatically?'},
+  {id:'f_budget', t:'t', per:true, q:'Annual budget range, and how much could go to tools if they saved volunteer hours?'},
+ ]},
+{code:'G', id:'memb', title:'Membership', who:['VP Membership'], kpi:true,
+ lead:'Membership is the master record everything keys off: scholarship eligibility, invitations, dues, and the (c)(19) veteran-percentage test.',
+ qs:[
+  {id:'g_cats', t:'l', q:'Membership categories, eligibility for each, and how eligibility is verified (DD-214, unit roster, vouching)?'},
+  {id:'g_count', t:'t', q:'Members today, active and lapsed? Share who are veterans or active duty versus family or supporters?'},
+  {id:'g_dues', t:'t', q:'Dues per category and frequency? Any waived?'},
+  {id:'g_apply', t:'l', q:'Walk through a new application: Submittable form, who reviews, what is checked, how approval is decided and communicated, how dues are collected, how the member is added to lists.'},
+  {id:'g_renew', t:'t', q:'How are renewals triggered and chased? What happens to a member who doesn’t pay?'},
+  {id:'g_leave', t:'t', q:'How does someone resign or get removed? Data deleted or archived?'},
+  {id:'g_submittable', t:'l', q:'What does Submittable do well, and what do you work around? Is it the right tool for a roster, or only for applications?'},
+  {id:'g_fields', t:'l', q:'Fields collected on the application? Which are required? Which are sensitive (unit, service dates, disability rating, dependents, home address)?'},
+  {id:'g_roster', t:'t', q:'Where is the roster of record: Submittable, spreadsheet, Wix contacts, mailing tool, an inbox? In sync?'},
+  {id:'g_access', t:'t', q:'Who can see the full roster? Who can export it?'},
+  {id:'g_directory', t:'t', q:'Is there a member directory? Should there be, given security concerns?'},
+  {id:'g_consent', t:'t', q:'Do members consent to how their data is used? Consent statement on the application?'},
+  {id:'g_comms', t:'l', q:'How do you reach members (email tool, Facebook group, text, newsletter)? How often? Open rates, if known?'},
+  {id:'g_self', t:'t', q:'Can members update their own contact details?'},
+  {id:'g_features', t:'check', q:'Member-facing features you would want', opts:['Online renewal','Member card','Event RSVP','Scholarship application pre-filled from the member record','Members-only area','Directory (members-only)']},
+  {id:'g_onboard', t:'t', q:'How are new board members and chairs oriented? Any written handover for this role?'},
+  {id:'g_time', t:'t', q:'Most time-consuming membership task each month?'},
+ ]},
+{code:'H', id:'store', title:'Store', who:['Store & Sales Chair','Treasurer'], kpi:true,
+ lead:'The public store page is "under construction" and sales run by email, so the first question is whether the store is a fundraising line, a member perk, or both.',
+ qs:[
+  {id:'h_products', t:'table', q:'Every product sold or held in stock', cols:['Item','Price','Cost','Qty on hand','Supplier','Event-only?'], rows:['','','','']},
+  {id:'h_revenue', t:'t', q:'Gross and net last year? Worth the hours it takes?'},
+  {id:'h_customer', t:'t', q:'Who is the customer: members, families, public, attendees? Anything restricted to members?'},
+  {id:'h_designs', t:'t', q:'Are any designs, logos, or insignia licensed or restricted? Who approves a new design?'},
+  {id:'h_walk', t:'l', q:'Walk through one sale from "someone emails sales@" to "money in the bank and item delivered": every step, tool, and person.'},
+  {id:'h_pay', t:'t', per:true, q:'How is payment taken (Square, PayPal, Venmo, cash, check)? Into which entity’s account?'},
+  {id:'h_inventory', t:'t', q:'How is inventory tracked? Where is stock kept? Who has keys?'},
+  {id:'h_ship', t:'t', q:'Shipping: who packs, which carrier, who pays? Local pickup?'},
+  {id:'h_refunds', t:'t', q:'Refunds, exchanges, damaged items?'},
+  {id:'h_tax', t:'t', q:'Sales tax charged? Registered with NC DOR? Sold across state lines?'},
+  {id:'h_ubi', t:'t', q:'Proceeds tracked separately from donations? Unrelated business income for either entity (ask the CPA)?'},
+  {id:'h_events', t:'t', q:'What is sold at events and how paid (card reader, cash box)? Who reconciles cash and how soon?'},
+  {id:'h_preorder', t:'t', q:'Pre-orders for event merch? How?'},
+  {id:'h_pod', t:'t', q:'Would print-on-demand (no stock, no packing) be acceptable at lower margin?'},
+  {id:'h_extras', t:'t', q:'Should a purchase be able to include a donation or round-up? Member discount?'},
+  {id:'h_reports', t:'t', q:'Reports you need: sales by item, by event, stock levels, sales tax collected?'},
+  {id:'h_backup', t:'t', q:'Who, besides you, could run the store tomorrow?'},
+  {id:'h_poll', t:'grid', q:'Store direction', opts:['Preferred','Acceptable','No'],
+   rows:['Full online store with inventory we hold','Print-on-demand store, no inventory','Event-only sales with a card reader','Email-order as today, with an order form and tracked payments','Retire the store; fold merch into tickets and sponsor packages']},
+ ]},
+{code:'R', id:'chairs', title:'Your chair or officer role', who:['VP Operations','Fundraising Chair','Scholarships Chair','Memorial Chair','Webmaster','Other'], kpi:true,
+ lead:'Short role-specific questions for chairs and officers whose work sits outside the four core seats.',
+ qs:[
+  {id:'r_ops1', t:'l', roles:['VP Operations'], q:'For each event (Ball, golf tournament, triathlon): who leads, which tools (ticketing, registration, sponsor tracking), and where the budget lives?'},
+  {id:'r_ops2', t:'t', roles:['VP Operations'], q:'Which vendors and venues are under contract? Deposits at risk if an event slips?'},
+  {id:'r_ops3', t:'t', roles:['VP Operations'], q:'How is check-in and on-site payment handled? What failed last time?'},
+  {id:'r_fund1', t:'l', roles:['Fundraising Chair'], q:'Walk through a sponsor from first contact to logo on the site: steps, tools, who approves, what the sponsor receives.'},
+  {id:'r_fund2', t:'t', roles:['Fundraising Chair'], q:'Where is the prospect and donor list kept? Who can see it?'},
+  {id:'r_fund3', t:'t', roles:['Fundraising Chair'], q:'Existing sponsorship packages for events: levels, prices, take-up last year?'},
+  {id:'r_fund4', t:'t', roles:['Fundraising Chair'], q:'Which entity receives sponsor money today, and are benefits (tables, logos) valued on the receipt?'},
+  {id:'r_sch1', t:'l', roles:['Scholarships Chair'], q:'Walk through the cycle: open, publicize, receive in Submittable, verify membership, score, award, notify, pay. Who does each step?'},
+  {id:'r_sch2', t:'t', roles:['Scholarships Chair'], q:'How many applications and awards last cycle? Award amounts?'},
+  {id:'r_sch3', t:'t', roles:['Scholarships Chair'], q:'Who sees application files (transcripts, disability documentation, minors’ data)? Where do they live after the cycle?'},
+  {id:'r_sch4', t:'t', roles:['Scholarships Chair'], q:'How is the Patriot Foundation hand-off for the NC Patriot Star scholarship coordinated?'},
+  {id:'r_mem1', t:'l', roles:['Memorial Chair'], q:'Walk through a paver order: Submittable form, inscription approval, payment, vendor order, installation, donor notification.'},
+  {id:'r_mem2', t:'t', roles:['Memorial Chair'], q:'Who approves inscriptions and by what rules? Who is the engraving vendor?'},
+  {id:'r_mem3', t:'t', roles:['Memorial Chair'], q:'Why does pavers.thejsoa@gmail.com sit outside the org domain, and who else can open it?'},
+  {id:'r_web1', t:'l', roles:['Webmaster'], q:'Who holds the Wix owner login, the domain registrar, and DNS? Where does @theJSOA.org mail actually route?'},
+  {id:'r_web2', t:'t', roles:['Webmaster'], q:'How are content changes requested and approved? Who else can publish?'},
+  {id:'r_web3', t:'t', roles:['Webmaster'], q:'What Wix apps or plans are paid for? Is Wix Stores, Events, or Ascend enabled?'},
+  {id:'r_web4', t:'t', roles:['Webmaster'], q:'The public /membership link returns 404. Where is that content, and what else is broken?'},
+  {id:'r_oth1', t:'l', roles:['Other'], q:'Describe what your role does in a typical month, the tools you use, and who you hand work to.'},
+  {id:'r_oth2', t:'l', roles:['Other'], q:'What decisions do you make on your own, and which go to the board?'},
+  {id:'r_any_hours', t:'t', q:'Hours per month on this role, and the single most time-consuming task?'},
+  {id:'r_any_break', t:'t', q:'If you stepped down next month, what would break first?'},
+ ]},
+{code:'I', id:'web', title:'Website, discoverability & sponsorship', who:ALL,
+ lead:'The site lists three partners with no way to become one, and gives no reason to give $5,000 rather than $50. A published sponsor ladder with logo credit is the proposal; you decide whether and how.',
+ qs:[
+  {id:'i_search', t:'t', q:'When a company or a JSOC family searches for you, what do they type? Is the org on Google Business Profile, Candid, Charity Navigator, and the NC charity registry?'},
+  {id:'i_jsof', t:'t', q:'Should JSOF (the 501(c)(3)) have its own page or site for corporate donors, rather than only the scholarships page?'},
+  {id:'i_found', t:'t', q:'Which partners found you versus you finding them? What made them say yes?'},
+  {id:'i_gets', t:'t', q:'What does a company get today for supporting you?'},
+  {id:'i_packages', t:'t', q:'Sponsorship packages for the Ball, golf, or triathlon already? Levels and prices?'},
+  {id:'i_tiers', t:'table', q:'Sponsor ladder proposal (edit the placeholders)', cols:['Tier','Annual gift','Public credit','Event benefits','Approval needed'],
+   rows:['Supporter','Bronze','Silver','Gold','Memorial / Scholarship Patron'],
+   prefill:[['','$500–$999','Name on Partners page','','Fundraising chair'],['','$1,000–$2,499','Logo on Partners page','Mention at one event','Fundraising chair'],['','$2,500–$4,999','Logo + link, homepage strip','Table or foursome at one event','President'],['','$5,000–$9,999','Logo + link in every footer, newsletter mention','Named sponsor of one event','Board vote'],['','$10,000+','Named scholarship or memorial credit, annual report','Speaking slot at awards ceremony','Board vote']]},
+  {id:'i_poll', t:'grid', q:'Board poll', opts:['Yes','No','Discuss'],
+   rows:['Publish a sponsor ladder with logo credit on the site','Set a minimum gift for any public credit','Route all corporate gifts to JSOF','Add a "Become a sponsor" form and page','Publish an annual impact report with sponsor listing','Offer recurring monthly giving','Add a members-only area to the site','Rebuild the site off Wix if the platform needs it']},
+  {id:'i_min', t:'choice', q:'Minimum gift for logo credit', opts:['$250','$500','$1,000','$2,500']},
+  {id:'i_never', t:'t', q:'Anything a sponsor must never get (member list access, unit imagery, naming rights on the memorial)?'},
+  {id:'i_decline', t:'t', q:'Who can decline a sponsor, and on what grounds? Written into a gift-acceptance policy?'},
+  {id:'i_stalled', t:'l', q:'Ideas raised before and never acted on? Why did they stall?'},
+ ]},
+{code:'J', id:'sop', title:'Workflows for the living SOP', who:ALL,
+ lead:'Every recurring task becomes one row, and each row becomes one SOP page, so the platform can run the mechanical steps and leave the marked decisions to a person.',
+ qs:[
+  {id:'j_tbl', t:'table', q:'Your recurring workflows', hint:'"Human decision" = a step where a person must judge, approve, or decline. Everything else is a candidate for automation. Delete rows that are not yours; add rows we missed.',
+   cols:['Workflow','Trigger','Owner role','Backup','Frequency','Steps today (short)','Tools used','Human decision points','Time per run','Pain / failure points'],
+   rows:['New membership application','Membership renewal','Online donation received','Check or cash donation','Donor thank-you and receipt','Scholarship cycle (open, review, award, pay)','Paver / memorial order','Store order','Event planning (Ball)','Event planning (golf, triathlon)','Event ticketing and check-in','Sponsor outreach and fulfillment','Board meeting (agenda, notice, minutes, actions)','Board vote between meetings','Reimbursement','Monthly close and Treasurer’s report','Annual filings (990s, SoS, solicitation license)','Website update','Social media post','Member newsletter / mass email','Board member onboarding','Board member offboarding','Password / account recovery','Grant to a JSOC family']},
+  {id:'j_top3', t:'l', q:'Which three workflows would save you the most time if the mechanical steps ran themselves?'},
+  {id:'j_never', t:'l', q:'Which workflows must never run without a person confirming, even if the system is right 99% of the time?'},
+  {id:'j_head', t:'l', q:'Which workflows exist only in one person’s head today?'},
+ ]},
+{code:'K', id:'plat', title:'Platform build inputs', who:ALL,
+ lead:'These answers size the build to what the board will actually use.',
+ qs:[
+  {id:'k_rank', t:'rank', q:'Rank the capabilities (1 = highest) and mark must-have or nice-to-have', must:true,
+   items:['One org-owned login and mailbox per role, with handover on board change','Shared password vault with recovery','Member roster of record with online join and renewal','Donations with automatic compliant receipts, per entity and line of effort','Scholarship application, review, and disbursement workflow','Event ticketing, sponsor packages, and check-in','Store with tracked payments and inventory (or print-on-demand)','Board meeting pack: agenda, minutes, votes, action tracking','Compliance calendar with reminders','Financial reporting per entity and restricted fund','Sponsor ladder page and "become a sponsor" flow','Public site refresh and search findability']},
+  {id:'k_budget', t:'t', per:true, q:'What can be spent per year on tools and hosting, all in? One-time setup budget?'},
+  {id:'k_admin', t:'t', q:'Who will be the platform’s day-to-day admin? Hours per month they can give?'},
+  {id:'k_dates', t:'t', q:'Hard dates the platform must be ready for or avoid (next Ball, scholarship cycle, election)?'},
+  {id:'k_keep', t:'t', q:'What must stay exactly as it is (Submittable, Wix, a bank, an email tool)?'},
+  {id:'k_hosting', t:'t', q:'Any requirement for U.S.-hosted services or vendors to avoid, for security or policy reasons?'},
+  {id:'k_ai', t:'choice', q:'Comfort with automation and AI assistance drafting emails, minutes, or receipts, if a person approves before anything goes out', opts:['Comfortable','Comfortable for internal drafts only','Uncomfortable','Need to see it first']},
+  {id:'k_success', t:'check', q:'Success in 12 months (pick up to three)', opts:['Board change-over with zero lost access','Volunteer hours per month down by a stated amount','Every donation receipted within 24 hours','Member count and renewal rate visible in one place','Scholarship cycle run end to end without email threads','Sponsor revenue up by a stated amount','Store profitable or retired by decision','All filings on time with confirmations stored']},
+ ]},
+];
+
+/* ---------- State ---------- */
+const KEY='jsoa-intake-v1';
+let S={meta:{},a:{}};
+function load(){try{const r=localStorage.getItem(KEY);if(r)S=JSON.parse(r);}catch(e){}}
+let canStore=true;
+let saveT;function save(){clearTimeout(saveT);saveT=setTimeout(()=>{S.meta=meta();try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){canStore=false;}stamp();},250);}
+function stamp(){const n=Object.keys(S.a).length;const el=document.getElementById('stamp');
+  if(!canStore){el.textContent='not saving in this browser — save a file';return;}
+  el.textContent=n?`draft · autosaved ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`:'draft · not started';}
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function meta(){return{name:$('r_name').value.trim(),role:$('r_role').value,roleOther:$('r_role_other').value.trim(),email:$('r_email').value.trim(),jsoa:$('e_jsoa').checked,jsof:$('e_jsof').checked};}
+function ents(){const m=meta();const e=[];if(m.jsoa)e.push('JSOA');if(m.jsof)e.push('JSOF');return e;}
+function visibleSections(){const m=meta();if(!m.role)return[];return SECTIONS.filter(s=>s.who===ALL||s.who.includes(m.role));}
+function visibleQs(sec){const m=meta();return sec.qs.filter(q=>!q.roles||q.roles.includes(m.role));}
+
+/* ---------- Render ---------- */
+function render(){
+  const m=meta();const main=$('main');const secs=visibleSections();
+  $('r_role_other_wrap').hidden=m.role!=='Other';
+  if(!m.role){main.innerHTML='<div class="empty">Choose your role on the left to see your questions.</div>';$('toc').innerHTML='';updateProgress();return;}
+  const E=ents();
+  const entNote=E.length?'':'<div class="note">Tick JSOA, JSOF, or both above. Questions that differ by entity will then show one answer box per entity.</div>';
+  let html=entNote;
+  for(const sec of secs){
+    const qs=visibleQs(sec);
+    let inner='';let n=0;
+    for(const q of qs){n++;inner+=renderQ(sec,q,n,E);}
+    if(sec.kpi){inner+=`<div class="q"><div class="ql"><span class="qn">KPI</span><span class="qt">KPI recommendations for the ${esc(m.role==='Other'?(m.roleOther||'role'):m.role)} seat</span></div><p class="hint">Propose what this seat should be measured on, per entity you serve.</p>`;let k=0;for(const q of KPI(m.role)){k++;inner+=renderQ(sec,q,`K${k}`,E);}inner+='</div>';}
+    inner+=renderQ(sec,{id:'miss',t:'l',q:'What did we not ask about in this section that matters?'},'?',E,true);
+    inner+=renderQ(sec,{id:'idea',t:'l',q:'A tool, risk, or idea of your own for this area'},'+',E,true);
+    html+=`<section class="sec" id="sec_${sec.id}"><div class="head"><span class="code">${sec.code}</span><div><h2>${esc(sec.title)}</h2><p class="lead">${esc(sec.lead)}</p><p class="who">${sec.who===ALL?'Everyone answers':'Answered by: '+sec.who.join(', ')}</p></div></div>${inner}</section>`;
+  }
+  main.innerHTML=html;
+  $('toc').innerHTML=secs.map(s=>`<li><a href="#sec_${s.id}" id="toc_${s.id}"><span class="code">${s.code}</span>${esc(s.title)}<span class="n"></span></a></li>`).join('');
+  wire();updateProgress();
+}
+function val(k){return S.a[k];}
+function renderQ(sec,q,n,E,miss){
+  const key=`${sec.id}.${q.id}`;
+  let body='';
+  const per=q.per&&E.length>1;
+  const box=(k,e)=>q.t==='t'?`<input type="text" id="f_${k}" data-k="${k}" value="${esc(val(k))}">`:`<textarea id="f_${k}" data-k="${k}">${esc(val(k))}</textarea>`;
+  if(q.t==='t'||q.t==='l'){
+    if(per){body=`<div class="per">${E.map(e=>`<div class="pe ${e.toLowerCase()}"><span class="tag ${e.toLowerCase()}">${e}</span>${box(key+'@'+e,e)}</div>`).join('')}</div>`;}
+    else if(q.per&&E.length===1){body=`<div class="per"><div class="pe ${E[0].toLowerCase()}"><span class="tag ${E[0].toLowerCase()}">${E[0]}</span>${box(key+'@'+E[0])}</div></div>`;}
+    else body=box(key);
+  }
+  else if(q.t==='choice'){
+    const cur=val(key)||{};
+    body=`<div class="chk">${q.opts.map((o,i)=>`<label><input type="radio" name="${key}" data-k="${key}" data-choice="${esc(o)}" ${cur.v===o?'checked':''}>${esc(o)}</label>`).join('')}<div class="other"><input type="radio" name="${key}" data-k="${key}" data-choice="__other" ${cur.v==='__other'?'checked':''}><span>Other:</span><input type="text" data-k="${key}" data-otherText="1" value="${esc(cur.other)}" placeholder="something we did not list"></div></div>`;
+  }
+  else if(q.t==='check'){
+    const cur=val(key)||{v:[]};
+    body=`<div class="chk">${q.opts.map(o=>`<label><input type="checkbox" data-k="${key}" data-check="${esc(o)}" ${(cur.v||[]).includes(o)?'checked':''}>${esc(o)}</label>`).join('')}<div class="other"><span>Other:</span><input type="text" data-k="${key}" data-otherText="1" value="${esc(cur.other)}" placeholder="something we did not list"></div></div>`;
+  }
+  else if(q.t==='grid'){
+    const cur=val(key)||{};
+    body=`<div class="tblwrap"><table class="grid"><thead><tr><th></th>${q.opts.map(o=>`<th>${esc(o)}</th>`).join('')}</tr></thead><tbody>${q.rows.map((r,i)=>`<tr><td class="first">${esc(r)}</td>${q.opts.map(o=>`<td class="c"><input type="radio" name="${key}#${i}" data-k="${key}" data-row="${i}" data-opt="${esc(o)}" ${cur[i]===o?'checked':''} aria-label="${esc(r)}: ${esc(o)}"></td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  else if(q.t==='rank'){
+    const cur=val(key)||{};
+    body=`<div class="rank">${q.items.map((it,i)=>`<div class="r"><input type="number" min="1" max="${q.items.length}" data-k="${key}" data-row="${i}" data-rank="1" value="${esc(cur[i]?.r)}" aria-label="Rank: ${esc(it)}"><span>${esc(it)}</span>${q.must?`<select data-k="${key}" data-row="${i}" data-must="1" aria-label="Priority: ${esc(it)}"><option value="">—</option><option ${cur[i]?.m==='Must-have'?'selected':''}>Must-have</option><option ${cur[i]?.m==='Nice-to-have'?'selected':''}>Nice-to-have</option></select>`:'<span></span>'}</div>`).join('')}</div>`;
+  }
+  else if(q.t==='table'){
+    let cur=val(key);
+    if(!cur){cur={rows:q.rows.map((r,i)=>{const row=new Array(q.cols.length).fill('');row[0]=r;if(q.prefill&&q.prefill[i])q.prefill[i].forEach((v,j)=>{if(v)row[j]=v;});return row;})};S.a[key]=cur;}
+    body=`<div class="tblwrap"><table class="grid" id="t_${key}"><thead><tr>${q.cols.map(c=>`<th>${esc(c)}</th>`).join('')}<th></th></tr></thead><tbody>${cur.rows.map((row,i)=>`<tr>${row.map((v,j)=>`<td><input type="text" data-k="${key}" data-row="${i}" data-col="${j}" data-cell="1" value="${esc(v)}" aria-label="${esc(q.cols[j])}"></td>`).join('')}<td class="rm"><button class="small" data-k="${key}" data-rmrow="${i}" title="Remove row" aria-label="Remove row">×</button></td></tr>`).join('')}</tbody></table></div><div style="margin-top:8px"><button class="small" data-k="${key}" data-addrow="1">+ Add a row we missed</button></div>`;
+  }
+  const hint=q.hint?`<p class="hint">${esc(q.hint)}</p>`:'';
+  return `<div class="q${miss?' miss':''}"><div class="ql"><span class="qn">${n}</span><span class="qt">${esc(q.q)}</span></div>${hint}<div class="ans">${body}</div></div>`;
+}
+
+function wire(){
+  const main=$('main');
+  main.oninput=e=>{
+    const t=e.target;const k=t.dataset.k;if(!k)return;
+    if(t.dataset.cell){const cur=S.a[k];cur.rows[+t.dataset.row][+t.dataset.col]=t.value;}
+    else if(t.dataset.otherText){S.a[k]=S.a[k]||{};S.a[k].other=t.value;const q=findQ(k);if(q&&q.t==='choice'&&t.value.trim()){S.a[k].v='__other';const r=t.parentElement.querySelector('input[type=radio]');if(r)r.checked=true;}}
+    else if(t.dataset.rank){S.a[k]=S.a[k]||{};S.a[k][t.dataset.row]=Object.assign({},S.a[k][t.dataset.row],{r:t.value});}
+    else if(t.dataset.must){S.a[k]=S.a[k]||{};S.a[k][t.dataset.row]=Object.assign({},S.a[k][t.dataset.row],{m:t.value});}
+    else if(t.dataset.choice!==undefined){S.a[k]=S.a[k]||{};S.a[k].v=t.dataset.choice;}
+    else if(t.dataset.check!==undefined){S.a[k]=S.a[k]||{v:[]};const v=new Set(S.a[k].v||[]);t.checked?v.add(t.dataset.check):v.delete(t.dataset.check);S.a[k].v=[...v];}
+    else if(t.dataset.opt!==undefined){S.a[k]=S.a[k]||{};S.a[k][t.dataset.row]=t.dataset.opt;}
+    else {S.a[k]=t.value;}
+    if(typeof S.a[k]==='string'&&S.a[k].trim()==='')delete S.a[k];
+    save();updateProgress();
+  };
+  main.onclick=e=>{
+    const b=e.target.closest('button');if(!b)return;const k=b.dataset.k;if(!k)return;
+    const cur=S.a[k];const q=findQ(k);
+    if(b.dataset.addrow){cur.rows.push(new Array(q.cols.length).fill(''));save();render();const rows=document.querySelectorAll(`#t_${CSS.escape(k)} tbody tr`);rows[rows.length-1]?.querySelector('input')?.focus();}
+    else if(b.dataset.rmrow!==undefined){cur.rows.splice(+b.dataset.rmrow,1);save();render();}
+  };
+}
+function findQ(k){const[sid,qid]=k.split('.');const sec=SECTIONS.find(s=>s.id===sid);return sec.qs.find(q=>q.id===qid);}
+
+function answered(k){const v=S.a[k];if(v==null)return false;if(typeof v==='string')return v.trim()!=='';if(v.rows)return v.rows.some(r=>r.slice(1).some(c=>c.trim()));if(v.v!==undefined)return (Array.isArray(v.v)?v.v.length>0:!!v.v)||!!v.other;return Object.keys(v).length>0;}
+function updateProgress(){
+  const secs=visibleSections();const E=ents();let tot=0,done=0;
+  for(const sec of secs){let st=0,sd=0;const qs=visibleQs(sec).slice();if(sec.kpi)qs.push(...KPI());
+    for(const q of qs){const key=`${sec.id}.${q.id}`;if(q.per&&E.length){for(const e of E){st++;if(answered(key+'@'+e))sd++;}}else{st++;if(answered(key))sd++;}}
+    tot+=st;done+=sd;const a=$('toc_'+sec.id);if(a){a.querySelector('.n').textContent=`${sd}/${st}`;a.classList.toggle('done',st>0&&sd===st);}
+  }
+  const p=tot?Math.round(done/tot*100):0;PROG={p,done,tot};$('bar').style.width=p+'%';$('pct').textContent=`${p}% answered (${done} of ${tot})`;
+}
+let PROG={p:0,done:0,tot:0};
+
+/* ---------- Export ---------- */
+function toMarkdown(){
+  const m=meta();const E=ents();const secs=visibleSections();
+  const role=m.role==='Other'?`Other (${m.roleOther||'unspecified'})`:m.role;
+  let md=`# JSOA / JSOF Intake — ${m.name||'(no name)'}\n\nRole: ${role||'(none)'}  \nEntities: ${E.join(', ')||'(none)'}  \nEmail: ${m.email||'(none)'}  \nExported: ${new Date().toISOString().slice(0,10)}\n`;
+  const line=v=>String(v??'').replace(/\r?\n/g,' / ').replace(/\|/g,'\\|');
+  for(const sec of secs){
+    md+=`\n## Part ${sec.code} — ${sec.title}\n`;
+    const qs=visibleQs(sec).slice();if(sec.kpi)qs.push(...KPI());qs.push({id:'miss',t:'l',q:'What did we not ask about in this section that matters?'},{id:'idea',t:'l',q:'A tool, risk, or idea of your own for this area'});
+    let n=0;
+    for(const q of qs){n++;const key=`${sec.id}.${q.id}`;md+=`\n**${sec.code}${n}. ${q.q}**\n`;
+      if(q.t==='t'||q.t==='l'){if(q.per&&E.length){for(const e of E){md+=`- ${e}: ${S.a[key+'@'+e]||'—'}\n`;}}else md+=`${S.a[key]||'—'}\n`;}
+      else if(q.t==='choice'){const c=S.a[key]||{};md+=`${c.v==='__other'?('Other: '+(c.other||'')):(c.v||'—')}${c.v!=='__other'&&c.other?' (also: '+c.other+')':''}\n`;}
+      else if(q.t==='check'){const c=S.a[key]||{};md+=`${(c.v||[]).map(x=>'- '+x).join('\n')||'—'}${c.other?'\n- Other: '+c.other:''}\n`;}
+      else if(q.t==='grid'){const c=S.a[key]||{};md+=q.rows.map((r,i)=>`- ${r}: ${c[i]||'—'}`).join('\n')+'\n';}
+      else if(q.t==='rank'){const c=S.a[key]||{};md+=q.items.map((it,i)=>`- [${c[i]?.r||'–'}] ${it}${c[i]?.m?' — '+c[i].m:''}`).join('\n')+'\n';}
+      else if(q.t==='table'){const c=S.a[key];const rows=(c?c.rows:[]).filter(r=>r.some(x=>x.trim()));md+=`| ${q.cols.join(' | ')} |\n| ${q.cols.map(()=>'---').join(' | ')} |\n`+rows.map(r=>`| ${r.map(line).join(' | ')} |`).join('\n')+'\n';}
+    }
+  }
+  return md;
+}
+function resumeBlock(){return '\n\n---\n\n*Resume code — keep this if you want to finish later on another computer. Paste the whole file back into the survey with "Load a saved file" or "Paste a resume code".*\n\n```json\n'+JSON.stringify({v:1,meta:meta(),a:S.a})+'\n```\n';}
+function restoreFrom(text){
+  let obj=null;
+  try{obj=JSON.parse(text);}catch(e){
+    const m=text.match(/```json\s*([\s\S]*?)```/g);
+    if(m&&m.length){try{obj=JSON.parse(m[m.length-1].replace(/```json\s*/,'').replace(/```\s*$/,''));}catch(e2){obj=null;}}
+  }
+  if(!obj||typeof obj!=='object'||!obj.a){toast('That did not contain a resume code — paste the whole saved file');return false;}
+  S={meta:obj.meta||{},a:obj.a||{}};
+  const mm=S.meta||{};
+  $('r_name').value=mm.name||'';$('r_role').value=mm.role||'';$('r_role_other').value=mm.roleOther||'';$('r_email').value=mm.email||'';
+  $('e_jsoa').checked=!!mm.jsoa;$('e_jsof').checked=!!mm.jsof;
+  save();render();stamp();toast('Answers loaded — carry on where you left off');return true;
+}
+function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1800);}
+async function copyText(t){try{await navigator.clipboard.writeText(t);toast('Copied — paste into an email or the shared doc');}catch(e){$('dlg_text').value=t;$('dlg').showModal();$('dlg_text').select();toast('Select all and copy');}}
+$('b_copy').onclick=()=>copyText(toMarkdown());
+$('b_submit').onclick=async()=>{
+  const m=meta();
+  if(!m.role){toast('Choose your role first');$('r_role').focus();return;}
+  if(!m.name){toast('Add your name so we know whose answers these are');$('r_name').focus();return;}
+  if(!m.jsoa&&!m.jsof){toast('Tick JSOA, JSOF, or both');$('e_jsoa').focus();return;}
+  if(PROG.p<50&&!confirm(`You have answered ${PROG.p}% (${PROG.done} of ${PROG.tot}). Your draft stays saved here, so you can send now and finish later. Submit anyway?`))return;
+  const md=toMarkdown();
+  let copied=true;try{await navigator.clipboard.writeText(md);}catch(e){copied=false;}
+  const who=m.role==='Other'?(m.roleOther||'Other'):m.role;
+  const subj=`JSOA/JSOF intake — ${m.name} (${who})`;
+  $('sdlg_h').textContent=copied?'Your answers are copied':'Almost there';
+  $('sdlg_state').innerHTML=copied
+    ? `<div class="okline"><span>Copied</span><span style="font-weight:400">${PROG.done} of ${PROG.tot} questions answered</span></div>`
+    : `<div class="warnline">This browser blocked the automatic copy. Select everything in the box below and copy it yourself.</div>`;
+  $('sdlg_steps').innerHTML=[
+    RETURN_TO?`Open an email to <strong>${esc(RETURN_TO)}</strong> (the button below does it for you).`
+             :'Reply to the email that sent you this survey.',
+    'Paste into the body of the message.',
+    'Send. Nothing else is needed.'
+  ].map(s=>`<li>${s}</li>`).join('');
+  $('sdlg_text').value=md;$('sdlg_text').hidden=copied;
+  $('sdlg_mail').hidden=!RETURN_TO;
+  $('sdlg_mail').onclick=()=>{location.href=`mailto:${encodeURIComponent(RETURN_TO)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent('My intake answers are pasted below.\n\n')}`;};
+  $('sdlg_file').hidden=!downloads;
+  $('sdlg').showModal();
+  if(!copied){$('sdlg_text').focus();$('sdlg_text').select();}
+};
+$('sdlg_close').onclick=()=>$('sdlg').close();
+$('sdlg_recopy').onclick=()=>copyText($('sdlg_text').value||toMarkdown());
+$('sdlg_file').onclick=()=>$('b_save').click();
+$('b_view').onclick=()=>{$('dlg_text').value=toMarkdown();$('dlg').showModal();};
+$('dlg_close').onclick=()=>$('dlg').close();
+$('dlg_copy').onclick=()=>copyText($('dlg_text').value);
+$('b_clear').onclick=()=>{if(confirm('Clear every answer in this browser? This cannot be undone.')){S={meta:{},a:{}};try{localStorage.removeItem(KEY);}catch(e){}['r_name','r_role','r_role_other','r_email'].forEach(i=>$(i).value='');$('e_jsoa').checked=false;$('e_jsof').checked=false;render();stamp();}};
+let downloads=null;
+$('b_save').onclick=async()=>{
+  const m=meta();const fn=`JSOA-intake-${(m.name||'answers').replace(/[^\w-]+/g,'-')}.md`;
+  if(!downloads){toast('Saving is not available here — use "Copy a resume code" instead');return;}
+  try{await downloads.save({filename:fn,data:toMarkdown()+resumeBlock()});toast('Saved — that file can be loaded back here');}
+  catch(e){if(e&&e.code==='declined')return;toast('Could not save — use "Copy a resume code" instead');}
+};
+$('b_code').onclick=()=>copyText(toMarkdown()+resumeBlock());
+$('b_load').onchange=async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;try{restoreFrom(await f.text());}catch(err){toast('Could not read that file');}e.target.value='';};
+$('b_paste').onclick=()=>{$('pdlg_text').value='';$('pdlg').showModal();$('pdlg_text').focus();};
+$('pdlg_close').onclick=()=>$('pdlg').close();
+$('pdlg_go').onclick=()=>{if(restoreFrom($('pdlg_text').value))$('pdlg').close();};
+(async()=>{try{downloads=window.claude?.use?await window.claude.use('downloads'):null;}catch(e){downloads=null;}
+  if(!downloads){$('b_save').hidden=true;$('b_code').hidden=false;$('savehint').textContent='Your answers stay in this browser. To finish on another computer, copy a resume code and paste it back there.';}})();
+
+/* ---------- Respondent wiring ---------- */
+['r_name','r_role','r_role_other','r_email','e_jsoa','e_jsof'].forEach(id=>{$(id).addEventListener('input',()=>{S.meta=meta();save();if(id!=='r_name'&&id!=='r_email'&&id!=='r_role_other')render();else updateProgress();});});
+load();
+if(S.meta){$('r_name').value=S.meta.name||'';$('r_role').value=S.meta.role||'';$('r_role_other').value=S.meta.roleOther||'';$('r_email').value=S.meta.email||'';$('e_jsoa').checked=!!S.meta.jsoa;$('e_jsof').checked=!!S.meta.jsof;}
+render();stamp();
+</script>

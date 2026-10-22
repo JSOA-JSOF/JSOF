@@ -1,11 +1,120 @@
 /* The shared public shell. Both entities use it; only --hue differs. */
 
 .shell {
+  /* ---- Palette ----
+     The public tier is a white site and stays one whatever the reader's
+     operating system is set to. The board workspaces behind the login still
+     follow the reader's theme, because those are tools rather than a shop
+     window. The front door at `/` pins itself to black for the same reason,
+     in the opposite direction.
+
+     This file is the only place in the public tier allowed a colour literal,
+     and a test enforces that. Everything else goes through these tokens. */
+  --ground: #FFFFFF;
+  --panel: #FFFFFF;
+  --panel-2: #FAF8F3;
+  --ink: #141310;
+  --ink-2: #4A463C;
+  --mute: #767064;
+  --line: #E3DDCE;
+  --line-2: #F0ECE1;
+
+  --jsoa: #7A5D10;
+  --jsoa-tint: #FBF5E3;
+  --jsof: #2B2A24;
+  --jsof-tint: #F2EFE6;
+
+  --warn: #8C3A1E;
+  --warn-tint: #F7E7DF;
+  --critical: #7E2D18;
+  --focus: #141310;
+
+  /* The dark band, borrowed from the front door so the interior reads as the
+     same site. Used by the hero and the footer, nowhere else: a white site
+     with two black bookends, not a dark site. */
+  --dark: #0B0A08;
+  --dark-ink: #F4F1E8;
+  --dark-ink-2: #CFC9BA;
+  --dark-mute: #8F897A;
+  --dark-line: rgba(244, 241, 232, 0.16);
+  /* The hero scrim, held here as a whole gradient rather than as stops, so
+     the colour literals stay in the one file the public tier allows them in
+     and blocks.module.css keeps going through tokens. */
+  --hero-scrim: linear-gradient(
+    to top,
+    rgba(11, 10, 8, 0.94) 0%,
+    rgba(11, 10, 8, 0.76) 30%,
+    rgba(11, 10, 8, 0.4) 66%,
+    rgba(11, 10, 8, 0.22) 100%
+  );
+
+  /* ---- Layout ----
+     Full width. The page runs edge to edge and the gutter grows with the
+     viewport; only the reading column is capped, because a line of text that
+     spans a wide monitor cannot be read, whatever the brief says. Those are
+     different things and they are held as different variables. */
+  /* Roughly the masthead's height, so a full-height hero can subtract it.
+     Approximate on purpose: it only decides whether a home page scrolls by a
+     few pixels, and a measured value would need JavaScript. */
+  --masthead-h: 112px;
+  --gutter: clamp(18px, 5vw, 72px);
+  /* The reading column runs the full width of the page.
+
+     This was capped at 68ch, which is the conventional measure for prose and
+     the reason long lines are hard to track back to the left edge. The board
+     asked for full width twice, so it is full width. To put a cap back, this
+     is the only line that needs changing; every block reads it rather than
+     setting its own. */
+  --measure: none;
+  --rhythm: clamp(40px, 6vw, 72px);
+
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  background: var(--ground);
+  color: var(--ink);
 }
+
+/* ---- The two entities ----
+
+   They keep the same structure, the same nav position and the same heading
+   order, so a reader can navigate either one without relearning the site.
+   What differs is the voice: the Association is warm, condensed and direct;
+   the Foundation is cooler, lighter and more spaced. That is enough to know
+   which organization you are in at a glance, which is the job, without the
+   two becoming different websites. */
+
+.jsoaHue {
+  --hue: var(--jsoa);
+  --hue-tint: var(--jsoa-tint);
+
+  --display: "Barlow Semi Condensed", sans-serif;
+  --display-weight: 700;
+  --display-tracking: -0.01em;
+  --display-leading: 1.02;
+  --rule-weight: 3px;
+  --rule-style: solid;
+  --eyebrow-tracking: 0.13em;
+  --band: var(--jsoa-tint);
+  --hue-on-dark: #D9B451;
+}
+
+.jsofHue {
+  --hue: var(--jsof);
+  --hue-tint: var(--jsof-tint);
+
+  --display: "Source Sans 3", sans-serif;
+  --display-weight: 600;
+  --display-tracking: -0.02em;
+  --display-leading: 1.12;
+  --rule-weight: 1px;
+  --rule-style: solid;
+  --eyebrow-tracking: 0.26em;
+  --band: var(--panel-2);
+  --hue-on-dark: #E8E3D6;
+}
+
 
 .jsoaHue {
   --hue: var(--jsoa);
@@ -20,15 +129,17 @@
 /* ---- header ---- */
 
 .masthead {
-  border-top: 4px solid var(--hue);
+  border-top: 3px solid var(--hue);
   border-bottom: 1px solid var(--line);
   background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .identity {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 12px 20px 10px;
+  width: 100%;
+  padding: 14px var(--gutter) 10px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 20px;
@@ -37,12 +148,26 @@
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-family: "Barlow Semi Condensed", sans-serif;
   font-weight: 700;
   font-size: 1.1rem;
   letter-spacing: 0.02em;
   text-decoration: none;
   color: var(--ink);
+}
+
+.crest {
+  display: block;
+  width: 30px;
+  height: auto;
+  flex: none;
+}
+
+.wordmarkShort {
+  font-weight: 700;
 }
 
 .wordmarkLong {
@@ -53,7 +178,18 @@
 }
 
 @media (max-width: 560px) {
-  .wordmarkLong {
+  .crest {
+  display: block;
+  width: 30px;
+  height: auto;
+  flex: none;
+}
+
+.wordmarkShort {
+  font-weight: 700;
+}
+
+.wordmarkLong {
     display: none;
   }
 }
@@ -68,9 +204,8 @@
 }
 
 .nav {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 0 20px 10px;
+  width: 100%;
+  padding: 0 var(--gutter) 12px;
 }
 
 .navList {
@@ -105,9 +240,8 @@
 /* ---- breadcrumb ---- */
 
 .crumbs {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 14px 20px 0;
+  width: 100%;
+  padding: 16px var(--gutter) 0;
   font-size: 0.84rem;
   color: var(--mute);
 }
@@ -142,22 +276,32 @@
 .main {
   flex: 1;
   width: 100%;
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 24px 20px 64px;
+  width: 100%;
+  padding: var(--rhythm) var(--gutter) calc(var(--rhythm) * 1.4);
 }
 
 /* ---- footer ---- */
 
+/* A white site with two black bookends. The hero opens the page in the front
+   door's language and the footer closes it, so the interior never stops
+   looking like the same site, without the reading surface going dark. */
 .foot {
   border-top: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--dark);
+  color: var(--dark-ink);
+}
+
+.foot a {
+  color: var(--dark-ink-2);
+}
+
+.foot a:hover {
+  color: var(--dark-ink);
 }
 
 .footInner {
-  max-width: 1040px;
-  margin: 0 auto;
-  padding: 24px 20px 32px;
+  width: 100%;
+  padding: var(--rhythm) var(--gutter);
   display: grid;
   gap: 24px;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -168,8 +312,8 @@
   font-size: 0.66rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--mute);
-  margin: 0 0 8px;
+  color: var(--hue-on-dark);
+  margin: 0 0 10px;
 }
 
 .footList {
@@ -183,20 +327,20 @@
 }
 
 .footList a {
-  color: var(--ink-2);
+  color: var(--dark-ink-2);
   text-decoration: none;
 }
 
 .footList a:hover {
-  color: var(--ink);
+  color: var(--dark-ink);
   text-decoration: underline;
 }
 
 .crossover {
-  border-left: 3px solid var(--hue);
+  border-left: 3px solid var(--hue-on-dark);
   padding-left: 12px;
   font-size: 0.9rem;
-  color: var(--ink-2);
+  color: var(--dark-ink-2);
 }
 
 .crossoverSpaced {
@@ -220,8 +364,7 @@
 }
 
 .legalInner {
-  max-width: 1040px;
-  margin: 0 auto;
+  width: 100%;
   padding: 12px 20px 20px;
   display: flex;
   flex-wrap: wrap;

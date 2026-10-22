@@ -1,197 +1,324 @@
+/* The split front door. Reasoning in src/app/page.tsx.
+
+   This page sets its own colours rather than inheriting the site palette. The
+   interior is a white, light-ground site; the door is black on purpose, so
+   the two photographs and the crest are the only things carrying colour. */
+
 .shell {
+  --door-ink: #F4F1E8;
+  --door-mute: #8F897A;
+  --gold: #D9B451;
+  --black: #0B0A08;
+
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-}
-
-.masthead {
-  border-bottom: 1px solid var(--line);
-  padding: 14px 24px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-  align-items: baseline;
-  justify-content: space-between;
-}
-
-.wordmark {
-  font-family: "Barlow Semi Condensed", sans-serif;
-  font-weight: 700;
-  font-size: 1.15rem;
-  letter-spacing: 0.02em;
-}
-
-.effort {
-  color: var(--mute);
-  font-size: 0.85rem;
-}
-
-.effort span + span::before {
-  content: " · ";
-  color: var(--line);
+  background: var(--black);
+  color: var(--door-ink);
 }
 
 .split {
+  position: relative;
   flex: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
 
-@media (max-width: 800px) {
-  .split {
-    grid-template-columns: 1fr;
-  }
-}
+/* ---- A door ---- */
 
 .door {
   position: relative;
+  isolation: isolate;
   display: flex;
-  flex-direction: column;
+  align-items: flex-end;
   justify-content: center;
-  gap: 20px;
-  padding: 56px 40px;
+  min-height: 72vh;
+  padding: 56px 48px 64px;
   text-decoration: none;
-  border: none;
-  background: var(--panel);
-  transition: background 160ms ease;
+  color: inherit;
+  overflow: hidden;
+  background: var(--black);
 }
 
-@media (max-width: 800px) {
-  .door {
-    padding: 40px 20px;
-    justify-content: flex-start;
-  }
-}
-
+/* The hairline between the halves, and the entity's hue as a top rule that
+   lights up on hover. Two signals, neither of them colour alone. */
 .door + .door {
-  border-left: 1px solid var(--line);
+  box-shadow: inset 1px 0 0 rgba(244, 241, 232, 0.14);
 }
 
-@media (max-width: 800px) {
-  .door + .door {
-    border-left: none;
-    border-top: 1px solid var(--line);
-  }
-}
-
-/* The accent rail is the only place the entity's hue carries weight. */
-.door::before {
+.door::after {
   content: "";
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
+  inset: 0 0 auto 0;
+  height: 3px;
   background: var(--hue);
+  opacity: 0.35;
+  transition: opacity 220ms ease;
+  z-index: 2;
 }
 
-.door:hover,
-.door:focus-visible {
-  background: var(--hue-tint);
+.door:hover::after,
+.door:focus-visible::after {
+  opacity: 1;
 }
 
 .assoc {
-  --hue: var(--jsoa);
-  --hue-tint: var(--jsoa-tint);
+  --hue: var(--gold);
 }
 
 .found {
-  --hue: var(--jsof);
-  --hue-tint: var(--jsof-tint);
+  --hue: var(--door-ink);
+  --photo-focus: center 26%;
 }
 
-.status {
+/* ---- The photograph ----
+
+   Hidden at rest. The scrim is the first background layer so it renders even
+   when the photograph is missing or blocked, which is also the state this
+   ships in until the artwork lands. */
+.photo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* Always present now. At rest it is drained of colour and held back a
+     little; the half under the cursor is the only one that comes alive. The
+     slight dimming is not decoration, it keeps the headings legible against a
+     photograph that is no longer hidden behind black. */
+  opacity: 1;
+  filter: grayscale(1) brightness(0.62) contrast(1.05);
+  transform: scale(1);
+  transition:
+    filter 420ms ease,
+    transform 620ms ease;
+  background-image:
+    linear-gradient(
+      to top,
+      rgba(11, 10, 8, 0.93) 0%,
+      rgba(11, 10, 8, 0.78) 26%,
+      rgba(11, 10, 8, 0.34) 62%,
+      rgba(11, 10, 8, 0.12) 100%
+    ),
+    var(--photo);
+  background-size: cover, cover;
+  /* --photo-focus lets a door anchor its crop. The Foundation photograph puts
+     its faces high in the frame and the door is far taller than the source,
+     so centring cuts through them. */
+  background-position: center, var(--photo-focus, center);
+  background-repeat: no-repeat, no-repeat;
+}
+
+.door:hover .photo,
+.door:focus-visible .photo {
+  filter: grayscale(0) brightness(1);
+  transform: scale(1.035);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .photo {
+    transform: none;
+    transition: filter 160ms ease;
+  }
+
+  .door:hover .photo,
+  .door:focus-visible .photo {
+    transform: none;
+  }
+}
+
+/* ---- The words ---- */
+
+.body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 36ch;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.kicker {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.7rem;
-  letter-spacing: 0.12em;
+  font-size: 0.68rem;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
+  color: var(--door-mute);
+  transition: color 220ms ease;
+}
+
+.door:hover .kicker,
+.door:focus-visible .kicker {
   color: var(--hue);
 }
 
 .name {
-  font-size: clamp(2rem, 4.4vw, 3rem);
+  font-family: "Barlow Semi Condensed", sans-serif;
+  font-size: clamp(2.6rem, 6vw, 4.6rem);
   font-weight: 700;
-  line-height: 1.02;
-  max-width: 22ch;
-}
-
-.purpose {
-  color: var(--ink-2);
-  max-width: 34ch;
+  line-height: 0.95;
+  letter-spacing: -0.01em;
   margin: 0;
-  font-size: 1.05rem;
 }
 
-.paths {
-  list-style: none;
-  margin: 4px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-width: 36ch;
+.lede {
+  margin: 2px 0 0;
+  font-size: 1.02rem;
+  line-height: 1.5;
+  color: #CFC9BA;
 }
 
-.paths li {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 9px 0;
-  border-top: 1px solid var(--line-2);
-  font-size: 0.95rem;
-}
-
-.paths li:last-child {
-  border-bottom: 1px solid var(--line-2);
-}
-
-.paths .who {
-  color: var(--mute);
-  font-size: 0.85rem;
-  text-align: right;
+.meta {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--door-mute);
 }
 
 .enter {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  align-self: flex-start;
-  margin-top: 6px;
+  align-self: center;
+  margin-top: 14px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid currentColor;
   font-family: "Barlow Semi Condensed", sans-serif;
   font-weight: 600;
-  font-size: 1.1rem;
-  letter-spacing: 0.01em;
+  font-size: 1.08rem;
+  letter-spacing: 0.02em;
   color: var(--hue);
 }
 
 .enter::after {
   content: "→";
-  transition: transform 160ms ease;
+  transition: transform 180ms ease;
 }
 
 .door:hover .enter::after,
 .door:focus-visible .enter::after {
-  transform: translateX(3px);
+  transform: translateX(4px);
 }
 
+/* The half not being pointed at steps back, so the choice reads as a choice
+   rather than as two equal walls of text. */
+.split:has(.door:hover) .door:not(:hover) .body,
+.split:has(.door:focus-visible) .door:not(:focus-visible) .body {
+  opacity: 0.5;
+  transition: opacity 220ms ease;
+}
+
+/* ---- The crest ---- */
+
+.crest {
+  position: absolute;
+  /* Not 50%. At this size the crest reaches down into the headings, so it is
+     seated above them rather than on the geometric centre. */
+  top: 37%;
+  left: 50%;
+  /* Optically centred, not geometrically.
+
+     The crest's bounding box is symmetric but its visual weight is not: the
+     opaque pixels have their centroid 7.4px left of centre in a 784px image,
+     about 0.94% of the width, so centring the box leaves the artwork looking
+     a few pixels left of the seam. The correction is expressed as a
+     percentage of the crest's own width, which is what a translate percentage
+     resolves against, so it holds at every size the clamp produces.
+
+     The remaining half pixel is the seam itself: the 1px rule is drawn inside
+     the right-hand door, so its centre is half a pixel right of 50%. */
+  --optical-x: 0.94%;
+  transform: translate(calc(-50% + var(--optical-x) + 0.5px), -50%);
+  z-index: 3;
+  pointer-events: none;
+  /* 35vw total, so each half of the crest covers ~35% of its own side. */
+  width: clamp(190px, 35vw, 560px);
+  /* Two shadows doing different jobs. The dark one seats the crest once a
+     photograph is revealed behind it; the faint gold one keeps its darker
+     steel from dissolving into the black at rest. */
+  filter:
+    drop-shadow(0 4px 18px rgba(0, 0, 0, 0.8))
+    drop-shadow(0 0 22px rgba(217, 180, 81, 0.18));
+}
+
+.crestImage {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ---- Stacked ---- */
+
+@media (max-width: 860px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+
+  .door {
+    min-height: 54vh;
+    padding: 40px 24px 44px;
+  }
+
+  .door + .door {
+    box-shadow: inset 0 1px 0 rgba(244, 241, 232, 0.14);
+  }
+
+  /* Stacked, the crest sits on a horizontal seam and would otherwise land on
+     top of the call to action above it. Open a band either side of the seam
+     for it to occupy, rather than letting it cover a link. */
+  .assoc {
+    padding-bottom: 104px;
+  }
+
+  .found {
+    padding-top: 104px;
+  }
+
+  .crest {
+    top: 50%;
+    width: 34vw;
+  }
+}
+
+/* ---- Foot ---- */
+
 .foot {
-  border-top: 1px solid var(--line);
-  padding: 12px 24px;
+  border-top: 1px solid rgba(244, 241, 232, 0.14);
+  padding: 14px 28px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px 20px;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.82rem;
-  color: var(--mute);
+  font-size: 0.8rem;
+  color: var(--door-mute);
 }
 
 .badge {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: var(--warn-tint);
-  color: var(--warn);
+  border: 1px solid rgba(217, 180, 81, 0.4);
+  color: var(--gold);
   border-radius: 4px;
   padding: 3px 8px;
+}
+
+/* ---- No hover to give ----
+
+   A touch screen never fires the reveal, so the half would stay black for
+   good. Show both photographs at rest instead. The scrim is the same, so the
+   text is as legible either way. */
+@media (hover: none) {
+  .photo {
+    filter: grayscale(0) brightness(0.78);
+    transform: none;
+  }
+
+  .door::after {
+    opacity: 1;
+  }
 }

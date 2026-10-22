@@ -1,54 +1,74 @@
-/* Shared content blocks for the public tier. Layout and rhythm only; every
-   colour comes from a token and every hue from --hue on the shell. */
+/* Shared content blocks for the public tier.
+
+   Layout and rhythm only. Every colour comes from a token and every hue from
+   --hue on the shell, which is also where the two entities' typographic
+   differences are defined. This file reads those variables and never decides
+   which entity it is rendering, so the Association and the Foundation diverge
+   in one place rather than in thirty.
+
+   Full width: the page runs edge to edge, and it is the reading column that
+   is capped rather than the layout. --measure comes from the shell. */
 
 .head {
-  max-width: 60ch;
+  max-width: var(--measure);
+  margin-bottom: clamp(20px, 3vw, 32px);
 }
 
 .eyebrow {
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 0.68rem;
-  letter-spacing: 0.13em;
+  letter-spacing: var(--eyebrow-tracking, 0.13em);
   text-transform: uppercase;
   color: var(--hue);
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .title {
-  font-size: clamp(1.9rem, 4.6vw, 2.8rem);
-  font-weight: 700;
-  line-height: 1.04;
-  max-width: 26ch;
+  font-family: var(--display);
+  font-size: clamp(2rem, 5.2vw, 3.6rem);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: var(--display-leading);
+  max-width: var(--measure);
+  margin: 0;
 }
 
 .lede {
   color: var(--ink-2);
-  font-size: 1.08rem;
-  max-width: 58ch;
-  margin: 14px 0 0;
+  font-size: clamp(1.02rem, 1.4vw, 1.18rem);
+  line-height: 1.55;
+  max-width: var(--measure);
+  margin: 16px 0 0;
 }
 
 .section {
-  margin-top: 44px;
-  max-width: 62ch;
+  margin-top: var(--rhythm);
+  max-width: var(--measure);
 }
 
+/* A wide section drops the reading cap because its content is a grid, not
+   prose. It still sits inside the page gutter. */
 .sectionWide {
   max-width: none;
 }
 
 .sectionTitle {
-  font-size: 1.32rem;
-  font-weight: 600;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--hue);
+  font-family: var(--display);
+  font-size: clamp(1.3rem, 2.2vw, 1.75rem);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  padding-bottom: 10px;
+  border-bottom: var(--rule-weight) var(--rule-style) var(--hue);
   display: inline-block;
+  margin: 0;
 }
 
 .sectionBody > p {
   color: var(--ink-2);
-  margin: 14px 0 0;
+  margin: 16px 0 0;
+  line-height: 1.6;
+  max-width: var(--measure);
 }
 
 .subTitle {
@@ -119,10 +139,12 @@
 /* ---- callouts ---- */
 
 .callout {
-  margin-top: 26px;
-  border-left: 3px solid var(--hue);
+  margin-top: 28px;
+  border-left: var(--rule-weight) var(--rule-style) var(--hue);
   background: var(--hue-tint);
-  padding: 14px 16px;
+  padding: clamp(14px, 2vw, 20px);
+  border-radius: 0 6px 6px 0;
+  max-width: var(--measure);
 }
 
 .calloutWarn {
@@ -169,21 +191,24 @@
   gap: 1px;
   background: var(--line);
   border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-@media (min-width: 720px) {
-  .cardsTwo {
-    grid-template-columns: 1fr 1fr;
-  }
+/* One rule instead of two breakpoints. The grid reflows on its own, so the
+   cards work at every width between a phone and a wide desktop rather than
+   only at the two sizes someone remembered to test. */
+.cardsTwo {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
 
-  .cardsThree {
-    grid-template-columns: repeat(3, 1fr);
-  }
+.cardsThree {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 }
 
 .card {
   background: var(--panel);
-  padding: 18px;
+  padding: clamp(16px, 2vw, 24px);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -198,9 +223,11 @@
 }
 
 .cardTitle {
-  font-size: 1.12rem;
-  font-weight: 600;
+  font-family: var(--display);
+  font-size: 1.18rem;
+  font-weight: var(--display-weight);
   line-height: 1.15;
+  margin: 0;
 }
 
 .cardTitle a {
@@ -385,4 +412,243 @@
 .stepLead {
   color: var(--ink);
   font-weight: 600;
+}
+
+/* ---- Banner ---- */
+
+/* Full bleed: the banner breaks out of the page gutter so the photograph
+   runs edge to edge, which is what "full width" is actually for. Everything
+   else on the page stays inside the gutter. */
+.banner {
+  margin: 0 calc(var(--gutter) * -1) clamp(20px, 3vw, 32px);
+  width: calc(100% + var(--gutter) * 2);
+}
+
+.bannerImage {
+  display: block;
+  width: 100%;
+  height: clamp(200px, 38vh, 520px);
+  object-fit: cover;
+  background: var(--panel-2);
+}
+
+.bannerCaption {
+  padding: 0 var(--gutter);
+}
+
+.bannerCaption {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--mute);
+}
+
+/* ---- Programmes, shared between both tiers ---- */
+
+.programmes {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+}
+
+.programme {
+  background: var(--panel);
+  padding: clamp(18px, 2.2vw, 28px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.programmeHead {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.programmeTitle {
+  font-family: var(--display);
+  font-size: 1.25rem;
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  margin: 0;
+}
+
+.programmeTitle a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.programmeTitle a:hover {
+  color: var(--hue);
+}
+
+.programmeWho {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.programmeBody {
+  color: var(--ink-2);
+  margin: 0;
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.programmeNote {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--mute);
+  border-left: var(--rule-weight) var(--rule-style) var(--line);
+  padding-left: 12px;
+}
+
+.impact {
+  margin: 6px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.impactRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.impactLabel {
+  font-size: 0.86rem;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.impactValue {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.impactFigure {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  font-weight: var(--display-weight);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* Unmeasured is deliberately quiet and deliberately not a zero. A reader must
+   be able to tell "we have not counted this" from "the answer is none". */
+.impactUnmeasured {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.impactFrom {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--mute);
+}
+
+/* ---- The dark photographic hero ---- */
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  margin: calc(var(--rhythm) * -1) calc(var(--gutter) * -1) clamp(28px, 4vw, 48px);
+  padding: clamp(80px, 14vh, 190px) var(--gutter) clamp(32px, 5vw, 64px);
+  background: var(--dark);
+  color: var(--dark-ink);
+  display: flex;
+  align-items: flex-end;
+  min-height: clamp(320px, 52vh, 620px);
+  overflow: hidden;
+}
+
+/* The photograph. Its URL and focal point are set inline, because both come
+   from the manifest and vary per image. */
+.heroPhoto {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* The scrim, as a pseudo-element rather than a second background layer.
+
+   An inline background-image would replace the gradient rather than sit under
+   it, and the gradient cannot move into the component because a colour
+   literal in a .tsx fails the public-tier colour test. So the photograph goes
+   inline and the scrim goes here, painted above it and below the words. The
+   band stays legible if the photograph never loads. */
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--hero-scrim);
+}
+
+/* A home page that is the whole page. The hero fills what is left below the
+   masthead, so "who we are" and the nav are all there is, and the only thing
+   under the fold is the footer. */
+.heroFull {
+  min-height: calc(100svh - var(--masthead-h, 112px));
+}
+
+/* When the hero is the whole page, nothing follows it, so the gap beneath it
+   separates nothing. It cancels its own bottom margin and the main column's
+   bottom padding, which together were adding about 150px of empty scroll
+   under a page that is meant not to scroll. The footer is then the only
+   thing below the fold. */
+.heroFull:last-child {
+  margin-bottom: calc(var(--rhythm) * -1.4);
+}
+
+.heroBody {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: var(--measure);
+}
+
+.heroEyebrow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: var(--eyebrow-tracking, 0.13em);
+  text-transform: uppercase;
+  color: var(--hue-on-dark, var(--dark-mute));
+}
+
+.heroTitle {
+  font-family: var(--display);
+  font-size: clamp(2.4rem, 6.4vw, 4.6rem);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: var(--display-leading);
+  margin: 0;
+}
+
+.heroLede {
+  margin: 4px 0 0;
+  font-size: clamp(1.02rem, 1.4vw, 1.2rem);
+  line-height: 1.55;
+  color: var(--dark-ink-2);
 }

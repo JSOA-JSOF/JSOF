@@ -4,83 +4,94 @@ import styles from "./page.module.css";
 /**
  * The split front door.
  *
- * One address, two entities. The visitor chooses before anything else loads,
- * which is what stops the site losing donors in membership language and
+ * One address, two entities, and the visitor chooses before anything else
+ * loads. That is what stops the site losing donors in membership language and
  * members in donor language.
  *
- * Nothing on this page identifies a member. See docs/ARCHITECTURE.md.
+ * At rest both halves are black and carry only the entity's name and what it
+ * is for. A photograph appears on the half under the cursor or keyboard focus.
+ * The photograph is decoration: everything needed to choose is in the text, so
+ * the door works identically with images blocked, on a touch screen with no
+ * hover at all, and for a reader who never sees it.
+ *
+ * OPSEC: nothing on this page identifies a member, and the two photographs
+ * must not either. See docs/ARCHITECTURE.md and docs/PRIVACY-AND-PAYMENTS.md.
  */
 
-const ASSOCIATION_PATHS = [
-  { label: "Apply for membership", who: "by sponsorship" },
-  { label: "Events", who: "ball, golf, triathlon" },
-  { label: "Store", who: "public catalogue" },
-  { label: "Member sign-in", who: "current members" },
-];
-
-const FOUNDATION_PATHS = [
-  { label: "Make a donation", who: "split across funds" },
-  { label: "Scholarships", who: "eligibility and dates" },
-  { label: "Sponsor an event", who: "companies" },
-  { label: "Memorial pavers", who: "honour the fallen" },
-];
+/** Drop the real files at these paths and they appear. Until then each half
+ *  falls back to the gradient underneath, which is the black at-rest state. */
+const ASSOCIATION_PHOTO = "/media/door-association.webp";
+const FOUNDATION_PHOTO = "/media/door-foundation.webp";
 
 export default function FrontDoor() {
   return (
     <div className={styles.shell}>
-      <header className={styles.masthead}>
-        <span className={styles.wordmark}>JSOA &nbsp;/&nbsp; JSOF</span>
-        <span className={styles.effort}>
-          <span>Memorialize the fallen</span>
-          <span>Scholarships for JSOC families</span>
-          <span>Support JSOC family events</span>
-        </span>
-      </header>
-
       <main className={styles.split}>
-        <Link href="/jsoa" className={`${styles.door} ${styles.assoc}`}>
-          <span className={styles.status}>Association &middot; 501(c)(19)</span>
-          <h1 className={styles.name}>Joint Special Operations Association</h1>
-          <p className={styles.purpose}>
-            Membership, events, and support for the JSOC community and their
-            families.
-          </p>
-          <ul className={styles.paths}>
-            {ASSOCIATION_PATHS.map((path) => (
-              <li key={path.label}>
-                <span>{path.label}</span>
-                <span className={styles.who}>{path.who}</span>
-              </li>
-            ))}
-          </ul>
-          <span className={styles.enter}>Enter the Association</span>
+        <Link
+          href="/jsoa"
+          className={`${styles.door} ${styles.assoc}`}
+          style={{ "--photo": `url("${ASSOCIATION_PHOTO}")` } as React.CSSProperties}
+        >
+          <span className={styles.photo} aria-hidden="true" />
+          <span className={styles.body}>
+            <span className={styles.kicker}>Joint Special Operations</span>
+            <h1 className={styles.name}>Association</h1>
+            <p className={styles.lede}>
+              The membership side. Join, renew, and find out what the
+              Association does for the JSOC community and their families.
+            </p>
+            <span className={styles.meta}>501(c)(19) veterans organization</span>
+            <span className={styles.enter}>Membership</span>
+          </span>
         </Link>
 
-        <Link href="/jsof" className={`${styles.door} ${styles.found}`}>
-          <span className={styles.status}>Foundation &middot; 501(c)(3)</span>
-          <h1 className={styles.name}>Joint Special Operations Foundation</h1>
-          <p className={styles.purpose}>
-            Scholarships and charitable giving. Gifts here are tax-deductible
-            and can be directed to a specific fund.
-          </p>
-          <ul className={styles.paths}>
-            {FOUNDATION_PATHS.map((path) => (
-              <li key={path.label}>
-                <span>{path.label}</span>
-                <span className={styles.who}>{path.who}</span>
-              </li>
-            ))}
-          </ul>
-          <span className={styles.enter}>Enter the Foundation</span>
+        <Link
+          href="/jsof"
+          className={`${styles.door} ${styles.found}`}
+          style={{ "--photo": `url("${FOUNDATION_PHOTO}")` } as React.CSSProperties}
+        >
+          <span className={styles.photo} aria-hidden="true" />
+          <span className={styles.body}>
+            <span className={styles.kicker}>Joint Special Operations</span>
+            <h1 className={styles.name}>Foundation</h1>
+            <p className={styles.lede}>
+              The giving side. Sponsor an event, fund a scholarship, or make a
+              gift. Donations here are tax-deductible.
+            </p>
+            <span className={styles.meta}>501(c)(3) public charity</span>
+            <span className={styles.enter}>Sponsor or donate</span>
+          </span>
         </Link>
+
+        {/* Decorative and never over either door's click target. */}
+        <div className={styles.crest} aria-hidden="true">
+          <Crest />
+        </div>
       </main>
 
       <footer className={styles.foot}>
-        <span>
-          Two entities, one volunteer board. PO Box 72758, Fort Bragg, NC 28307.
-        </span>
+        <span>Two entities, one volunteer board. PO Box 72758, Fort Bragg, NC 28307.</span>
         <span className={styles.badge}>Demo build &middot; no live member data</span>
       </footer>
     </div>
+  );
+}
+
+/**
+ * The association crest, centred on the seam between the two halves.
+ *
+ * Decorative: the container is aria-hidden and the choice a visitor has to
+ * make is carried entirely by the two headings either side of it.
+ */
+function Crest() {
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src="/media/crest-v2.webp"
+      alt=""
+      width={784}
+      height={860}
+      className={styles.crestImage}
+    />
   );
 }

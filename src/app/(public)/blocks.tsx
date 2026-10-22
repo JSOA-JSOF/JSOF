@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import type { ContactRole } from "./contact-roles";
 import { SECRETARY_MAILBOX } from "./contact-roles";
+import { PUBLIC_IMAGES, type PublicImageKey } from "./media";
+import type { Programme } from "./programmes";
 import styles from "./blocks.module.css";
 
 /**
@@ -29,6 +31,171 @@ export function PageHead({
       <h1 className={styles.title}>{title}</h1>
       {lede ? <p className={styles.lede}>{lede}</p> : null}
     </div>
+  );
+}
+
+/**
+ * A full-width photograph beneath the page head.
+ *
+ * The interior pages are a white site, so the image is a band rather than a
+ * backdrop with type laid over it. That keeps the heading on white where it
+ * is most legible, and it means a photograph that fails to load costs the
+ * page nothing.
+ *
+ * OPSEC: no identifiable member, unit patch, or badge in any image used here.
+ * See docs/ARCHITECTURE.md.
+ */
+export function Banner({
+  image,
+  caption,
+}: {
+  /** A key from the reviewed manifest. An arbitrary path will not compile. */
+  image: PublicImageKey;
+  /** What the image is, for a sighted reader. Not alt text. */
+  caption?: string;
+}) {
+  return (
+    <figure className={styles.banner}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={PUBLIC_IMAGES[image].src}
+        alt=""
+        className={styles.bannerImage}
+        style={{ objectPosition: PUBLIC_IMAGES[image].focus ?? "center" }}
+      />
+      {caption ? <figcaption className={styles.bannerCaption}>{caption}</figcaption> : null}
+    </figure>
+  );
+}
+
+/**
+ * One programme, rendered for one side of the house.
+ *
+ * `view` picks which sentence is shown and whether an ask appears. Both views
+ * read the same record and the same impact figures, so the Association's
+ * description and the Foundation's cannot drift apart. See programmes.ts.
+ */
+export function ProgrammeCards({
+  programmes,
+  view,
+}: {
+  programmes: Programme[];
+  /** "what" is the Association's framing; "funds" is the Foundation's. */
+  view: "what" | "funds";
+}) {
+  return (
+    <ul className={styles.programmes}>
+      {programmes.map((programme) => {
+        const body = view === "funds" ? programme.funds : programme.what;
+        if (body === null) return null;
+        return (
+          <li key={programme.slug} className={styles.programme}>
+            <div className={styles.programmeHead}>
+              <h3 className={styles.programmeTitle}>
+                <Link href={programme.href}>{programme.title}</Link>
+              </h3>
+              <span className={styles.programmeWho}>
+                Run by {programme.runBy} &middot; funded by {programme.fundedBy}
+              </span>
+            </div>
+            <p className={styles.programmeBody}>{body}</p>
+            {programme.fundingNote ? (
+              <p className={styles.programmeNote}>{programme.fundingNote}</p>
+            ) : null}
+            <dl className={styles.impact}>
+              {programme.impact.map((figure) => (
+                <div key={figure.label} className={styles.impactRow}>
+                  <dt className={styles.impactLabel}>{figure.label}</dt>
+                  <dd className={styles.impactValue}>
+                    {figure.value === null ? (
+                      <>
+                        <span className={styles.impactUnmeasured}>not yet measured</span>
+                        <span className={styles.impactFrom}>
+                          Needs {figure.needs}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={styles.impactFigure}>{figure.value}</span>
+                        <span className={styles.impactFrom}>{figure.from}</span>
+                      </>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * The crest, for the masthead.
+ *
+ * Decorative: the wordmark beside it carries the name. It lives here rather
+ * than in PublicShell because blocks.tsx is the only file in the public tier
+ * permitted an <img>, and every one of them resolves through the manifest.
+ */
+export function Mark({ className }: { className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={PUBLIC_IMAGES.crest.src} alt="" className={className} />
+  );
+}
+
+/**
+ * The dark photographic hero: the front door's language, on a white site.
+ *
+ * The door at `/` is black, full-bleed, with condensed type sitting on a
+ * scrimmed photograph. The interior is a white site and should stay one, so
+ * what carries over is the device rather than the background: one dark band
+ * at the top of a page, then white for everything that has to be read.
+ *
+ * The scrim is the first background layer, so the band is still legible if
+ * the photograph fails or is blocked, exactly as on the door.
+ */
+export function Hero({
+  eyebrow,
+  title,
+  lede,
+  image,
+  full,
+}: {
+  eyebrow: string;
+  title: string;
+  /** One paragraph, or several. */
+  lede?: string | string[];
+  image: PublicImageKey;
+  /**
+   * Fill the viewport below the masthead. For a home page that is meant to be
+   * the whole page: who we are, and the navigation, with nothing to scroll to.
+   */
+  full?: boolean;
+}) {
+  const photo = PUBLIC_IMAGES[image];
+  const paragraphs = lede === undefined ? [] : Array.isArray(lede) ? lede : [lede];
+  return (
+    <header className={`${styles.hero} ${full ? styles.heroFull : ""}`}>
+      <div
+        className={styles.heroPhoto}
+        aria-hidden="true"
+        style={{
+          backgroundImage: `url("${photo.src}")`,
+          backgroundPosition: photo.focus ?? "center",
+        }}
+      />
+      <div className={styles.heroBody}>
+        <span className={styles.heroEyebrow}>{eyebrow}</span>
+        <h1 className={styles.heroTitle}>{title}</h1>
+        {paragraphs.map((paragraph) => (
+          <p key={paragraph.slice(0, 40)} className={styles.heroLede}>
+            {paragraph}
+          </p>
+        ))}
+      </div>
+    </header>
   );
 }
 

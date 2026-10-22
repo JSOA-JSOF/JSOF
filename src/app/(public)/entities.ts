@@ -65,8 +65,8 @@ export const JSOA_PROFILE: EntityProfile = {
   nav: [
     { href: "/jsoa/mission", label: "Mission" },
     { href: "/jsoa/events", label: "Events" },
-    { href: "/jsoa/family-support", label: "Family support" },
-    { href: "/apply", label: "Join", ownedBy: "membership" },
+    { href: "/jsoa/scholarships", label: "Scholarships" },
+    { href: "/jsoa/membership", label: "Membership" },
     { href: "/store", label: "Store", ownedBy: "store" },
     { href: "/jsoa/contact", label: "Contact" },
   ],
@@ -90,11 +90,11 @@ export const JSOF_PROFILE: EntityProfile = {
   hueClass: "jsofHue",
   home: "/jsof",
   nav: [
-    { href: "/jsof/why-the-foundation", label: "Why the Foundation" },
+    { href: "/jsof/mission", label: "Mission" },
+    { href: "/jsof/events", label: "Events" },
     { href: "/jsof/scholarships", label: "Scholarships" },
-    { href: "/jsof/memorial", label: "Memorial" },
-    { href: "/jsof/partners", label: "Partners" },
     { href: "/donate", label: "Donate", ownedBy: "foundation" },
+    { href: "/jsof/partners", label: "Partners" },
     { href: "/jsof/contact", label: "Contact" },
   ],
   crossover: {

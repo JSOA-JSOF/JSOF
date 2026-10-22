@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import type { Entity } from "@/lib/authz/model";
 
+import { Mark } from "./blocks";
 import { ENTITY_PROFILES, POSTAL_ADDRESS } from "./entities";
 import styles from "./public-shell.module.css";
 
@@ -38,7 +39,10 @@ export function PublicShell({ entity, currentPath, crumbs, children }: PublicShe
       <header className={styles.masthead}>
         <div className={styles.identity}>
           <Link href={profile.home} className={styles.wordmark}>
-            {profile.shortName}{" "}
+            {/* The crest from the front door, so the interior reads as the
+                same site rather than as a separate one. */}
+            <Mark className={styles.crest} />
+            <span className={styles.wordmarkShort}>{profile.shortName}</span>{" "}
             <span className={styles.wordmarkLong}>{profile.legalName}</span>
           </Link>
           <span className={styles.subsection}>
