@@ -40,6 +40,16 @@
   /* The hero scrim, held here as a whole gradient rather than as stops, so
      the colour literals stay in the one file the public tier allows them in
      and blocks.module.css keeps going through tokens. */
+  /* The card scrim. Bottom-weighted, because card text sits at the foot and
+     the first photograph we put behind it is bright sunlit grass, which is
+     the hardest case for light type. Held here with the other literals. */
+  --card-scrim: linear-gradient(
+    to top,
+    rgba(11, 10, 8, 0.88) 0%,
+    rgba(11, 10, 8, 0.62) 34%,
+    rgba(11, 10, 8, 0.28) 68%,
+    rgba(11, 10, 8, 0.12) 100%
+  );
   --hero-scrim: linear-gradient(
     to top,
     rgba(11, 10, 8, 0.94) 0%,

@@ -73,6 +73,16 @@ export const PUBLIC_IMAGES = {
     depicts: "NO_PEOPLE",
     note: "The association crest. An emblem, with no people in it at all.",
   },
+  "event-golf": {
+    src: "/media/event-golf.webp",
+    reviewed: "2026-10-23",
+    depicts: "UNIDENTIFIABLE",
+    // The crest is on the ball, which is the point of the shot.
+    focus: "center 45%",
+    note:
+      "A gloved hand placing a ball on a tee. No face, no name tape, no " +
+      "unit insignia, and nothing that identifies the person holding it.",
+  },
   "foundation-hero": {
     src: "/media/door-foundation.webp",
     reviewed: "2026-10-20",

@@ -12,6 +12,13 @@ export const metadata: Metadata = {
   alternates: { canonical: "/jsof/events" },
 };
 
+/** Only the golf tournament has a photograph so far. */
+const CARD_IMAGE: Record<string, "event-golf" | undefined> = {
+  "golf-tournament": "event-golf",
+  ball: undefined,
+  triathlon: undefined,
+};
+
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -61,6 +68,7 @@ export default function FoundationEventsPage() {
             statement: event.summary,
             foot: dates.state === "CONFIRMED" ? dates.venue : event.kind,
             href: "/donate/sponsor",
+            image: CARD_IMAGE[event.slug],
           };
         })}
       />

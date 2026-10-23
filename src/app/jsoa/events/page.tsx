@@ -13,6 +13,13 @@ export const metadata: Metadata = {
   alternates: { canonical: "/jsoa/events" },
 };
 
+/** Only the golf tournament has a photograph so far. */
+const CARD_IMAGE: Record<string, "event-golf" | undefined> = {
+  "golf-tournament": "event-golf",
+  ball: undefined,
+  triathlon: undefined,
+};
+
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -71,6 +78,7 @@ export default function EventsIndex() {
             statement: event.summary,
             foot: dates.state === "CONFIRMED" ? dates.venue : event.kind,
             href: `/jsoa/events/${event.slug}`,
+            image: CARD_IMAGE[event.slug],
           };
         })}
       />

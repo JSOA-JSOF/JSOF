@@ -713,14 +713,26 @@
   z-index: 0;
   background-size: cover;
   background-repeat: no-repeat;
-  filter: grayscale(1) brightness(0.52);
+  filter: grayscale(1) brightness(0.78);
   transform: scale(1);
   transition: filter 420ms ease, transform 620ms ease;
 }
 
+/* Over the photograph, under the words. Without it a bright image leaves
+   the foot of the card unreadable, which only shows up once a real
+   photograph goes in. */
+.effortLink:has(.effortPhoto)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--card-scrim);
+  pointer-events: none;
+}
+
 .effortLink:hover .effortPhoto,
 .effortLink:focus-visible .effortPhoto {
-  filter: grayscale(0) brightness(0.62);
+  filter: grayscale(0) brightness(0.92);
   transform: scale(1.04);
 }
 
@@ -790,7 +802,7 @@
    Same reasoning as the front door. */
 @media (hover: none) {
   .effortPhoto {
-    filter: grayscale(0) brightness(0.56);
+    filter: grayscale(0) brightness(0.86);
     transform: none;
   }
 }
