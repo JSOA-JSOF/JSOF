@@ -65,37 +65,58 @@ Going over is not a cliff. Storage past 10GB is $0.015 per GB per month, so
 leaving old events in the bucket forever: pull them down with the script,
 put them wherever the Association keeps its records, and delete the prefix.
 
-## The public page
+## The gallery
 
-    https://thejsof.org/drop/golf26-k7n2xqvp4m/photos
+    https://thejsof.org/drop/golf26-k7n2xqvp4m/gallery
 
-Linked from the drop page, under the film and under the uploader. Open to
-anyone with the link, and still noindex: an event page full of faces
-should be shareable without also being searchable.
+Linked from under the film, from under the uploader, and from the green
+box that appears the moment something has been sent.
 
-A photograph gets there through two gates and needs both.
+**It exists so that somebody can see their photographs arrived.** Most of
+the people at this event are not young, "it says sent" is a weaker
+reassurance than seeing the photograph, and somebody who is not sure will
+send everything a second time. So everything shows, newest first, and
+sending ends on "They are in the gallery now. Have a look and check they
+all arrived."
 
-**The sender's.** A tick box in the tray, off by default, reading "Show
-these on the public page for this event." The line above the send button
-changes with it, so what they are agreeing to is on screen at the moment
-they agree. Nothing is public because somebody did not read a sentence.
+It was built the other way first, with a tick box and board approval
+before anything appeared. That is the right shape for publishing and the
+wrong shape for this: behind two gates the sender sees nothing, which is
+the one thing the gallery is for.
 
-**The board's.** On the review page, every photograph whose sender ticked
-the box carries an Approve button. The ones that did not say "Private"
-instead, with no control at all, because a button that is going to be
-refused reads as something the board may override. Pressing Approve again
-takes a photograph straight back down, and the public routes stop serving
-it within the minute.
+**It is not publication, and the page says so rather than implying it.**
+The address is unlisted and reachable only by scanning the code on the
+sign, it is noindex, it is not on the Association's website, and it
+closes with the drop on 6 November. After that the gallery routes stop
+serving and say the gallery has closed.
 
-Both are checked on the route that hands over the pixels, not only on the
-listing, so a key copied out of a page somebody had open an hour ago is
-worth nothing once an approval is withdrawn.
+**The board can take any photograph out.** Every tile on the review page
+carries an In gallery button; pressing it hides that photograph, pressing
+it again puts it back, and either takes effect within the minute. Both
+the listing and the route that serves the pixels check the hide list, so
+a link somebody already has stops working too. The hide list is a small
+JSON file in the bucket, outside the drop's prefix, and if it cannot be
+read the gallery serves nothing rather than everything.
 
-Turn the whole thing off for an event with `publicGallery: false` in
-`src/lib/drop/config.ts`. That makes the public routes 404 rather than
-serve an empty page.
+Turn the whole thing off for an event with `gallery: false` in
+`src/lib/drop/config.ts`.
 
-## The poster
+### Two sizes
+
+The handset uploads the photograph at 2560px and a 640px copy beside it,
+both from one decode, so the second costs almost nothing where it is made
+and saves every viewer afterwards. The grid uses the small copy: about
+100KB rather than 650KB, which on a course network is the difference
+between a gallery and a blank screen. Anything uploaded before this
+existed has no small copy and falls back to the full size.
+
+Thumbnails live under `<prefix>/thumbs/` and are filtered out of the
+manifest, the gallery listing and `collect-photos.sh`, so counts are
+counts of photographs. A thumbnail key cannot be requested directly,
+which keeps the hide check from being walked around by naming the small
+copy.
+
+## The poster## The poster
 
 ```bash
 python3 scripts/make-poster.py golf26-k7n2xqvp4m ~/Desktop/golf-poster.pdf
@@ -153,9 +174,11 @@ undo would be asking the board to delete it. For a photograph of other
 people at an Association event, that is a bad place to put the undo
 button.
 
-**Nothing is published.** The upload route has no GET. The two routes that
-read are behind a key the board holds and the sign does not carry, and the
-object route will only serve keys under its own drop's prefix, so a key for
-one event cannot read another. The page tells people their photographs go
-to the board and nowhere else, and that promise is the reason for all three
-of those.
+**Nothing reaches the website.** The upload route has no GET. The two
+routes that read for the board need a key the board holds and the sign
+does not carry, and they will only serve keys under their own drop's
+prefix, so a key for one event cannot read another. The gallery serves
+without a key, but only while the drop is open, only what the board has
+not hidden, and only at an unlisted, noindex address nobody finds by
+accident. None of it appears on thejsoa.org or thejsof.org, and the page
+says that rather than implying it.

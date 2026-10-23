@@ -5,6 +5,7 @@ import {
   MAX_FILE_BYTES,
   dropByCode,
   dropIsOpen,
+  thumbKeyFor,
 } from "@/lib/drop/config";
 
 /**
@@ -67,16 +68,17 @@ export async function POST(
   // photograph, not so we know who was there.
   const credit = (form.get("credit") ?? "").toString().slice(0, 80).trim();
 
-  // The sender's half of the public-page decision. Off unless the box was
-  // ticked, and anything other than an exact "yes" counts as off: a
-  // photograph does not go on a public page because a value was mangled
-  // somewhere between the handset and here.
-  const share = form.get("share")?.toString() === "yes";
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const unique = crypto.randomUUID().slice(0, 8);
   const extension = type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
   const key = `${drop.prefix}/${stamp}-${unique}.${extension}`;
+
+  // The small copy for the gallery grid, if the browser managed to make
+  // one. Optional on purpose: a handset that could not encode it still
+  // gets its photograph in, and the gallery falls back to the full size
+  // for that one rather than dropping it.
+  const thumb = form.get("thumb");
 
   try {
     await bucket.put(key, file.stream(), {
@@ -85,10 +87,14 @@ export async function POST(
         event: drop.event,
         heldOn: drop.heldOn,
         originalName: file.name.slice(0, 120),
-        share: share ? "yes" : "no",
         ...(credit ? { credit } : {}),
       },
     });
+    if (thumb instanceof File && thumb.size > 0 && thumb.size < MAX_FILE_BYTES) {
+      await bucket.put(thumbKeyFor(key), thumb.stream(), {
+        httpMetadata: { contentType: "image/jpeg" },
+      });
+    }
   } catch {
     return fail(502, "That did not save. Try it again.");
   }

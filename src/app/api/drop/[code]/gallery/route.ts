@@ -1,15 +1,17 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { readApprovals } from "@/lib/drop/approvals";
-import { dropByCode } from "@/lib/drop/config";
+import { dropByCode, dropIsOpen, isThumbKey } from "@/lib/drop/config";
+import { readHidden } from "@/lib/drop/visibility";
 
 /**
- * What the public page may show. No key: that is the point of it.
+ * What the gallery shows. No key: that is the point of it.
  *
- * It lists the approved objects and nothing else, so a photograph that
- * has not been through both gates is not named here, let alone served.
- * Not even its filename: the original name off somebody's phone is their
- * text, not ours to publish.
+ * Newest first, because the person refreshing this page thirty seconds
+ * after pressing send is looking for their own photographs and should
+ * not have to scroll past everyone else's to find them.
+ *
+ * It closes with the drop. After that the route says so rather than
+ * serving the photographs to anyone who kept the link.
  */
 
 export const dynamic = "force-dynamic";
@@ -20,30 +22,59 @@ export async function GET(
 ) {
   const { code } = await params;
   const drop = dropByCode(code);
-  if (!drop || !drop.publicGallery) {
+  if (!drop || !drop.gallery) {
     return Response.json({ error: "Not found." }, { status: 404 });
   }
+  if (!dropIsOpen(drop, new Date())) {
+    return Response.json(
+      { event: drop.event, closed: true, count: 0, objects: [] },
+      { headers: { "Cache-Control": "public, max-age=300" } },
+    );
+  }
+
   const { env } = getCloudflareContext();
   const bucket = env.EVENT_PHOTOS;
-  if (!bucket) return Response.json({ event: drop.event, objects: [] });
+  if (!bucket) return Response.json({ event: drop.event, count: 0, objects: [] });
 
-  const approvals = await readApprovals(bucket, drop);
-  const objects: { key: string; credit?: string }[] = [];
-  for (const key of approvals.keys) {
-    const head = await bucket.head(key);
-    // An approval for an object that has since been deleted is stale, and
-    // a deleted photograph should disappear from the page without anybody
-    // having to tidy the list first.
-    if (!head) continue;
-    if (head.customMetadata?.share !== "yes") continue;
-    objects.push({
-      key,
-      ...(head.customMetadata?.credit ? { credit: head.customMetadata.credit } : {}),
-    });
+  let hidden: Set<string>;
+  try {
+    hidden = new Set((await readHidden(bucket, drop)).keys);
+  } catch {
+    // Cannot tell what was taken down, so show nothing. Failing closed is
+    // the only safe direction for a list whose job is to withhold.
+    return Response.json({ error: "Unavailable." }, { status: 503 });
   }
+
+  const objects: { key: string; credit?: string }[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({
+      prefix: `${drop.prefix}/`,
+      cursor,
+      include: ["customMetadata"],
+    });
+    for (const object of page.objects) {
+      // Thumbnails live under the same prefix and are not photographs.
+      if (isThumbKey(object.key)) continue;
+      if (hidden.has(object.key)) continue;
+      objects.push({
+        key: object.key,
+        ...(object.customMetadata?.credit
+          ? { credit: object.customMetadata.credit }
+          : {}),
+      });
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  // The keys begin with the upload time, so sorting them sorts by when
+  // they arrived without having to carry the date through.
+  objects.sort((a, b) => b.key.localeCompare(a.key));
 
   return Response.json(
     { event: drop.event, count: objects.length, objects },
-    { headers: { "Cache-Control": "public, max-age=60" } },
+    // Short, because somebody is refreshing this to see their own
+    // photograph appear.
+    { headers: { "Cache-Control": "public, max-age=10" } },
   );
 }

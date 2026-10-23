@@ -1,8 +1,8 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import { isBoard } from "@/lib/drop/admin";
-import { readApprovals } from "@/lib/drop/approvals";
-import { dropByCode } from "@/lib/drop/config";
+import { dropByCode, isThumbKey } from "@/lib/drop/config";
+import { readHidden } from "@/lib/drop/visibility";
 
 /**
  * Everything a drop has collected, as JSON.
@@ -34,14 +34,11 @@ export async function GET(
     uploaded: string;
     credit?: string;
     originalName?: string;
-    /** Whether the sender ticked the public-page box. */
-    share: boolean;
-    /** Whether the board has cleared it for the public page. */
-    approved: boolean;
+    /** Whether the board has taken it out of the gallery. */
+    hidden: boolean;
   }[] = [];
 
-  const approvals = await readApprovals(bucket, drop);
-  const cleared = new Set(approvals.keys);
+  const pulled = new Set((await readHidden(bucket, drop)).keys);
 
   let cursor: string | undefined;
   do {
@@ -51,12 +48,12 @@ export async function GET(
       include: ["customMetadata"],
     });
     for (const object of page.objects) {
+      if (isThumbKey(object.key)) continue;
       objects.push({
         key: object.key,
         size: object.size,
         uploaded: object.uploaded.toISOString(),
-        share: object.customMetadata?.share === "yes",
-        approved: cleared.has(object.key),
+        hidden: pulled.has(object.key),
         ...(object.customMetadata?.credit
           ? { credit: object.customMetadata.credit }
           : {}),

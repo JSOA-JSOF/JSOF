@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ACCEPTED_TYPES,
   RESIZE_MAX_EDGE,
+  THUMB_MAX_EDGE,
   dropIsOpen,
   type Drop as DropConfig,
 } from "@/lib/drop/config";
@@ -58,8 +59,16 @@ function isPhotograph(file: File): boolean {
     : /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
 }
 
-/** Longest edge, JPEG, stripped of everything the camera wrote into it. */
-async function shrink(file: File): Promise<Blob> {
+/**
+ * Two JPEGs from one decode: the photograph, and a small copy for the
+ * gallery grid.
+ *
+ * Decoding a 12 megapixel photograph is the expensive part and it only
+ * happens once. Drawing it twice at two sizes costs almost nothing on
+ * top, and it means the gallery never has to serve full photographs as
+ * thumbnails.
+ */
+async function shrink(file: File): Promise<{ full: Blob; thumb: Blob | null }> {
   // `from-image` applies the EXIF rotation, which is also how the rotation
   // gets dropped: the pixels come out the right way up and the tag that
   // said so is gone. The rest of the EXIF block goes with it, which is the
@@ -67,35 +76,38 @@ async function shrink(file: File): Promise<Blob> {
   // coordinates taken at an event is the kind of thing this organization
   // does not collect by accident.
   const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-  const scale = Math.min(1, RESIZE_MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
 
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("no canvas");
-  context.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
+  const draw = async (edge: number, quality: number): Promise<Blob | null> => {
+    const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", quality),
+    );
+  };
 
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", 0.86),
-  );
-  if (!blob) throw new Error("no blob");
-  return blob;
+  try {
+    const full = await draw(RESIZE_MAX_EDGE, 0.86);
+    if (!full) throw new Error("no blob");
+    const thumb = await draw(THUMB_MAX_EDGE, 0.72);
+    return { full, thumb };
+  } finally {
+    bitmap.close();
+  }
 }
 
-async function send(
-  code: string,
-  file: File,
-  credit: string,
-  share: boolean,
-): Promise<void> {
+async function send(code: string, file: File, credit: string): Promise<void> {
   let body: Blob = file;
+  let thumb: Blob | null = null;
   let name = file.name;
   try {
-    body = await shrink(file);
+    const sized = await shrink(file);
+    body = sized.full;
+    thumb = sized.thumb;
     name = name.replace(/\.[^.]+$/, "") + ".jpg";
   } catch {
     // A format the canvas will not decode, or a photograph large enough to
@@ -105,8 +117,8 @@ async function send(
 
   const form = new FormData();
   form.append("file", new File([body], name, { type: body.type || file.type }));
+  if (thumb) form.append("thumb", new File([thumb], `thumb-${name}`, { type: "image/jpeg" }));
   if (credit) form.append("credit", credit);
-  if (share) form.append("share", "yes");
 
   const response = await fetch(`/api/drop/${encodeURIComponent(code)}`, {
     method: "POST",
@@ -124,19 +136,14 @@ export function Drop({ drop }: { drop: DropConfig }) {
   const [picked, setPicked] = useState<Picked[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [credit, setCredit] = useState("");
-  // Off by default. Nobody's photograph goes on a public page because
-  // they did not read a sentence.
-  const [share, setShare] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const creditRef = useRef("");
-  const shareRef = useRef(false);
   const open = dropIsOpen(drop, new Date());
 
   creditRef.current = credit;
-  shareRef.current = share;
 
   useEffect(() => {
     const element = video.current;
@@ -214,11 +221,11 @@ export function Drop({ drop }: { drop: DropConfig }) {
           if (!job) return;
           mark(job.id, { state: "sending" });
           try {
-            await send(drop.code, job.file, creditRef.current, shareRef.current);
+            await send(drop.code, job.file, creditRef.current);
             mark(job.id, { state: "sent" });
           } catch (first) {
             try {
-              await send(drop.code, job.file, creditRef.current, shareRef.current);
+              await send(drop.code, job.file, creditRef.current);
               mark(job.id, { state: "sent" });
             } catch (second) {
               mark(job.id, {
@@ -294,9 +301,9 @@ export function Drop({ drop }: { drop: DropConfig }) {
               Watch again
             </button>
           ) : null}
-          {drop.publicGallery ? (
-            <Link className={styles.seeAll} href={`/drop/${drop.code}/photos`}>
-              or see everyone&rsquo;s photos
+          {drop.gallery ? (
+            <Link className={styles.seeAll} href={`/drop/${drop.code}/gallery`}>
+              or see the gallery
             </Link>
           ) : null}
         </div>
@@ -411,24 +418,10 @@ export function Drop({ drop }: { drop: DropConfig }) {
                   decided a release and this page is not the place to
                   invent one.
                 */}
-                <label className={styles.tick}>
-                  <input
-                    type="checkbox"
-                    checked={share}
-                    className={styles.tickBox}
-                    onChange={(event) => setShare(event.target.checked)}
-                  />
-                  <span>
-                    Show these on the public page for this event. The board
-                    checks every photo before any of them goes up, and you can
-                    ask for yours to come down at any time.
-                  </span>
-                </label>
-
                 <p className={styles.consent}>
-                  {share
-                    ? "These go to the board. The ones they clear will appear on the event's public page."
-                    : "These go to the board and nowhere else. They will not appear on any public page."}
+                  These go to the Association. They will show in the gallery, so
+                  you can check they arrived, until it closes on 6 November.
+                  Nothing is put on the website.
                 </p>
 
                 <button
@@ -458,15 +451,33 @@ export function Drop({ drop }: { drop: DropConfig }) {
             ) : null}
 
             {sent > 0 && !busy ? (
-              <p className={styles.done}>
-                {sent} {sent === 1 ? "photo" : "photos"} sent. Thank you.
-                {failed > 0 ? " The ones marked failed did not go. Try them again." : ""}
-              </p>
+              <div className={styles.doneBox}>
+                <p className={styles.done}>
+                  {sent} {sent === 1 ? "photo" : "photos"} sent. Thank you.
+                  {failed > 0
+                    ? " The ones marked failed did not go. Try them again."
+                    : ""}
+                </p>
+                {drop.gallery ? (
+                  <>
+                    <p className={styles.doneNote}>
+                      They are in the gallery now. Have a look and check they all
+                      arrived.
+                    </p>
+                    <Link
+                      className={`${styles.choose} ${styles.sendAll}`}
+                      href={`/drop/${drop.code}/gallery`}
+                    >
+                      See the gallery
+                    </Link>
+                  </>
+                ) : null}
+              </div>
             ) : null}
 
-            {drop.publicGallery ? (
-              <Link className={styles.seeAll} href={`/drop/${drop.code}/photos`}>
-                See everyone&rsquo;s photos &rarr;
+            {drop.gallery ? (
+              <Link className={styles.seeAll} href={`/drop/${drop.code}/gallery`}>
+                See the gallery &rarr;
               </Link>
             ) : null}
 

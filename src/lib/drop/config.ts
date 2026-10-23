@@ -36,13 +36,13 @@ export type Drop = {
   /** Last day the drop accepts anything, inclusive, as YYYY-MM-DD. */
   closesAt: string;
   /**
-   * Whether this drop has a public page at all.
+   * Whether this drop has a gallery at all.
    *
    * Off is a reasonable answer for an event the board would rather keep
-   * off the open internet, and it switches off the public routes
-   * entirely rather than leaving them serving an empty list.
+   * off the open internet, and it switches the gallery routes off
+   * entirely rather than leaving them serving an empty page.
    */
-  publicGallery: boolean;
+  gallery: boolean;
 };
 
 export const DROPS: Drop[] = [
@@ -56,7 +56,7 @@ export const DROPS: Drop[] = [
     // Two weeks. Long enough that somebody who gets home and remembers the
     // photographs on Sunday can still send them.
     closesAt: "2026-11-06",
-    publicGallery: true,
+    gallery: true,
   },
 ];
 
@@ -92,3 +92,26 @@ export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 /** Longest edge the browser resizes to before uploading. */
 export const RESIZE_MAX_EDGE = 2560;
+
+/**
+ * Longest edge of the small copy the browser also uploads.
+ *
+ * The gallery is a grid of squares on a phone. Served from the full
+ * photographs it is tens of megabytes, which on a course network is a
+ * blank screen for a minute, and the one thing the gallery exists to do
+ * is reassure somebody quickly. The handset has already decoded the
+ * image to resize it, so a second, smaller encode is nearly free there
+ * and saves every viewer afterwards.
+ */
+export const THUMB_MAX_EDGE = 640;
+
+/** Where a photograph's small copy lives, given the photograph's key. */
+export function thumbKeyFor(key: string): string {
+  const cut = key.lastIndexOf("/");
+  return `${key.slice(0, cut)}/thumbs/${key.slice(cut + 1)}`;
+}
+
+/** Thumbnails are stored under the drop's prefix and are not photographs. */
+export function isThumbKey(key: string): boolean {
+  return key.includes("/thumbs/");
+}
