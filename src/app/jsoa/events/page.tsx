@@ -8,16 +8,18 @@ export const metadata: Metadata = {
   title: "Events · JSOA",
   description:
     "The Joint Special Operations Association's three recurring events: the " +
-    "JSOC Ball, the Joint Special Operations Golf Tournament, and the JSOC " +
+    "JSOC Ball, the Golf Tournament, and the JSOC " +
     "Youth Triathlon. Dates for the next cycle are confirmed by the Events Chair.",
   alternates: { canonical: "/jsoa/events" },
 };
 
-/** The triathlon still has none; a card without one is composed, not blank. */
-const CARD_IMAGE: Record<string, "event-golf" | "event-ball" | undefined> = {
+const CARD_IMAGE: Record<
+  string,
+  "event-golf" | "event-ball" | "event-triathlon" | undefined
+> = {
   "golf-tournament": "event-golf",
   ball: "event-ball",
-  triathlon: undefined,
+  triathlon: "event-triathlon",
 };
 
 const MONTHS = [

@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 
-import { Callout, Offices, OutboundLinks, PageHead } from "@/app/(public)/blocks";
+import {
+  Callout,
+  Mailboxes,
+  Offices,
+  OutboundLinks,
+  PageHead,
+  Section,
+} from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
 import { JSOA_CONTACTS } from "@/app/(public)/contact-roles";
 import { POSTAL_ADDRESS } from "@/app/(public)/entities";
@@ -35,19 +42,25 @@ export default function ContactPage() {
       <PageHead
         eyebrow="Contact"
         title="Who to write to"
-        lede="Pick the office by what you need decided, not by seniority. Every office below is a volunteer post held alongside a job."
+        lede="Two addresses. Use the first if you need help with something, the second if you already know which office you want."
       />
 
-      <Offices items={JSOA_CONTACTS} />
+      <Mailboxes />
 
-      <Callout title="Why there are no names here">
+      <Section title="The offices, and what each one decides" id="offices" wide>
+        <Offices items={JSOA_CONTACTS} />
+      </Section>
+
+      <Callout title="Why there are no names or direct addresses here">
         <p>
           A published list of the people who run a JSOC-affiliated
           association, matched to their offices, is a list somebody else can
           use. It is also wrong within a year of every election. So this page
           publishes the office, what it decides, and how long it takes to
           answer. Ask in your first message and the person answering will tell
-          you who they are.
+          you who they are. Direct addresses are not published either: every
+          office is a volunteer post that changes hands, and an address tied
+          to one of them stops working the moment it does.
         </p>
       </Callout>
 

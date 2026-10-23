@@ -115,7 +115,7 @@ export const EVENTS: PublicEvent[] = [
   },
   {
     slug: "golf-tournament",
-    title: "Joint Special Operations Golf Tournament",
+    title: "Golf Tournament",
     kind: "Charity golf",
     summary:
       "A one-day charity golf tournament supporting JSOC warriors and their " +

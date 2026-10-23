@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import type { ContactRole } from "./contact-roles";
-import { SECRETARY_MAILBOX } from "./contact-roles";
+import { PUBLIC_MAILBOXES, SECRETARY_MAILBOX } from "./contact-roles";
 import { PUBLIC_IMAGES, publicImage, type PublicImageKey } from "./media";
 import type { Programme } from "./programmes";
 import styles from "./blocks.module.css";
@@ -504,6 +504,31 @@ export function Steps({
  * Where a mailbox is not yet routed the row sends the reader to the Secretary
  * instead of printing an address that bounces.
  */
+/**
+ * The two public addresses, as the first thing on a contact page.
+ *
+ * Deliberately larger than the office list beneath them. Most people writing
+ * in do not know or care which office handles their thing, and asking them
+ * to work it out before they can send a message is how a contact page fails.
+ * The offices stay listed so anyone who does know can name one.
+ */
+export function Mailboxes() {
+  const boxes = [PUBLIC_MAILBOXES.support, PUBLIC_MAILBOXES.connect];
+  return (
+    <ul className={styles.mailboxes}>
+      {boxes.map((box) => (
+        <li key={box.address} className={styles.mailbox}>
+          <a className={styles.mailboxLink} href={`mailto:${box.address}`}>
+            <span className={styles.mailboxLabel}>{box.label}</span>
+            <span className={styles.mailboxAddress}>{box.address}</span>
+            <span className={styles.mailboxWhen}>{box.when}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function Offices({ items }: { items: ContactRole[] }) {
   return (
     <ul className={styles.offices}>
@@ -512,21 +537,6 @@ export function Offices({ items }: { items: ContactRole[] }) {
           <h3 className={styles.officeRole}>{office.role}</h3>
           <p className={styles.officeRemit}>{office.remit}</p>
           <div className={styles.officeFoot}>
-            {office.mailboxLive ? (
-              <a className={styles.officeMail} href={`mailto:${office.mailbox}`}>
-                {office.mailbox}
-              </a>
-            ) : (
-              /* No address is printed for a mailbox that does not exist yet.
-                 A published address that bounces is worse than none, and the
-                 Secretary can route it. */
-              <span className={styles.officePending}>
-                Via{" "}
-                <a className={styles.officeMail} href={`mailto:${SECRETARY_MAILBOX}`}>
-                  the Secretary
-                </a>
-              </span>
-            )}
             <span className={styles.officeResponds}>
               Replies within {office.respondsWithin}
             </span>

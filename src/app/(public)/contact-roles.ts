@@ -14,6 +14,33 @@ import type { Entity } from "@/lib/authz/model";
  * and board information. See docs/MODULE-BRIEF.md.
  */
 
+/**
+ * The two addresses the public writes to.
+ *
+ * This replaces fourteen per-office mailboxes on the public tier, six of
+ * which did not exist and were being routed through the Secretary anyway.
+ * Publishing one address per office also published the org chart, and tied
+ * every address to a volunteer post that changes hands.
+ *
+ * The split is by what the writer wants, not by who we are:
+ *   support  - I need help with something
+ *   connect  - I want to reach a particular office
+ *
+ * A reader picking the wrong one costs nothing, because both are triaged.
+ */
+export const PUBLIC_MAILBOXES = {
+  support: {
+    address: "support@thejsoa.org",
+    label: "Get help",
+    when: "Something is wrong, you are stuck, or you need assistance.",
+  },
+  connect: {
+    address: "connect@thejsoa.org",
+    label: "Reach an office",
+    when: "You know which office you need. Name it in your message.",
+  },
+} as const;
+
 export type ContactRole = {
   slug: string;
   /** The office. Never a person. */
@@ -21,6 +48,11 @@ export type ContactRole = {
   entity: Entity;
   /** What this office actually decides, so a reader picks the right one. */
   remit: string;
+  /**
+   * Internal routing only. Not published: the public tier lists offices and
+   * what they decide, and sends everyone to PUBLIC_MAILBOXES. Six of these
+   * addresses do not exist yet, which is the other reason.
+   */
   mailbox: string;
   /**
    * False where the mailbox still has to be created or re-pointed. The page

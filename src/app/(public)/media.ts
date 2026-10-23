@@ -73,6 +73,19 @@ export const PUBLIC_IMAGES = {
     depicts: "NO_PEOPLE",
     note: "The association crest. An emblem, with no people in it at all.",
   },
+  "event-triathlon": {
+    src: "/media/event-triathlon.webp",
+    reviewed: "2026-10-23",
+    depicts: "SYNTHETIC",
+    note:
+      "Three children in race kit at a transition area, faces visible. " +
+      "Classified SYNTHETIC because the board confirmed the image is " +
+      "generated and none of these children exist. This is the one entry " +
+      "where that confirmation came from the board rather than from markers " +
+      "in the frame, and it is the entry where it matters most: a real " +
+      "child's face needs guardian consent, not a photo release, and the " +
+      "test would reject it as MEMBERS.",
+  },
   "event-ball": {
     src: "/media/event-ball.webp",
     reviewed: "2026-10-23",

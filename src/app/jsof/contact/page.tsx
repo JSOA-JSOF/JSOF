@@ -8,6 +8,7 @@ import {
   OutboundLinks,
   PageHead,
   Section,
+  Mailboxes,
 } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
 import { POSTAL_ADDRESS } from "@/app/(public)/entities";
@@ -50,7 +51,9 @@ export default function FoundationContactPage() {
       </Callout>
 
       <Section title="Offices" id="offices" wide>
-        <Offices items={JSOF_CONTACTS} />
+        <Mailboxes />
+
+      <Offices items={JSOF_CONTACTS} />
       </Section>
 
       <Section title="Which office" id="which-office">
