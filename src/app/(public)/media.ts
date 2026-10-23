@@ -73,6 +73,18 @@ export const PUBLIC_IMAGES = {
     depicts: "NO_PEOPLE",
     note: "The association crest. An emblem, with no people in it at all.",
   },
+  "event-ball": {
+    src: "/media/event-ball.webp",
+    reviewed: "2026-10-23",
+    depicts: "SYNTHETIC",
+    // The place setting is the subject; the figures are behind it.
+    focus: "center 55%",
+    note:
+      "A place setting in a ballroom, with figures in formal and service " +
+      "dress behind it. Classified SYNTHETIC on the generated-image markers " +
+      "in the frame: nobody in it exists. If these are real people the " +
+      "entry is wrong and it must come down.",
+  },
   "event-golf": {
     src: "/media/event-golf.webp",
     reviewed: "2026-10-23",

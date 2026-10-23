@@ -12,10 +12,10 @@ export const metadata: Metadata = {
   alternates: { canonical: "/jsof/events" },
 };
 
-/** Only the golf tournament has a photograph so far. */
-const CARD_IMAGE: Record<string, "event-golf" | undefined> = {
+/** The triathlon still has none; a card without one is composed, not blank. */
+const CARD_IMAGE: Record<string, "event-golf" | "event-ball" | undefined> = {
   "golf-tournament": "event-golf",
-  ball: undefined,
+  ball: "event-ball",
   triathlon: undefined,
 };
 
