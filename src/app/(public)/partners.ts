@@ -11,7 +11,11 @@
  * nothing.
  *
  * What an acknowledgment may carry is therefore fixed: the organization's
- * name, its web address, and a value-neutral factual statement. No adjective,
+ * name, its own logo, its web address, and a value-neutral factual
+ * statement. The logo is in the permitted list rather than a risk to it: a
+ * payor's established logo and slogan are part of its identity, and it is
+ * the qualitative or comparative claim that converts a placement. No
+ * adjective,
  * no comparison, no endorsement, no price, no call to action, and never the
  * word "provider" in an exclusivity sense, because an exclusive sponsor is a
  * qualified sponsorship payment and an exclusive provider is not.
@@ -20,11 +24,34 @@
  * against `FORBIDDEN_SPONSOR_LANGUAGE` in `./public-safety`.
  */
 
+import type { PublicImageKey } from "./media";
+
 export type Partner = {
   slug: string;
   /** Not `name`: nothing in the public tier carries a field called `name`. */
   organization: string;
-  url: string;
+  /**
+   * Their own web address, or null where they have none that works.
+   *
+   * Null is a real state and not an oversight. Linking a partner to a
+   * registrar's parking page is worse for them than not linking them at
+   * all, so the card drops the link rather than publishing a dead one.
+   */
+  url: string | null;
+  /**
+   * Their logo, as a key into the image manifest, or null where we do not
+   * have one.
+   *
+   * A logo is acknowledgment rather than advertising, which is why this is
+   * safe to add: the sponsorship rules treat a payor's own logo and
+   * established slogan as part of their identity, and it is the qualitative
+   * or comparative claim that converts a placement into advertising, not
+   * the mark itself. So the mark goes in and the adjectives stay out.
+   *
+   * The manifest entry carries whose mark it is and whether the permission
+   * to show it is actually held. See `rights` in ./media.
+   */
+  logo: PublicImageKey | null;
   /**
    * The exact approved wording. Held as one string so the board can see and
    * approve what will appear, rather than approving a design and discovering
@@ -43,7 +70,8 @@ export const PARTNERS: Partner[] = [
   {
     slug: "patriot-foundation",
     organization: "Patriot Foundation",
-    url: "https://patriotfoundation.org",
+    url: "https://www.patriotfoundation.org/",
+    logo: "partner-patriot-foundation",
     acknowledgment: "Patriot Foundation",
     relationship:
       "Administers the North Carolina Patriot Star Scholarship, including its " +
@@ -53,13 +81,19 @@ export const PARTNERS: Partner[] = [
     slug: "patriot-military-family-foundation",
     organization: "Patriot Military Family Foundation",
     url: "https://patriotmilitaryfamilyfoundation.org",
+    logo: "partner-patriot-military-family-foundation",
     acknowledgment: "Patriot Military Family Foundation",
     relationship: null,
   },
   {
     slug: "force-network",
     organization: "Force Network",
-    url: "https://forcenetwork.com",
+    // forcenetwork.com resolves to a Network Solutions "under construction"
+    // placeholder, and the HTTPS address does not answer at all. Checked
+    // 23 October 2026. Until they give us a working address this card
+    // carries the name and nothing else.
+    url: null,
+    logo: null,
     acknowledgment: "Force Network",
     relationship: null,
   },
@@ -75,11 +109,13 @@ export const PARTNERS_STANDFIRST =
 
 /**
  * The explanation the reader gets for why the page is so plain. Worth saying
- * out loud: a visitor who expects logos and testimonials should understand
- * that the restraint is a tax position, not indifference.
+ * out loud: a visitor who expects testimonials and a sentence about how
+ * wonderful each organization is should understand that the restraint is a
+ * tax position, not indifference.
  */
 export const ACKNOWLEDGMENT_NOTE =
-  "These entries carry a name, a link, and a statement of fact. They carry no " +
+  "These entries carry a name, a logo, a link, and a statement of fact. " +
+  "They carry no " +
   "description of any organization's products or services, no comparison, and " +
   "no recommendation. Under the rules for qualified sponsorship, a single " +
   "acknowledgment that also advertises is treated as advertising in full, and " +

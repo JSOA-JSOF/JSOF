@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { Hero } from "@/app/(public)/blocks";
-import { Intro } from "@/app/(public)/Intro";
+import { Intro, TIMING_10S } from "@/app/(public)/Intro";
 import { PublicShell } from "@/app/(public)/PublicShell";
 import { JSOA_PROFILE } from "@/app/(public)/entities";
 
@@ -35,6 +35,8 @@ export default function AssociationHome() {
   return (
     <PublicShell entity="JSOA" currentPath={JSOA_PROFILE.home}>
       <Intro
+        video="/media/jsoa-intro.mp4"
+        timing={TIMING_10S}
         title="Joint Special Operations Association"
         mission={[
           "The Joint Special Operations Association is an organization " +

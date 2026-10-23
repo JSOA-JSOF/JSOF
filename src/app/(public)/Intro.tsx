@@ -31,13 +31,44 @@ import styles from "./intro.module.css";
  */
 
 /**
- * When the composition is complete. Must match the animation timings.
+ * The shape of a sequence, cut to the length of its film.
  *
- * The film is 10s and the veil lands on its final frame; the title, crest
- * and mission follow over the next 3.5s. So the sequence runs past the film,
- * and this is the moment it settles.
+ * Every value is a fraction of the film rather than a fixed number, because
+ * the two entities have films of different lengths and the composition has
+ * to land the same way on both: the veil completing just before the last
+ * frame, the crest rising while the picture is still visible, the type
+ * following the black rather than competing with it.
  */
-const HOLD_AT_MS = 13_400;
+export type IntroTiming = {
+  /** Seconds. The veil runs this long from zero. */
+  veilRun: number;
+  crestDelay: number;
+  crestRun: number;
+  titleDelay: number;
+  missionDelay: number;
+  /** When the composition is complete and the card holds. Milliseconds. */
+  holdAtMs: number;
+};
+
+/** The Association's ten second film. */
+export const TIMING_10S: IntroTiming = {
+  veilRun: 9.6,
+  crestDelay: 7,
+  crestRun: 3.2,
+  titleDelay: 10.2,
+  missionDelay: 10.8,
+  holdAtMs: 13_400,
+};
+
+/** The Foundation's eight second film, scaled to 0.8 of the above. */
+export const TIMING_8S: IntroTiming = {
+  veilRun: 7.6,
+  crestDelay: 5.6,
+  crestRun: 2.6,
+  titleDelay: 8.2,
+  missionDelay: 8.7,
+  holdAtMs: 11_400,
+};
 
 /** A stalled video must not hold the page: this is the hard stop. */
 const STALL_LIMIT_MS = 18_000;
@@ -70,7 +101,12 @@ export function Intro({
   title,
   mission,
   note,
+  video,
+  timing,
 }: {
+  /** The film for this entity. */
+  video: string;
+  timing: IntroTiming;
   /** Fades in at the top. */
   title: string;
   /** Fades in at the foot. One paragraph or several. */
@@ -132,13 +168,13 @@ export function Intro({
   // The clock starts with the picture, not with the mount.
   useEffect(() => {
     if (!running) return;
-    holdTimer.current = setTimeout(() => setState("held"), HOLD_AT_MS);
+    holdTimer.current = setTimeout(() => setState("held"), timing.holdAtMs);
     stallTimer.current = setTimeout(() => setState("held"), STALL_LIMIT_MS);
     return () => {
       if (holdTimer.current) clearTimeout(holdTimer.current);
       if (stallTimer.current) clearTimeout(stallTimer.current);
     };
-  }, [running]);
+  }, [running, timing.holdAtMs]);
 
   useEffect(() => {
     if (state !== "playing") return;
@@ -171,13 +207,22 @@ export function Intro({
       className={`${styles.intro} ${running ? styles.running : ""} ${
         state === "held" ? styles.held : ""
       }`}
+      style={
+        {
+          "--veil-run": `${timing.veilRun}s`,
+          "--crest-delay": `${timing.crestDelay}s`,
+          "--crest-run": `${timing.crestRun}s`,
+          "--title-delay": `${timing.titleDelay}s`,
+          "--mission-delay": `${timing.missionDelay}s`,
+        } as React.CSSProperties
+      }
       role="dialog"
       aria-label="Introduction"
     >
       <video
         ref={videoRef}
         className={styles.video}
-        src="/media/jsoa-intro.mp4"
+        src={video}
         muted
         playsInline
         autoPlay

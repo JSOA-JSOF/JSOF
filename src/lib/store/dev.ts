@@ -72,13 +72,33 @@ export const DEV_VIEWERS: DevViewerOption[] = [
 
 export const DEFAULT_DEV_VIEWER_KEY = "visitor";
 
+/**
+ * Never outside development.
+ *
+ * The comment at the top of this file says the switcher "must not survive
+ * contact with real records", and the storefront honoured that in spirit and
+ * not in code: it is keyed by a query parameter, and a query parameter works
+ * just as well in production. `/store/members?viewer=good-standing` returned
+ * the member-only catalogue on the live site, which defeats the page's own
+ * stated principle that it "names nothing that is not on the public
+ * catalogue while you are without access".
+ *
+ * Membership state is not a board role, so this could not use
+ * `assertDevOnly()` from the authz session. It gets the same guarantee a
+ * different way: outside development every key resolves to the visitor, so
+ * there is no string that opens the catalogue.
+ */
 export function resolveDevViewer(key: string | null | undefined): DevViewerOption {
-  const found = DEV_VIEWERS.find((o) => o.key === key);
+  const fallbackOnly = process.env.NODE_ENV === "production";
+  const found = fallbackOnly ? undefined : DEV_VIEWERS.find((o) => o.key === key);
   if (found) return found;
   const fallback = DEV_VIEWERS.find((o) => o.key === DEFAULT_DEV_VIEWER_KEY);
   if (!fallback) throw new Error("No default dev viewer");
   return fallback;
 }
+
+/** True only where the switcher is allowed to render at all. */
+export const DEV_SWITCHER_AVAILABLE = process.env.NODE_ENV !== "production";
 
 export const DEV_SWITCHER_WARNING =
   "Development affordance. There is no sign-in behind this yet, so the role " +

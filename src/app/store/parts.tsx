@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PublicShell } from "@/app/(public)/PublicShell";
 
 import { formatCents } from "@/lib/store/cart";
-import { DEV_SWITCHER_WARNING, DEV_VIEWERS } from "@/lib/store/dev";
+import { DEV_SWITCHER_AVAILABLE, DEV_SWITCHER_WARNING, DEV_VIEWERS } from "@/lib/store/dev";
 import type { Product, PublicProduct } from "@/lib/store/types";
 
 import styles from "./store.module.css";
@@ -63,6 +63,9 @@ export function ViewerStrip({
   basePath: string;
   extraQuery?: Record<string, string>;
 }) {
+  // Not in production. `resolveDevViewer` already pins every key to the
+  // visitor there, so the strip would be a row of links that change nothing.
+  if (!DEV_SWITCHER_AVAILABLE) return null;
   const href = (key: string) => {
     const params = new URLSearchParams({ ...(extraQuery ?? {}), viewer: key });
     return `${basePath}?${params.toString()}`;

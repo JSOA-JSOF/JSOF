@@ -46,7 +46,12 @@ export default function ScholarshipsPage() {
       <EffortCards
         items={SCHOLARSHIP_PROGRAMS.map((programme) => ({
           key: programme.slug,
-          eyebrow: APPLICATION_WINDOW.closes.replace(/^They /, "Closes ").replace(/\.$/, ""),
+          // "They close in the middle of February" -> "Closes in the middle
+          // of February". Stripping only "They " left the verb behind and
+          // the card read "Closes close in the middle of February".
+          eyebrow: APPLICATION_WINDOW.closes
+            .replace(/^They close /, "Closes ")
+            .replace(/\.$/, ""),
           accent: false,
           title: programme.title,
           foot: programme.administeredBy,

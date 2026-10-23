@@ -295,27 +295,49 @@ export function MemberWall({
 export function PartnerCards({
   items,
 }: {
-  items: { slug: string; organization: string; url: string; relationship: string | null }[];
+  items: {
+    slug: string;
+    organization: string;
+    url: string | null;
+    logo: PublicImageKey | null;
+    relationship: string | null;
+  }[];
 }) {
   return (
     <ul className={styles.offices}>
       {items.map((partner) => (
         <li key={partner.slug} className={styles.office}>
-          <h3 className={styles.officeRole}>{partner.organization}</h3>
+          {/* The plate is rendered empty when there is no logo, so the
+              names still line up across the row. */}
+          <div className={styles.partnerPlate}>
+            {partner.logo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={PUBLIC_IMAGES[partner.logo].src}
+                alt={partner.organization}
+                className={styles.partnerLogo}
+              />
+            ) : null}
+          </div>
+          <h2 className={styles.officeRole}>{partner.organization}</h2>
           {partner.relationship ? (
             <p className={styles.officeRemit}>{partner.relationship}</p>
           ) : (
             <p className={styles.officeRemit} />
           )}
           <div className={styles.officeFoot}>
-            <a
-              className={styles.officeMail}
-              href={partner.url}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              {partner.url.replace(/^https?:\/\//, "")}
-            </a>
+            {partner.url ? (
+              <a
+                className={styles.officeMail}
+                href={partner.url}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                {partner.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </a>
+            ) : (
+              <span className={styles.officeResponds}>No current web address</span>
+            )}
           </div>
         </li>
       ))}

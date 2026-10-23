@@ -336,6 +336,31 @@
   gap: 8px;
 }
 
+/*
+ * The logo plate.
+ *
+ * Partner logos arrive in whatever shape and on whatever background their
+ * owner drew them on, which is the usual reason a logo wall looks untidy.
+ * A fixed-height white tile with the mark contained inside it gives three
+ * marks of different proportions the same optical weight, and keeps a mark
+ * drawn for white paper on white paper.
+ */
+.partnerPlate {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 72px;
+  margin-bottom: 4px;
+}
+
+.partnerLogo {
+  max-height: 100%;
+  max-width: min(100%, 220px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
 .officeRole {
   font-family: var(--display);
   font-size: 1.1rem;

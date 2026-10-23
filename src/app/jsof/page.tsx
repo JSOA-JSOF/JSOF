@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { Hero } from "@/app/(public)/blocks";
+import { Intro, TIMING_8S } from "@/app/(public)/Intro";
 import { PublicShell } from "@/app/(public)/PublicShell";
 import { JSOF_PROFILE } from "@/app/(public)/entities";
 
@@ -31,6 +32,23 @@ export const metadata: Metadata = {
 export default function FoundationHome() {
   return (
     <PublicShell entity="JSOF" currentPath={JSOF_PROFILE.home}>
+      <Intro
+        video="/media/jsof-intro.mp4"
+        timing={TIMING_8S}
+        title="Joint Special Operations Foundation"
+        mission={[
+          "The Joint Special Operations Foundation is the charitable entity " +
+            "for the JSOC community. It funds the scholarship programmes, " +
+            "the memorial to those who have given their lives, and help for " +
+            "families in genuine need.",
+        ]}
+        note={
+          "A separate 501(c)(3) from the Association, with its own books and " +
+          "its own receipts. No members, no dues, no paid staff. Gifts are " +
+          "tax-deductible."
+        }
+      />
+
       <Hero
         full
         eyebrow="Foundation · 501(c)(3)"

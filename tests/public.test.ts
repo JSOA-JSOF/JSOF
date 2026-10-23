@@ -22,7 +22,7 @@ import { describe, expect, it } from "vitest";
 import { DATA_CLASSES, ROLES, type DataClass } from "../src/lib/authz/model";
 import * as membershipState from "../src/lib/membership/state";
 
-import { PUBLIC_IMAGES } from "../src/app/(public)/media";
+import { PUBLIC_IMAGES, publicImage } from "../src/app/(public)/media";
 import { PROGRAMMES } from "../src/app/(public)/programmes";
 import { ENTITY_PROFILES, JSOA_PROFILE, JSOF_PROFILE } from "../src/app/(public)/entities";
 import {
@@ -722,11 +722,27 @@ describe("partner entries are acknowledgment only", () => {
   it("carries an approved acknowledgment string per partner, and nothing extra", () => {
     for (const partner of PARTNERS) {
       expect(Object.keys(partner).sort()).toEqual(
-        ["acknowledgment", "organization", "relationship", "slug", "url"].sort(),
+        ["acknowledgment", "logo", "organization", "relationship", "slug", "url"].sort(),
       );
       // The acknowledgment is the name. Anything more is copy nobody approved.
       expect(partner.acknowledgment).toBe(partner.organization);
-      expect(partner.url.startsWith("https://")).toBe(true);
+      // Null is allowed, a dead link is not: anything published is https.
+      if (partner.url !== null) {
+        expect(partner.url.startsWith("https://")).toBe(true);
+      }
+    }
+  });
+
+  it("records whose mark each partner logo is before showing it", () => {
+    for (const partner of PARTNERS) {
+      if (partner.logo === null) continue;
+      const entry = publicImage(partner.logo);
+      const rights = entry.rights;
+      expect(rights, `${partner.slug}: a logo with no rights record`).toBeTruthy();
+      if (!rights) continue;
+      // The mark belongs to them, not to us, and the record has to say so.
+      expect(rights.owner).toBe(partner.organization);
+      expect(rights.source.length).toBeGreaterThan(10);
     }
   });
 

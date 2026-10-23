@@ -56,6 +56,25 @@ export type PublicImage = {
   focus?: string;
   /** What was checked, in one line. Not alt text. */
   note: string;
+  /**
+   * Who owns the mark, where it came from, and on whose authority it is
+   * shown. Present only on a third-party logo.
+   *
+   * The rest of this manifest answers an OPSEC question: is there a member
+   * in this frame. A partner's logo raises none of that and a different
+   * question instead, which the OPSEC note has no field for. A trademark
+   * shown without the owner's say-so is the Foundation implying a
+   * relationship it may not have, which is the one thing a partner page
+   * must never do.
+   */
+  rights?: {
+    /** The organization that owns the mark. */
+    owner: string;
+    /** Where the file was taken from. */
+    source: string;
+    /** "granted" once the office holds it in writing. Nothing else counts. */
+    permission: "granted" | "requested" | "not yet asked";
+  };
 };
 
 export const PUBLIC_IMAGES = {
@@ -143,6 +162,33 @@ export const PUBLIC_IMAGES = {
     note:
       "A gloved hand placing a ball on a tee. No face, no name tape, no " +
       "unit insignia, and nothing that identifies the person holding it.",
+  },
+  "partner-patriot-foundation": {
+    src: "/media/partner-patriot-foundation.webp",
+    reviewed: "2026-10-23",
+    depicts: "NO_PEOPLE",
+    note:
+      "The Patriot Foundation's own logo: two flags, a banner and a " +
+      "wordmark. No photograph and no people in it.",
+    rights: {
+      owner: "Patriot Foundation",
+      source: "patriotfoundation.org, the logo on their own home page",
+      permission: "not yet asked",
+    },
+  },
+  "partner-patriot-military-family-foundation": {
+    src: "/media/partner-patriot-military-family-foundation.webp",
+    reviewed: "2026-10-23",
+    depicts: "UNIDENTIFIABLE",
+    note:
+      "The Patriot Military Family Foundation's own logo. The four figures " +
+      "in it are flat silhouettes in a drawn mark, not a photograph of " +
+      "anyone.",
+    rights: {
+      owner: "Patriot Military Family Foundation",
+      source: "patriotmilitaryfamilyfoundation.org, the logo on their home page",
+      permission: "not yet asked",
+    },
   },
   "foundation-hero": {
     src: "/media/door-foundation.webp",

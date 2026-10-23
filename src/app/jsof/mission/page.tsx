@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { Bullets, Callout, EffortCards, PageHead } from "@/app/(public)/blocks";
+import { EffortCards, PageHead } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
 import { programmesFundedBy } from "@/app/(public)/programmes";
 
@@ -28,10 +28,14 @@ const CARD_IMAGE: Record<
  * The Foundation's mission, as a menu.
  *
  * Same pattern as the Association's: three cards, one fact each, detail
- * behind the click. What stays in prose is the list of things the Foundation
- * may not fund, which is the part most charities leave out and the part that
- * keeps this one a charity. Turning that into a card would make it look like
- * another option rather than a boundary.
+ * behind the click.
+ *
+ * The "what the Foundation does not fund" list was here and the board
+ * removed it. The boundary it stated is still enforced in the data: a
+ * programme the Association funds has a null `funds` string, so it cannot
+ * render on this side at all, and a test rejects any Association-funded
+ * programme that offers a donor framing. The page no longer says it; the
+ * code still cannot break it.
  */
 export default function FoundationMissionPage() {
   const funded = programmesFundedBy("JSOF");
@@ -60,15 +64,6 @@ export default function FoundationMissionPage() {
         }))}
       />
 
-      <Callout title="What the Foundation does not fund">
-        <Bullets
-          items={[
-            "The Association's day to day running.",
-            "Members' events. The ball, the golf and the triathlon are member benefits, and the Association pays for them.",
-            "Anything that benefits members because they are members.",
-          ]}
-        />
-      </Callout>
     </PublicShell>
   );
 }
