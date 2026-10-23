@@ -16,13 +16,14 @@ import styles from "./drop.module.css";
  *
  * Two rules decided everything here.
  *
- * The first is that the film must never be in the way. It plays, and it is
- * worth watching, but the uploader is live from the first paint and sits
- * directly under it. If autoplay is refused, if the network is too slow to
- * start it, if the person has data saver on, if they simply do not care:
- * none of that stops them sending photographs. A ten second clip that has
- * to finish before the page works is a ten second clip that loses half the
- * submissions.
+ * The first is the film, then the uploader, in that order. The clip is the
+ * reason the code was worth scanning, so it gets the whole screen and is
+ * not something to scroll past. What it is not is a gate: the button that
+ * moves on is on screen from the first paint, before the video has loaded
+ * a single frame. If autoplay is refused, if the connection is too slow to
+ * start it, if data saver is on, if the person simply does not care, they
+ * are one tap from the uploader. A ten second clip that has to finish
+ * before the page works is a ten second clip that loses submissions.
  *
  * The second is that a phone at a golf course is the worst network in the
  * world. So the browser resizes every photograph before it leaves the
@@ -94,6 +95,8 @@ async function send(code: string, file: File, credit: string): Promise<void> {
 }
 
 export function Drop({ drop }: { drop: DropConfig }) {
+  const [stage, setStage] = useState<"film" | "upload">("film");
+  const [ended, setEnded] = useState(false);
   const [rows, setRows] = useState<Row[]>([]);
   const [credit, setCredit] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -166,44 +169,87 @@ export function Drop({ drop }: { drop: DropConfig }) {
   const failed = rows.filter((row) => row.state === "failed").length;
   const busy = rows.some((row) => row.state === "waiting" || row.state === "sending");
 
-  return (
-    <main className={styles.page}>
-      <div className={styles.film}>
-        <video
-          ref={video}
-          className={styles.video}
-          src={drop.video}
-          muted
-          playsInline
-          autoPlay
-          loop
-          preload="auto"
-          onPlaying={() => setNeedsTap(false)}
-        />
-        <div className={styles.filmVeil} />
-        <div className={styles.filmText}>
-          <p className={styles.eyebrow}>Joint Special Operations Association</p>
-          <h1 className={styles.title}>{drop.event}</h1>
-          <p className={styles.where}>{drop.where}</p>
+  if (stage === "film") {
+    return (
+      <main className={`${styles.page} ${styles.filmStage}`}>
+        <div className={styles.film}>
+          <video
+            ref={video}
+            className={styles.video}
+            src={drop.video}
+            muted
+            playsInline
+            autoPlay
+            preload="auto"
+            onPlaying={() => setNeedsTap(false)}
+            onEnded={() => setEnded(true)}
+          />
+          <div className={styles.filmVeil} />
+          <div className={styles.filmText}>
+            <p className={styles.eyebrow}>Joint Special Operations Association</p>
+            <h1 className={styles.title}>{drop.event}</h1>
+            <p className={styles.where}>{drop.where}</p>
+          </div>
+          {needsTap ? (
+            <button
+              type="button"
+              className={styles.tap}
+              onClick={() => void video.current?.play()}
+            >
+              Play
+            </button>
+          ) : null}
         </div>
-        {needsTap ? (
+
+        {/*
+          On screen from the first paint, before the video has loaded a
+          frame. The film leads, but it never holds anybody hostage.
+        */}
+        <div className={styles.gate}>
           <button
             type="button"
-            className={styles.tap}
-            onClick={() => void video.current?.play()}
+            className={`${styles.choose} ${ended ? styles.chooseReady : ""}`}
+            onClick={() => setStage("upload")}
           >
-            Play
+            {open ? "Send your photos" : "Continue"}
           </button>
-        ) : null}
-      </div>
+          {ended ? (
+            <button
+              type="button"
+              className={styles.again}
+              onClick={() => {
+                setEnded(false);
+                const element = video.current;
+                if (element) {
+                  element.currentTime = 0;
+                  void element.play();
+                }
+              }}
+            >
+              Watch again
+            </button>
+          ) : (
+            <p className={styles.gateNote}>Taking photos today? Send them to us.</p>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className={styles.page}>
+      <header className={styles.bar}>
+        <p className={styles.eyebrow}>Joint Special Operations Association</p>
+        <p className={styles.barTitle}>{drop.event}</p>
+      </header>
 
       <section className={styles.panel}>
         {open ? (
           <>
-            <h2 className={styles.heading}>Send us your photos</h2>
+            <h1 className={styles.heading}>Send us your photos</h1>
             <p className={styles.lede}>
               If you took something good today, put it here. No account, no sign-in.
-              Pick as many as you like.
+              As many as you like.
             </p>
 
             <div
@@ -284,7 +330,7 @@ export function Drop({ drop }: { drop: DropConfig }) {
           </>
         ) : (
           <>
-            <h2 className={styles.heading}>This one has closed</h2>
+            <h1 className={styles.heading}>This one has closed</h1>
             <p className={styles.lede}>
               Photographs for {drop.event} are no longer being collected here. If you
               still have some, write to connect@thejsoa.org and say which event.

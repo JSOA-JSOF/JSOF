@@ -54,6 +54,19 @@ Going over is not a cliff. Storage past 10GB is $0.015 per GB per month, so
 leaving old events in the bucket forever: pull them down with the script,
 put them wherever the Association keeps its records, and delete the prefix.
 
+## The poster
+
+```bash
+python3 scripts/make-poster.py golf26-k7n2xqvp4m ~/Desktop/golf-poster.pdf
+```
+
+US Letter, white, one page, ready to email or print. It reads the drop out
+of `src/lib/drop/config.ts`, so the URL on the paper and the URL the Worker
+serves cannot drift apart, and it generates its own QR on the way.
+
+White rather than black on purpose. A dark poster is handsome on a screen
+and a toner cartridge on paper, and the code has to sit on white anyway.
+
 ## Adding the next event
 
 One entry in `src/lib/drop/config.ts`, a new code, a clip in `public/media`,

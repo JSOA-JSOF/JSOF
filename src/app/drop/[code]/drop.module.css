@@ -25,10 +25,21 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/*
+ * The film stage fills the screen and does not scroll. Everything the
+ * first view needs is the clip and one button, and a page that can be
+ * scrolled invites somebody to scroll past the thing they came for.
+ */
+.filmStage {
+  height: 100dvh;
+  overflow: hidden;
+}
+
 .film {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   background: var(--black);
 }
@@ -95,6 +106,75 @@
   font-size: 0.8rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.gate {
+  flex: none;
+  padding: clamp(16px, 4vw, 26px) clamp(16px, 5vw, 40px)
+    calc(clamp(18px, 4vw, 28px) + env(safe-area-inset-bottom));
+  background: var(--black);
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+
+.gate .choose {
+  width: 100%;
+  max-width: 24rem;
+}
+
+/* The clip has finished, so the button stops being the quiet option. */
+.chooseReady {
+  animation: lift 0.45s ease both;
+}
+
+@keyframes lift {
+  from {
+    transform: scale(0.97);
+    box-shadow: 0 0 0 0 rgba(200, 163, 73, 0);
+  }
+  to {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(200, 163, 73, 0.14);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chooseReady {
+    animation: none;
+  }
+}
+
+.gateNote,
+.again {
+  margin: 12px 0 0;
+  color: var(--ink-2);
+  font-size: 0.82rem;
+}
+
+.again {
+  display: inline-block;
+  background: none;
+  border: 0;
+  padding: 8px 10px;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+
+/* The upload view keeps the name in a thin bar, so there is no doubt which
+   event these photographs are going to. */
+.bar {
+  padding: clamp(14px, 4vw, 20px) clamp(16px, 5vw, 40px);
+  border-bottom: 1px solid var(--line);
+}
+
+.barTitle {
+  margin: 4px 0 0;
+  font-size: clamp(1rem, 4.4vw, 1.25rem);
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .panel {
@@ -252,8 +332,7 @@
 }
 
 @media (min-width: 760px) {
-  .film {
-    aspect-ratio: 21 / 9;
-    max-height: 56dvh;
+  .filmText {
+    padding-bottom: clamp(20px, 3vw, 36px);
   }
 }
