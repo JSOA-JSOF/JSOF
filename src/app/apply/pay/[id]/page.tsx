@@ -14,7 +14,7 @@ import styles from "../../apply.module.css";
 import { beginCheckout } from "./actions";
 
 export const metadata = {
-  title: "Membership dues — JSOA",
+  title: "Membership dues · JSOA",
   robots: { index: false, follow: false },
 };
 

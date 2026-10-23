@@ -21,7 +21,7 @@ import styles from "../store.module.css";
  */
 
 export const metadata = {
-  title: "Member store — Joint Special Operations Association",
+  title: "Member store · Joint Special Operations Association",
   robots: { index: false, follow: false },
 };
 

@@ -51,7 +51,7 @@ export default function FoundationEventsPage() {
       <PageHead
         eyebrow="Sponsorship"
         title="What you can sponsor"
-        lede="The events belong to the Association. Sponsorship runs through the Foundation, because that is where what a sponsor receives has to be answered. From $2,500."
+        lede="The Association runs the events. Sponsorship goes through the Foundation, because that is the side that can tell you what your payment buys and how it is taxed. From $2,500."
       />
 
       <EffortCards

@@ -5,7 +5,7 @@ import { MINIMUM_AGE, UNDER_THIRTEEN_NOTICE } from "@/lib/scholarships/minors";
 import styles from "../scholarship.module.css";
 
 export const metadata = {
-  title: "We cannot take an application yet — JSOF",
+  title: "We cannot take an application yet · JSOF",
   robots: { index: false, follow: false },
 };
 

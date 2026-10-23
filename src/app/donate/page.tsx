@@ -5,7 +5,7 @@ import styles from "./donate.module.css";
 import DonateFlow, { type FundOption } from "./DonateFlow";
 
 export const metadata = {
-  title: "Make a gift — JSOA / JSOF",
+  title: "Make a gift · JSOA / JSOF",
   description:
     "Give to the Joint Special Operations Foundation or the Joint Special Operations Association.",
 };
@@ -16,7 +16,7 @@ export const metadata = {
  * organization. Balances are FINANCIAL and live behind the board screens.
  *
  * `listPublicFundOptions` is the one read in this module with no `authorize()`
- * call, because it touches no data class — it returns names, restrictions and
+ * call, because it touches no data class. It returns names, restrictions and
  * purposes, and no money at all. See the note at the top of actions.ts.
  */
 export default function DonatePage() {

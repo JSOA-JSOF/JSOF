@@ -6,7 +6,7 @@ import styles from "../apply.module.css";
 import { readReference } from "../draft";
 
 export const metadata = {
-  title: "Application received — JSOA",
+  title: "Application received · JSOA",
   robots: { index: false, follow: false },
 };
 

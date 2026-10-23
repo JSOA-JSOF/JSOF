@@ -12,7 +12,7 @@ import {
 import { PublicShell } from "@/app/(public)/PublicShell";
 
 export const metadata: Metadata = {
-  title: "Membership — JSOA",
+  title: "Membership · JSOA",
   description:
     "Who may join the Joint Special Operations Association, what membership " +
     "costs, and how an application is sponsored and confirmed.",

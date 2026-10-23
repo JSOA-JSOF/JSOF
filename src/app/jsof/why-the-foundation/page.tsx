@@ -32,9 +32,9 @@ export default function WhyTheFoundationPage() {
         eyebrow="For donors"
         title="Why give to the Foundation rather than the Association"
         lede={
-          "Two organizations, one board, one community, and two different tax " +
-          "positions. If you are giving rather than joining, the Foundation is " +
-          "almost always the right side of the door."
+          "Both organizations share a board. They do not share a tax " +
+          "position, and that is the part that affects you. If you are " +
+          "giving rather than joining, give to the Foundation."
         }
       />
 

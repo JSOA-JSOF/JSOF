@@ -5,7 +5,7 @@ import { PATRIOT_FOUNDATION, decideRouting } from "@/lib/scholarships/routing";
 import styles from "../scholarship.module.css";
 
 export const metadata = {
-  title: "Apply to the Patriot Foundation — JSOF",
+  title: "Apply to the Patriot Foundation · JSOF",
   robots: { index: false, follow: false },
 };
 

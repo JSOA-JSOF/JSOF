@@ -26,7 +26,7 @@ import { answerRouting, goBack, saveStep, submitDraft } from "./actions";
 import { readDraftId } from "./draft";
 
 export const metadata = {
-  title: "Apply for a scholarship — JSOF",
+  title: "Apply for a scholarship · JSOF",
   description:
     "The Joint Special Operations Foundation's Merit and Wounded Patriot scholarships.",
 };

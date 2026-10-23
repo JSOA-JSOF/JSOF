@@ -9,7 +9,7 @@ import styles from "../../../apply.module.css";
 import { simulateWebhook } from "../actions";
 
 export const metadata = {
-  title: "Redirecting to the payment provider — JSOA",
+  title: "Redirecting to the payment provider · JSOA",
   robots: { index: false, follow: false },
 };
 

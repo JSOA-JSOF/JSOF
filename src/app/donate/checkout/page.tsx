@@ -12,7 +12,7 @@ import type { Allocation } from "@/lib/donations/types";
 import styles from "./checkout.module.css";
 
 export const metadata = {
-  title: "Payment — JSOA / JSOF",
+  title: "Payment · JSOA / JSOF",
   // The payment step is not somewhere a search engine should land a donor.
   robots: { index: false, follow: false },
 };
@@ -36,7 +36,7 @@ export const metadata = {
  * it returns. This page then never renders at all.
  *
  * The query string carries the entity, the total and the fund split, and
- * nothing else. No donor name, no email address, no anything personal — see
+ * nothing else. No donor name, no email address, no anything personal. See
  * the privacy rule about URL parameters.
  */
 
@@ -177,7 +177,7 @@ export default async function CheckoutStubPage({
           <li>
             <span className={styles.key}>Redirect URL from the provider</span>
             <span className={`${styles.value} ${styles.absent}`}>
-              none — not integrated
+              none, not integrated
             </span>
           </li>
         </ul>

@@ -6,7 +6,7 @@ import styles from "../scholarship.module.css";
 import { readReference } from "../draft";
 
 export const metadata = {
-  title: "Application received — JSOF",
+  title: "Application received · JSOF",
   robots: { index: false, follow: false },
 };
 

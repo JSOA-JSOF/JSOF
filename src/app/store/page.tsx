@@ -21,7 +21,7 @@ import styles from "./store.module.css";
  */
 
 export const metadata = {
-  title: "Store — Joint Special Operations Association",
+  title: "Store · Joint Special Operations Association",
   description:
     "Association merchandise. Prices exclude North Carolina sales tax, which is shown at checkout.",
 };

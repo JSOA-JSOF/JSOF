@@ -22,7 +22,7 @@ import { goBack, saveStep, submitDraft } from "./actions";
 import { readDraftId } from "./draft";
 
 export const metadata = {
-  title: "Apply for membership — JSOA",
+  title: "Apply for membership · JSOA",
   description:
     "Membership in the Joint Special Operations Association is by sponsorship from a current member.",
 };

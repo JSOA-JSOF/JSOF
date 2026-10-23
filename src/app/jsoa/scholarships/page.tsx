@@ -16,7 +16,7 @@ import {
 } from "@/app/(public)/scholarships";
 
 export const metadata: Metadata = {
-  title: "Scholarships — JSOA",
+  title: "Scholarships · JSOA",
   description:
     "The scholarship year for JSOA members: when applications open and close, " +
     "how the process works, and where to apply.",
@@ -45,7 +45,7 @@ export default function AssociationScholarshipsPage() {
       <PageHead
         eyebrow="Association · 501(c)(19)"
         title="Scholarships"
-        lede="The scholarships are administered by the Joint Special Operations Foundation. This page is the member's view: the shape of the year, and what happens to an application."
+        lede="The Foundation runs the scholarships. This page is for members: when to apply, and what happens after you do."
       />
 
       <Section title="The year" id="timeline">

@@ -8,7 +8,7 @@ import styles from "../../apply.module.css";
 import { recordVouch } from "./actions";
 
 export const metadata = {
-  title: "A membership application names you as sponsor — JSOA",
+  title: "A membership application names you as sponsor · JSOA",
   // Nothing behind a token is meant to be found.
   robots: { index: false, follow: false },
 };

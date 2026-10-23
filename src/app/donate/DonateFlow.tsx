@@ -194,7 +194,7 @@ export default function DonateFlow({ funds }: { funds: FundOption[] }) {
 
   /**
    * The handoff link. Entity, total and the fund split only. No name, no email,
-   * no anything else in the query string — see the privacy rules on putting
+   * no anything else in the query string. See the privacy rules on putting
    * personal data in a URL.
    */
   const checkoutHref =

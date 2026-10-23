@@ -5,7 +5,7 @@ import { PublicShell } from "@/app/(public)/PublicShell";
 import { EVENTS } from "@/app/(public)/events";
 
 export const metadata: Metadata = {
-  title: "Sponsor an event — JSOF",
+  title: "Sponsor an event · JSOF",
   description:
     "Corporate sponsorship of the JSOC community's events, what a sponsor " +
     "receives, and the difference between an acknowledgment and advertising.",

@@ -12,7 +12,7 @@ import styles from "../../store.module.css";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Order recorded — Association store",
+  title: "Order recorded · Association store",
   robots: { index: false, follow: false },
 };
 
