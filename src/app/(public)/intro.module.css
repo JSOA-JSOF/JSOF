@@ -20,8 +20,10 @@
      why the sequence runs past the film to about 13.5s. */
   --veil-delay: 0s;
   --veil-run: 9.6s;
-  /* The logo leads, then the name, then the mission. */
-  --crest-delay: 9.7s;
+  /* The logo leads, rising out of the picture while it is still visible,
+     then the name, then the mission. */
+  --crest-delay: 7s;
+  --crest-run: 3.2s;
   --title-delay: 10.2s;
   --mission-delay: 10.8s;
   --type-run: 2.4s;
@@ -47,6 +49,13 @@
   gap: clamp(12px, 2.5vh, 28px);
 }
 
+/* The picture darkens as well as being veiled.
+ 
+   A black layer fading in over a bright image does not read as black: alpha
+   compositing is linear, so at 40% over a lit sunset the result is a washed
+   mid-tone. That is the grey. Multiplying the picture's own brightness down
+   on the same curve is what a fade to black actually does, and the two
+   together reach a true black rather than a dark haze. */
 .video {
   position: absolute;
   inset: 0;
@@ -54,6 +63,8 @@
   height: 100%;
   object-fit: cover;
   z-index: 0;
+  animation: dimOut var(--veil-run) cubic-bezier(0.76, 0, 0.88, 0.05) forwards;
+  animation-delay: var(--veil-delay);
 }
 
 /* ease-in so almost nothing happens early and the dark gathers late, which is
@@ -120,6 +131,9 @@
 }
 
 .crest {
+  /* Its own, longer run: it starts while the film is still playing and has
+     to arrive gently rather than snapping in over a moving picture. */
+  animation-duration: var(--crest-run);
   animation-delay: var(--crest-delay);
   width: clamp(96px, 22vw, 290px);
   max-height: 34vh;
@@ -194,6 +208,11 @@
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes dimOut {
+  from { filter: brightness(1); }
+  to { filter: brightness(0); }
 }
 
 @keyframes riseIn {
