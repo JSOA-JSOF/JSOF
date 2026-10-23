@@ -370,30 +370,43 @@ export function Drop({ drop }: { drop: DropConfig }) {
                     </li>
                   ))}
                 </ul>
+
+                <label className={styles.credit}>
+                  <span className={styles.creditLabel}>
+                    Your name, if you want the credit
+                  </span>
+                  <input
+                    type="text"
+                    value={credit}
+                    maxLength={80}
+                    autoComplete="name"
+                    placeholder="Optional"
+                    className={styles.creditInput}
+                    onChange={(event) => setCredit(event.target.value)}
+                  />
+                </label>
+
+                {/*
+                  Where they go, said at the moment of pressing rather than
+                  only in the small print at the bottom. This is the whole
+                  of what is being agreed to: it is consent to send, and
+                  not a licence to publish, because the board has not
+                  decided a release and this page is not the place to
+                  invent one.
+                */}
+                <p className={styles.consent}>
+                  These go to the Association&rsquo;s board. Nothing is published
+                  anywhere without asking you first.
+                </p>
+
+                <button
+                  type="button"
+                  className={`${styles.choose} ${styles.sendAll}`}
+                  onClick={sendAll}
+                >
+                  Send {picked.length} {picked.length === 1 ? "photo" : "photos"}
+                </button>
               </div>
-            ) : null}
-
-            <label className={styles.credit}>
-              <span className={styles.creditLabel}>Your name, if you want the credit</span>
-              <input
-                type="text"
-                value={credit}
-                maxLength={80}
-                autoComplete="name"
-                placeholder="Optional"
-                className={styles.creditInput}
-                onChange={(event) => setCredit(event.target.value)}
-              />
-            </label>
-
-            {picked.length > 0 ? (
-              <button
-                type="button"
-                className={`${styles.choose} ${styles.sendAll}`}
-                onClick={sendAll}
-              >
-                Send {picked.length} {picked.length === 1 ? "photo" : "photos"}
-              </button>
             ) : null}
 
             {rows.length > 0 ? (
@@ -420,9 +433,8 @@ export function Drop({ drop }: { drop: DropConfig }) {
             ) : null}
 
             <p className={styles.small}>
-              These go straight to the board and nowhere else. Nothing you send is
-              published anywhere without asking you first. Your phone shrinks each
-              photo before it leaves, which also strips the location it recorded.
+              Your phone shrinks each photo before it leaves, which also strips the
+              location it recorded. Nothing is sent until you press the button.
             </p>
           </>
         ) : (
