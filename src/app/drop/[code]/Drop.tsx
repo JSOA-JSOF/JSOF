@@ -16,14 +16,17 @@ import styles from "./drop.module.css";
  *
  * Two rules decided everything here.
  *
- * The first is the film, then the uploader, in that order. The clip is the
- * reason the code was worth scanning, so it gets the whole screen and is
- * not something to scroll past. What it is not is a gate: the button that
- * moves on is on screen from the first paint, before the video has loaded
- * a single frame. If autoplay is refused, if the connection is too slow to
- * start it, if data saver is on, if the person simply does not care, they
- * are one tap from the uploader. A ten second clip that has to finish
- * before the page works is a ten second clip that loses submissions.
+ * The first is the film, then the uploader, in that order, and nothing on
+ * top of the film. It sits at the full width of the phone at its own
+ * shape, so no part of the frame is cropped away and no caption covers
+ * what somebody scanned a code to watch. The only thing under it is the
+ * button.
+ *
+ * That button is not a gate. It is on screen from the first paint, before
+ * the video has loaded a frame, so a refused autoplay, a slow connection
+ * or data saver still leaves somebody one tap from the uploader. A ten
+ * second clip that has to finish before the page works is a ten second
+ * clip that loses submissions.
  *
  * The second is that a phone at a golf course is the worst network in the
  * world. So the browser resizes every photograph before it leaves the
@@ -184,12 +187,6 @@ export function Drop({ drop }: { drop: DropConfig }) {
             onPlaying={() => setNeedsTap(false)}
             onEnded={() => setEnded(true)}
           />
-          <div className={styles.filmVeil} />
-          <div className={styles.filmText}>
-            <p className={styles.eyebrow}>Joint Special Operations Association</p>
-            <h1 className={styles.title}>{drop.event}</h1>
-            <p className={styles.where}>{drop.where}</p>
-          </div>
           {needsTap ? (
             <button
               type="button"
@@ -228,9 +225,7 @@ export function Drop({ drop }: { drop: DropConfig }) {
             >
               Watch again
             </button>
-          ) : (
-            <p className={styles.gateNote}>Taking photos today? Send them to us.</p>
-          )}
+          ) : null}
         </div>
       </main>
     );

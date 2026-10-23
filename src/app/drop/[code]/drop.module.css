@@ -26,9 +26,15 @@
 }
 
 /*
- * The film stage fills the screen and does not scroll. Everything the
- * first view needs is the clip and one button, and a page that can be
- * scrolled invites somebody to scroll past the thing they came for.
+ * The film stage fills the screen and does not scroll, and the clip sits
+ * in the middle of it at the full width of the phone.
+ *
+ * The container takes the clip's own 16:9 rather than whatever is left
+ * over after the button, and the video is `contain` inside it. Those two
+ * together are what make it adjust to the handset: on any width, from a
+ * small phone to a desktop, the frame is shown whole. The earlier version
+ * stretched the container to the free height and used `cover`, which on a
+ * tall phone threw away most of the sides of the shot.
  */
 .filmStage {
   height: 100dvh;
@@ -38,8 +44,10 @@
 .film {
   position: relative;
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  aspect-ratio: 16 / 9;
+  flex: none;
+  /* Centres the clip in whatever is left after the button. */
+  margin: auto 0;
   overflow: hidden;
   background: var(--black);
 }
@@ -49,25 +57,7 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-}
-
-/* Keeps the type legible over whatever frame happens to be under it. */
-.filmVeil {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(11, 10, 8, 0.55) 0%,
-    rgba(11, 10, 8, 0.15) 45%,
-    rgba(11, 10, 8, 0.92) 100%
-  );
-}
-
-.filmText {
-  position: absolute;
-  inset: auto 0 0 0;
-  padding: 0 clamp(16px, 5vw, 40px) clamp(14px, 3vw, 28px);
+  object-fit: contain;
 }
 
 .eyebrow {
@@ -77,20 +67,6 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--gold);
-}
-
-.title {
-  margin: 0;
-  font-size: clamp(1.5rem, 7.5vw, 3rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-}
-
-.where {
-  margin: 4px 0 0;
-  font-size: clamp(0.78rem, 3.2vw, 0.95rem);
-  color: var(--ink-2);
 }
 
 .tap {
@@ -144,15 +120,9 @@
   }
 }
 
-.gateNote,
-.again {
-  margin: 12px 0 0;
-  color: var(--ink-2);
-  font-size: 0.82rem;
-}
-
 .again {
   display: inline-block;
+  margin: 12px 0 0;
   background: none;
   border: 0;
   padding: 8px 10px;
@@ -331,8 +301,13 @@
   line-height: 1.55;
 }
 
-@media (min-width: 760px) {
-  .filmText {
-    padding-bottom: clamp(20px, 3vw, 36px);
+/*
+ * On a wide screen a 16:9 clip at the full width is taller than the
+ * viewport, so the width is capped and the shape does the rest.
+ */
+@media (min-width: 900px) {
+  .film {
+    max-width: 68rem;
+    align-self: center;
   }
 }
