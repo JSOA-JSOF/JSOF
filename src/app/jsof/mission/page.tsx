@@ -15,8 +15,8 @@ export const metadata: Metadata = {
 /** Family aid is the one programme with no photograph, and should stay
  *  that way: it is families in crisis, and there is no image of that we
  *  could publish. */
-const CARD_IMAGE: Record<string, "foundation-hero" | "memorial" | undefined> = {
-  scholarships: "foundation-hero",
+const CARD_IMAGE: Record<string, "scholarship-award" | "memorial" | undefined> = {
+  scholarships: "scholarship-award",
   memorial: "memorial",
   "family-aid": undefined,
 };

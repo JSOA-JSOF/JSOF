@@ -73,6 +73,19 @@ export const PUBLIC_IMAGES = {
     depicts: "NO_PEOPLE",
     note: "The association crest. An emblem, with no people in it at all.",
   },
+  "scholarship-award": {
+    src: "/media/scholarship-award.webp",
+    reviewed: "2026-10-23",
+    depicts: "SYNTHETIC",
+    // The handover is the subject, and it sits right of centre.
+    focus: "60% center",
+    note:
+      "A scholarship being presented to a recipient with her family. " +
+      "Recognisable faces, including a child. Classified SYNTHETIC because " +
+      "the board confirmed these images are generated and none of these " +
+      "people exist. If any of them are real this comes down: a recipient " +
+      "is precisely who the Foundation promises never to identify.",
+  },
   memorial: {
     src: "/media/memorial.webp",
     reviewed: "2026-10-23",
