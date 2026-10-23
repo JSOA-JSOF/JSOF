@@ -56,6 +56,25 @@
    mid-tone. That is the grey. Multiplying the picture's own brightness down
    on the same curve is what a fade to black actually does, and the two
    together reach a true black rather than a dark haze. */
+/* Everything animated is held until the picture is up. See Intro.tsx:
+   starting the clock at mount meant a phone on cellular spent the first
+   seconds of the fade still buffering. */
+.intro .video,
+.intro .veil,
+.intro .title,
+.intro .crest,
+.intro .mission {
+  animation-play-state: paused;
+}
+
+.running .video,
+.running .veil,
+.running .title,
+.running .crest,
+.running .mission {
+  animation-play-state: running;
+}
+
 .video {
   position: absolute;
   inset: 0;
@@ -63,7 +82,7 @@
   height: 100%;
   object-fit: cover;
   z-index: 0;
-  animation: dimOut var(--veil-run) cubic-bezier(0.76, 0, 0.88, 0.05) forwards;
+  animation: dimOut var(--veil-run) cubic-bezier(0.53, 0.29, 0.93, 0.5) forwards;
   animation-delay: var(--veil-delay);
 }
 
@@ -76,15 +95,18 @@
   z-index: 1;
   background: var(--dark);
   opacity: 0;
-  /* An exponential ease-in, which is the only curve that does what was
-     asked: barely anything for the first seven seconds, then closing the
-     whole gap in the last three.
+  /* Even keeled, and solved for rather than guessed.
 
-     Roughly: 4% dark at 5s, 12% at 7s, 35% at 8.5s, black at 9.6s. The
-     picture is effectively untouched through the part worth watching and
-     then goes decisively. A linear fade would be half dark by five seconds
-     and would bury the boarding. */
-  animation: fadeIn var(--veil-run) cubic-bezier(0.76, 0, 0.88, 0.05) forwards;
+     The veil and the picture's brightness multiply, so perceived darkness is
+     steeper than the veil alone: a linear veil is already a fifth gone after
+     one second. For the darkening to be felt evenly the veil has to follow
+     1 - sqrt(1 - t), and this curve is the closest cubic-bezier to it.
+
+     The result is almost exactly ten percent per second:
+       1s 11%   3s 32%   5s 52%   7s 72%   9s 95%   9.6s black
+
+     Visible from the first second, no late surprise, nothing rushed. */
+  animation: fadeIn var(--veil-run) cubic-bezier(0.53, 0.29, 0.93, 0.5) forwards;
   animation-delay: var(--veil-delay);
 }
 
@@ -145,28 +167,34 @@
 }
 
 .mission {
+  justify-self: stretch;
   animation-delay: var(--mission-delay);
-  /* Tracks the viewport like the title, but capped: a line of body text that
-     spans a wide monitor cannot be read, whatever it does for the title. */
-  max-width: min(92vw, 70ch);
+  /* Runs the full width of the card, like the title. The size scales with
+     the viewport too, so the measure stays roughly constant in lines rather
+     than stretching into one long ribbon on a wide screen: at 1440 it sets
+     to about 22px and fills two lines, on a phone to about 15px and fills
+     five. Same mechanism as --title-fit, same single lever. */
+  max-width: none;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-/* The aside: smaller, italic, quieter than the mission it sits under. */
+/* The aside: italic, smaller, quieter than the mission above it. No
+   parentheses; the italic does that work on its own. */
 .note {
   font-style: italic;
-  font-size: 0.86em;
+  font-size: 0.82em;
   color: var(--dark-mute);
-  max-width: min(92vw, 84ch);
+  max-width: none;
   margin-inline: auto;
 }
 
 .mission p {
   margin: 0;
-  font-size: clamp(0.92rem, 1.5vw, 1.08rem);
-  line-height: 1.6;
+  font-size: clamp(0.95rem, 1.55vw, 1.5rem);
+  line-height: 1.55;
   color: var(--dark-ink-2);
 }
 
@@ -238,7 +266,7 @@
   }
 
   .mission p {
-    font-size: 0.88rem;
+    font-size: clamp(0.82rem, 1.25vw, 1.1rem);
     line-height: 1.45;
   }
 }

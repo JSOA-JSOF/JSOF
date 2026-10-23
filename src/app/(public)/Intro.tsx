@@ -43,6 +43,20 @@ const HOLD_AT_MS = 13_400;
 const STALL_LIMIT_MS = 18_000;
 
 /**
+ * How long to wait for the picture before running the sequence anyway.
+ *
+ * On a phone on cellular the file takes seconds to buffer, and the sequence
+ * used to start its clock at mount: by the time the first frame arrived the
+ * veil was already a third closed and there was nothing left to watch. The
+ * animations now wait for the video to actually start.
+ *
+ * If it never starts, which is what iOS does in Low Power Mode and what any
+ * browser may do if it mistrusts the autoplay, the sequence runs regardless
+ * after this. The reader still gets the card; they just do not get the film.
+ */
+const PICTURE_GRACE_MS = 4_000;
+
+/**
  * Set by the front door at the moment a door is clicked, and consumed here.
  *
  * A one-shot flag rather than a "seen" flag, because the rule is about where
@@ -62,7 +76,7 @@ export function Intro({
   /** Fades in at the foot. One paragraph or several. */
   mission: string[];
   /**
-   * A quieter aside beneath the mission, set in parentheses and italics.
+   * A quieter aside beneath the mission, set in italics.
    *
    * Wraps naturally rather than being forced onto a single rendered line: at
    * this length that would be unreadable on a phone, and "one line" is about
@@ -80,6 +94,9 @@ export function Intro({
    *
    * `window` is absent on the server, where this always renders nothing.
    */
+  /** Animations are held until the picture is up, or until we give up. */
+  const [running, setRunning] = useState(false);
+
   const [state, setState] = useState<"checking" | "playing" | "held" | "done">(() => {
     if (typeof window === "undefined") return "checking";
     let cameThroughTheDoor = false;
@@ -105,17 +122,23 @@ export function Intro({
     setState("done");
   }, []);
 
+  // Give the picture a moment to arrive; start without it if it does not.
   useEffect(() => {
-    if (state !== "playing") return;
+    if (state !== "playing" || running) return;
+    const grace = setTimeout(() => setRunning(true), PICTURE_GRACE_MS);
+    return () => clearTimeout(grace);
+  }, [state, running]);
+
+  // The clock starts with the picture, not with the mount.
+  useEffect(() => {
+    if (!running) return;
     holdTimer.current = setTimeout(() => setState("held"), HOLD_AT_MS);
     stallTimer.current = setTimeout(() => setState("held"), STALL_LIMIT_MS);
     return () => {
       if (holdTimer.current) clearTimeout(holdTimer.current);
       if (stallTimer.current) clearTimeout(stallTimer.current);
     };
-    // Runs once: `state` only ever leaves "playing" by the timers below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [running]);
 
   useEffect(() => {
     if (state !== "playing") return;
@@ -145,7 +168,9 @@ export function Intro({
 
   return (
     <div
-      className={`${styles.intro} ${state === "held" ? styles.held : ""}`}
+      className={`${styles.intro} ${running ? styles.running : ""} ${
+        state === "held" ? styles.held : ""
+      }`}
       role="dialog"
       aria-label="Introduction"
     >
@@ -158,7 +183,12 @@ export function Intro({
         autoPlay
         preload="auto"
         aria-hidden="true"
-        onError={() => setState("held")}
+        onPlaying={() => setRunning(true)}
+        onError={() => {
+          // No picture at all: show the card rather than a black rectangle.
+          setRunning(true);
+          setState("held");
+        }}
       />
       <div className={styles.veil} aria-hidden="true" />
 
@@ -171,7 +201,7 @@ export function Intro({
         {mission.map((paragraph) => (
           <p key={paragraph.slice(0, 40)}>{paragraph}</p>
         ))}
-        {note ? <p className={styles.note}>({note})</p> : null}
+        {note ? <p className={styles.note}>{note}</p> : null}
       </div>
 
       <button type="button" className={styles.skip} onClick={dismiss} autoFocus>

@@ -312,13 +312,36 @@
    A touch screen never fires the reveal, so the half would stay black for
    good. Show both photographs at rest instead. The scrim is the same, so the
    text is as legible either way. */
+/* ---- No pointer ----
+
+   A phone cannot hover, and the grey-to-colour move is the whole gesture of
+   this page. This used to give up and render both halves in colour, which
+   threw the gesture away entirely.
+
+   Scrolling is the touch equivalent of pointing: the half you have scrolled
+   to is the one you are looking at. DoorLink sets data-inview from an
+   IntersectionObserver, and only on touch devices, so a desktop pointer is
+   never second-guessed. */
 @media (hover: none) {
   .photo {
-    filter: grayscale(0) brightness(0.78);
     transform: none;
   }
 
-  .door::after {
+  .door[data-inview="true"] .photo {
+    filter: grayscale(0) brightness(1);
+  }
+
+  .door[data-inview="true"]::after {
     opacity: 1;
+  }
+
+  .door[data-inview="true"] .kicker {
+    color: var(--hue);
+  }
+
+  /* The half not being looked at steps back, as it does under a cursor. */
+  .split:has(.door[data-inview="true"]) .door[data-inview="false"] .body {
+    opacity: 0.5;
+    transition: opacity 220ms ease;
   }
 }
