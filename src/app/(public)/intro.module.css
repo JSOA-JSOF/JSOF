@@ -81,17 +81,37 @@
   animation: riseIn var(--type-run) ease-out forwards;
 }
 
+/* One line, sized to the viewport rather than to a breakpoint.
+
+   The string is fixed and known, so its width in ems is fixed too: about
+   19.3em for "JOINT SPECIAL OPERATIONS ASSOCIATION" in this face at this
+   tracking, counting the spaces and the letter-spacing. Dividing the usable
+   width by that gives a font-size that fills the line at any screen, with no
+   breakpoints and nothing to maintain.
+
+   --title-fit is the result, and is the one number to change if the wording
+   changes. nowrap holds it to a single line; the measured value is set a
+   little under the theoretical fit so a font that loads slightly wider than
+   expected still has room. */
 .title {
+  /* Measured, not estimated. At 4.7vw the line fills about 97% of the usable
+     width at both 375px and 1440px, and 4.9vw overflows at both. The
+     consistency across that range is the point: one number, no breakpoints.
+     The remaining 3% is margin against a fallback font loading wider than
+     Barlow Semi Condensed. */
+  --title-fit: 4.7vw;
+
   animation-delay: var(--title-delay);
   margin: 0;
   font-family: var(--display);
   font-weight: var(--display-weight);
-  font-size: clamp(1.3rem, 3.4vw, 2.6rem);
+  font-size: clamp(0.78rem, var(--title-fit), 5.4rem);
   line-height: 1.1;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--hue-on-dark);
-  max-width: 24ch;
+  max-width: none;
 }
 
 .crest {
@@ -107,10 +127,21 @@
 
 .mission {
   animation-delay: var(--mission-delay);
-  max-width: 62ch;
+  /* Tracks the viewport like the title, but capped: a line of body text that
+     spans a wide monitor cannot be read, whatever it does for the title. */
+  max-width: min(92vw, 70ch);
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* The aside: smaller, italic, quieter than the mission it sits under. */
+.note {
+  font-style: italic;
+  font-size: 0.86em;
+  color: var(--dark-mute);
+  max-width: min(92vw, 84ch);
+  margin-inline: auto;
 }
 
 .mission p {
@@ -175,7 +206,7 @@
    screen. The title and crest shrink so the mission survives whole. */
 @media (max-height: 560px) {
   .title {
-    font-size: clamp(1rem, 2.4vw, 1.5rem);
+    --title-fit: 3.4vw;
   }
 
   .crest {

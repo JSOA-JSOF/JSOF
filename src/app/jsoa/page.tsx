@@ -41,10 +41,12 @@ export default function AssociationHome() {
             "designed to bring together people with the common interest of " +
             "supporting JSOC and the organizations that make up the JSOC " +
             "enterprise, the unit members and their families.",
-          "The JSOA does not have paid employees. It is operated by a group " +
-            "of dedicated volunteers. We are a 501(c)(19) tax-exempt " +
-            "organization.",
         ]}
+        note={
+          "The JSOA does not have paid employees. It is operated by a group " +
+          "of dedicated volunteers. We are a 501(c)(19) tax-exempt " +
+          "organization."
+        }
       />
 
       <Hero

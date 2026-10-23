@@ -55,11 +55,20 @@ const FROM_DOOR_KEY = "jsoa:from-door";
 export function Intro({
   title,
   mission,
+  note,
 }: {
   /** Fades in at the top. */
   title: string;
   /** Fades in at the foot. One paragraph or several. */
   mission: string[];
+  /**
+   * A quieter aside beneath the mission, set in parentheses and italics.
+   *
+   * Wraps naturally rather than being forced onto a single rendered line: at
+   * this length that would be unreadable on a phone, and "one line" is about
+   * it reading as one continuous aside rather than a second paragraph.
+   */
+  note?: string;
 }) {
   /**
    * Decided during render, not in an effect.
@@ -162,6 +171,7 @@ export function Intro({
         {mission.map((paragraph) => (
           <p key={paragraph.slice(0, 40)}>{paragraph}</p>
         ))}
+        {note ? <p className={styles.note}>({note})</p> : null}
       </div>
 
       <button type="button" className={styles.skip} onClick={dismiss} autoFocus>
