@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import { isBoard } from "@/lib/drop/admin";
+import { readApprovals } from "@/lib/drop/approvals";
 import { dropByCode } from "@/lib/drop/config";
 
 /**
@@ -33,7 +34,14 @@ export async function GET(
     uploaded: string;
     credit?: string;
     originalName?: string;
+    /** Whether the sender ticked the public-page box. */
+    share: boolean;
+    /** Whether the board has cleared it for the public page. */
+    approved: boolean;
   }[] = [];
+
+  const approvals = await readApprovals(bucket, drop);
+  const cleared = new Set(approvals.keys);
 
   let cursor: string | undefined;
   do {
@@ -47,6 +55,8 @@ export async function GET(
         key: object.key,
         size: object.size,
         uploaded: object.uploaded.toISOString(),
+        share: object.customMetadata?.share === "yes",
+        approved: cleared.has(object.key),
         ...(object.customMetadata?.credit
           ? { credit: object.customMetadata.credit }
           : {}),

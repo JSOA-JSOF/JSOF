@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -85,7 +86,12 @@ async function shrink(file: File): Promise<Blob> {
   return blob;
 }
 
-async function send(code: string, file: File, credit: string): Promise<void> {
+async function send(
+  code: string,
+  file: File,
+  credit: string,
+  share: boolean,
+): Promise<void> {
   let body: Blob = file;
   let name = file.name;
   try {
@@ -100,6 +106,7 @@ async function send(code: string, file: File, credit: string): Promise<void> {
   const form = new FormData();
   form.append("file", new File([body], name, { type: body.type || file.type }));
   if (credit) form.append("credit", credit);
+  if (share) form.append("share", "yes");
 
   const response = await fetch(`/api/drop/${encodeURIComponent(code)}`, {
     method: "POST",
@@ -117,14 +124,19 @@ export function Drop({ drop }: { drop: DropConfig }) {
   const [picked, setPicked] = useState<Picked[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [credit, setCredit] = useState("");
+  // Off by default. Nobody's photograph goes on a public page because
+  // they did not read a sentence.
+  const [share, setShare] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const creditRef = useRef("");
+  const shareRef = useRef(false);
   const open = dropIsOpen(drop, new Date());
 
   creditRef.current = credit;
+  shareRef.current = share;
 
   useEffect(() => {
     const element = video.current;
@@ -202,11 +214,11 @@ export function Drop({ drop }: { drop: DropConfig }) {
           if (!job) return;
           mark(job.id, { state: "sending" });
           try {
-            await send(drop.code, job.file, creditRef.current);
+            await send(drop.code, job.file, creditRef.current, shareRef.current);
             mark(job.id, { state: "sent" });
           } catch (first) {
             try {
-              await send(drop.code, job.file, creditRef.current);
+              await send(drop.code, job.file, creditRef.current, shareRef.current);
               mark(job.id, { state: "sent" });
             } catch (second) {
               mark(job.id, {
@@ -281,6 +293,11 @@ export function Drop({ drop }: { drop: DropConfig }) {
             >
               Watch again
             </button>
+          ) : null}
+          {drop.publicGallery ? (
+            <Link className={styles.seeAll} href={`/drop/${drop.code}/photos`}>
+              or see everyone&rsquo;s photos
+            </Link>
           ) : null}
         </div>
       </main>
@@ -394,9 +411,24 @@ export function Drop({ drop }: { drop: DropConfig }) {
                   decided a release and this page is not the place to
                   invent one.
                 */}
+                <label className={styles.tick}>
+                  <input
+                    type="checkbox"
+                    checked={share}
+                    className={styles.tickBox}
+                    onChange={(event) => setShare(event.target.checked)}
+                  />
+                  <span>
+                    Show these on the public page for this event. The board
+                    checks every photo before any of them goes up, and you can
+                    ask for yours to come down at any time.
+                  </span>
+                </label>
+
                 <p className={styles.consent}>
-                  These go to the Association&rsquo;s board. Nothing is published
-                  anywhere without asking you first.
+                  {share
+                    ? "These go to the board. The ones they clear will appear on the event's public page."
+                    : "These go to the board and nowhere else. They will not appear on any public page."}
                 </p>
 
                 <button
@@ -430,6 +462,12 @@ export function Drop({ drop }: { drop: DropConfig }) {
                 {sent} {sent === 1 ? "photo" : "photos"} sent. Thank you.
                 {failed > 0 ? " The ones marked failed did not go. Try them again." : ""}
               </p>
+            ) : null}
+
+            {drop.publicGallery ? (
+              <Link className={styles.seeAll} href={`/drop/${drop.code}/photos`}>
+                See everyone&rsquo;s photos &rarr;
+              </Link>
             ) : null}
 
             <p className={styles.small}>

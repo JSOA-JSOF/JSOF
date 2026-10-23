@@ -326,10 +326,73 @@
   white-space: nowrap;
 }
 
+/* Approve, on the review grid. Sits across the foot of the thumbnail. */
+.mark,
+.markOff {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: 0;
+  padding: 6px 4px;
+  font-size: 0.66rem;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  background: rgba(11, 10, 8, 0.82);
+  color: var(--ink-2);
+}
+
+.mark {
+  cursor: pointer;
+}
+
+.mark:disabled {
+  opacity: 0.5;
+}
+
+.markOn {
+  background: var(--gold);
+  color: var(--black);
+  font-weight: 700;
+}
+
+.markOff {
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* The credit tag moves up when a status sits under it. */
+.tile .creditTag {
+  bottom: 26px;
+}
+
 .errorNote {
   margin: 14px 0 0;
   color: var(--bad);
   font-size: 0.88rem;
+}
+
+.tick {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  margin: clamp(14px, 3.5vw, 18px) 0 0;
+  color: var(--ink-2);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.tickBox {
+  flex: none;
+  /* Big enough to hit with a thumb, and nudged onto the first line. */
+  width: 22px;
+  height: 22px;
+  margin: 1px 0 0;
+  accent-color: var(--gold);
 }
 
 .consent {
@@ -343,6 +406,19 @@
   display: block;
   width: 100%;
   margin-top: clamp(12px, 3vw, 16px);
+  /* Also used on a Link, which is not a button and needs the type back. */
+  text-align: center;
+  text-decoration: none;
+  line-height: 18px;
+}
+
+/* The quieter way through to the public page, under the uploader. */
+.seeAll {
+  display: inline-block;
+  margin-top: clamp(16px, 4vw, 22px);
+  color: var(--gold);
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 /* Inside the tray the name field is part of the step, not a stray input. */

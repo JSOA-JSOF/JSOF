@@ -25,6 +25,10 @@ type Item = {
   uploaded: string;
   credit?: string;
   originalName?: string;
+  /** The sender ticked the public-page box. */
+  share: boolean;
+  /** The board has cleared it for the public page. */
+  approved: boolean;
 };
 
 type Manifest = { event: string; count: number; bytes: number; objects: Item[] };
@@ -39,12 +43,15 @@ function Thumb({
   code,
   item,
   authKey,
+  onApproved,
 }: {
   code: string;
   item: Item;
   authKey: string;
+  onApproved: (key: string, approved: boolean) => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const box = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
@@ -80,6 +87,23 @@ function Thumb({
 
   const name = item.originalName ?? item.key.split("/").pop() ?? "photo.jpg";
 
+  const setApproved = async (approved: boolean) => {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/drop/${code}/approve`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ key: item.key, approved }),
+      });
+      if (response.ok) onApproved(item.key, approved);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <li ref={box} className={styles.tile}>
       {url ? (
@@ -91,6 +115,23 @@ function Thumb({
         <span className={styles.thumbWait} />
       )}
       {item.credit ? <span className={styles.creditTag}>{item.credit}</span> : null}
+      {/*
+        No control at all where the sender did not agree. The route
+        refuses it anyway, and a button that is going to be refused is
+        worse than no button: it reads as something the board may override.
+      */}
+      {item.share ? (
+        <button
+          type="button"
+          disabled={busy}
+          className={`${styles.mark} ${item.approved ? styles.markOn : ""}`}
+          onClick={() => void setApproved(!item.approved)}
+        >
+          {item.approved ? "Public" : "Approve"}
+        </button>
+      ) : (
+        <span className={styles.markOff}>Private</span>
+      )}
     </li>
   );
 }
@@ -164,6 +205,8 @@ export function Review({ code, event }: { code: string; event: string }) {
     );
   }
 
+  const live = manifest.objects.filter((item) => item.approved).length;
+
   return (
     <main className={styles.page}>
       <header className={styles.bar}>
@@ -175,15 +218,38 @@ export function Review({ code, event }: { code: string; event: string }) {
           {manifest.count} {manifest.count === 1 ? "photograph" : "photographs"}
         </h1>
         <p className={styles.lede}>
-          {megabytes(manifest.bytes)} in total. Tap one to download it. For all of
-          them at once, run <code>scripts/collect-photos.sh {code}</code>.
+          {megabytes(manifest.bytes)} in total, {live} on the public page. Tap a
+          photograph to download it. For all of them at once, run{" "}
+          <code>scripts/collect-photos.sh {code}</code>.
+        </p>
+        <p className={styles.small}>
+          Approve only puts a photograph on the public page. It is offered on
+          the ones whose sender ticked the box and on no others. Pressing it
+          again takes the photograph back down.
         </p>
         {manifest.count === 0 ? (
           <p className={styles.small}>Nothing has been sent yet.</p>
         ) : (
           <ul className={styles.grid}>
             {manifest.objects.map((item) => (
-              <Thumb key={item.key} code={code} item={item} authKey={authKey} />
+              <Thumb
+                key={item.key}
+                code={code}
+                item={item}
+                authKey={authKey}
+                onApproved={(key, approved) =>
+                  setManifest((current) =>
+                    current
+                      ? {
+                          ...current,
+                          objects: current.objects.map((object) =>
+                            object.key === key ? { ...object, approved } : object,
+                          ),
+                        }
+                      : current,
+                  )
+                }
+              />
             ))}
           </ul>
         )}

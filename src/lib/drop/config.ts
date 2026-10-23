@@ -35,6 +35,14 @@ export type Drop = {
   video: string;
   /** Last day the drop accepts anything, inclusive, as YYYY-MM-DD. */
   closesAt: string;
+  /**
+   * Whether this drop has a public page at all.
+   *
+   * Off is a reasonable answer for an event the board would rather keep
+   * off the open internet, and it switches off the public routes
+   * entirely rather than leaving them serving an empty list.
+   */
+  publicGallery: boolean;
 };
 
 export const DROPS: Drop[] = [
@@ -48,6 +56,7 @@ export const DROPS: Drop[] = [
     // Two weeks. Long enough that somebody who gets home and remembers the
     // photographs on Sunday can still send them.
     closesAt: "2026-11-06",
+    publicGallery: true,
   },
 ];
 

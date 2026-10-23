@@ -65,6 +65,36 @@ Going over is not a cliff. Storage past 10GB is $0.015 per GB per month, so
 leaving old events in the bucket forever: pull them down with the script,
 put them wherever the Association keeps its records, and delete the prefix.
 
+## The public page
+
+    https://thejsof.org/drop/golf26-k7n2xqvp4m/photos
+
+Linked from the drop page, under the film and under the uploader. Open to
+anyone with the link, and still noindex: an event page full of faces
+should be shareable without also being searchable.
+
+A photograph gets there through two gates and needs both.
+
+**The sender's.** A tick box in the tray, off by default, reading "Show
+these on the public page for this event." The line above the send button
+changes with it, so what they are agreeing to is on screen at the moment
+they agree. Nothing is public because somebody did not read a sentence.
+
+**The board's.** On the review page, every photograph whose sender ticked
+the box carries an Approve button. The ones that did not say "Private"
+instead, with no control at all, because a button that is going to be
+refused reads as something the board may override. Pressing Approve again
+takes a photograph straight back down, and the public routes stop serving
+it within the minute.
+
+Both are checked on the route that hands over the pixels, not only on the
+listing, so a key copied out of a page somebody had open an hour ago is
+worth nothing once an approval is withdrawn.
+
+Turn the whole thing off for an event with `publicGallery: false` in
+`src/lib/drop/config.ts`. That makes the public routes 404 rather than
+serve an empty page.
+
 ## The poster
 
 ```bash

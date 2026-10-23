@@ -67,6 +67,12 @@ export async function POST(
   // photograph, not so we know who was there.
   const credit = (form.get("credit") ?? "").toString().slice(0, 80).trim();
 
+  // The sender's half of the public-page decision. Off unless the box was
+  // ticked, and anything other than an exact "yes" counts as off: a
+  // photograph does not go on a public page because a value was mangled
+  // somewhere between the handset and here.
+  const share = form.get("share")?.toString() === "yes";
+
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const unique = crypto.randomUUID().slice(0, 8);
   const extension = type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
@@ -79,6 +85,7 @@ export async function POST(
         event: drop.event,
         heldOn: drop.heldOn,
         originalName: file.name.slice(0, 120),
+        share: share ? "yes" : "no",
         ...(credit ? { credit } : {}),
       },
     });

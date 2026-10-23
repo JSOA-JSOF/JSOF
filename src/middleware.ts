@@ -52,7 +52,10 @@ function isOpenInMvp(pathname: string): boolean {
 }
 
 export function middleware(request: NextRequest) {
-  const stage = process.env.STAGE ?? "live";
+  // Typed as string, not as the literal in wrangler.jsonc. `wrangler
+  // types` narrows STAGE to whatever is configured today, which makes
+  // every comparison against the other stages look like dead code.
+  const stage: string = process.env.STAGE ?? "live";
   if (stage === "live") return NextResponse.next();
 
   const { pathname } = request.nextUrl;
