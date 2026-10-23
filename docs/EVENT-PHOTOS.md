@@ -8,7 +8,7 @@ sign-in, nothing to install.
 
 The golf tournament's drop:
 
-    https://jsoa-jsof-platform.jsoa-jsof-platform.workers.dev/drop/golf26-k7n2xqvp4m
+    https://thejsof.org/drop/golf26-k7n2xqvp4m
 
 It closes on 6 November 2026 on its own.
 
@@ -60,7 +60,7 @@ One entry in `src/lib/drop/config.ts`, a new code, a clip in `public/media`,
 and a new QR:
 
 ```bash
-swift scripts/make-qr.swift "https://.../drop/<code>" ~/Desktop/<event>.png 2048
+swift scripts/make-qr.swift "https://thejsof.org/drop/<code>" ~/Desktop/<event>.png 2048
 ```
 
 Generate the code with something that is actually random, for example

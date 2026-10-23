@@ -6,6 +6,23 @@
   // nodejs_compat is required by the adapter: Next's server code expects a
   // Node runtime, and this is the shim layer that gives it one on workerd.
   "compatibility_flags": ["nodejs_compat"],
+  // thejsof.org was registered at Cloudflare on 22 October 2026 and its
+  // zone was empty, so there was no DNS to migrate and nothing to break.
+  // A custom domain creates and manages the record itself.
+  //
+  // thejsoa.org is a separate problem: it is registered at Network
+  // Solutions and its nameservers still point at Wix, which is where the
+  // old site is served from. See docs/DNS-AND-EMAIL.md. Nothing here
+  // touches it, and the old site keeps working until somebody with the
+  // registrar login moves the nameservers.
+  "routes": [
+    { "pattern": "thejsof.org", "custom_domain": true },
+    { "pattern": "www.thejsof.org", "custom_domain": true }
+  ],
+  // Keep the workers.dev address working alongside the custom domains.
+  // Adding routes turns it off by default, and anything already shared
+  // points at it, including a QR that may already be printed.
+  "workers_dev": true,
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"

@@ -17,7 +17,7 @@ set -euo pipefail
 
 CODE="${1:-}"
 OUT="${2:-event-photos/$CODE}"
-BASE="${DROP_BASE:-https://jsoa-jsof-platform.jsoa-jsof-platform.workers.dev}"
+BASE="${DROP_BASE:-https://thejsof.org}"
 
 if [ -z "$CODE" ]; then
   echo "usage: DROP_ADMIN_KEY=... $0 <code> [outdir]" >&2
