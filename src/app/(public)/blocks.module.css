@@ -735,6 +735,13 @@
   color: var(--hue);
 }
 
+/* An unconfirmed date is not a fact, so it does not get the hue that says
+   one. The same rule the dashboards use: colour means something. */
+.effortNumberQuiet {
+  color: var(--mute);
+  opacity: 0.85;
+}
+
 .effortLink:has(.effortPhoto) .effortNumber {
   color: var(--hue-on-dark);
 }

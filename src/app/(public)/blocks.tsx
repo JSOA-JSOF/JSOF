@@ -150,14 +150,19 @@ export function EffortCards({
 }: {
   items: {
     key: string;
-    /** Rendered as 01, 02, 03. */
-    index: number;
+    /**
+     * The one fact worth seeing before the click. A number on the lines of
+     * effort, a date on an event. Whatever the reader came for.
+     */
+    eyebrow: string;
     title: string;
     statement: string;
-    /** "Association" or "Foundation", shown so the split is never implicit. */
-    by: string;
+    /** The quiet line at the foot: whose work it is, or what kind of thing. */
+    foot: string;
     href: string;
     image?: PublicImageKey;
+    /** Draws the eyebrow in the entity hue: a confirmed date, a live thing. */
+    accent?: boolean;
   }[];
 }) {
   return (
@@ -178,12 +183,16 @@ export function EffortCards({
                 />
               ) : null}
               <span className={styles.effortBody}>
-                <span className={styles.effortNumber}>
-                  {String(item.index).padStart(2, "0")}
+                <span
+                  className={`${styles.effortNumber} ${
+                    item.accent === false ? styles.effortNumberQuiet : ""
+                  }`}
+                >
+                  {item.eyebrow}
                 </span>
                 <span className={styles.effortTitle}>{item.title}</span>
                 <span className={styles.effortStatement}>{item.statement}</span>
-                <span className={styles.effortBy}>{item.by}</span>
+                <span className={styles.effortBy}>{item.foot}</span>
               </span>
             </Link>
           </li>

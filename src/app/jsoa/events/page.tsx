@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
-import { Cards, OutboundLinks, PageHead, Section } from "@/app/(public)/blocks";
+import { EffortCards, PageHead } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
-import { DATES_TO_BE_CONFIRMED_LABEL, EVENTS, EVENTS_STANDFIRST } from "@/app/(public)/events";
+import { EVENTS } from "@/app/(public)/events";
 
 export const metadata: Metadata = {
   title: "Events · JSOA",
@@ -13,6 +13,37 @@ export const metadata: Metadata = {
   alternates: { canonical: "/jsoa/events" },
 };
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * Format an ISO date without touching the Date constructor.
+ *
+ * `new Date("2026-10-23")` parses as UTC midnight and then renders in local
+ * time, which in any western timezone shows the day before. For a date that
+ * is the single most important fact on the card, being off by one is not a
+ * rounding error. The string is already the three numbers we want.
+ */
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/**
+ * Events, as a menu.
+ *
+ * Each card leads with the one fact somebody came for: the date, or a plain
+ * statement that it is not set. A confirmed date takes the entity hue; an
+ * unconfirmed one stays grey, because colour here means "this is a fact" and
+ * the live Wix site's habit of showing last year's date as though it were
+ * this year's is exactly what that rule exists to prevent.
+ *
+ * Everything else, registration, sponsorship, what happens on the day, is on
+ * the event's own page, one click away.
+ */
 export default function EventsIndex() {
   return (
     <PublicShell
@@ -20,77 +51,29 @@ export default function EventsIndex() {
       currentPath="/jsoa/events"
       crumbs={[{ href: "/jsoa/events", label: "Events" }]}
     >
-      <PageHead eyebrow="Events" title="Events" lede={EVENTS_STANDFIRST} />
+      <PageHead eyebrow="Events" title="What's on" />
 
-      <Section title="The three events" id="the-events" wide>
-        <Cards
-          columns={3}
-          items={EVENTS.map((event) => ({
+      <EffortCards
+        items={EVENTS.map((event) => {
+          // Narrowed on the discriminant itself: assigning the check to a
+          // boolean first loses it, because TypeScript does not track the
+          // boolean back to the union.
+          const dates = event.dates;
+          const confirmed = dates.state === "CONFIRMED";
+          return {
             key: event.slug,
-            kind: event.kind,
+            eyebrow:
+              dates.state === "CONFIRMED"
+                ? formatDay(dates.startsAt)
+                : "Date to be confirmed",
+            accent: confirmed,
             title: event.title,
+            statement: event.summary,
+            foot: dates.state === "CONFIRMED" ? dates.venue : event.kind,
             href: `/jsoa/events/${event.slug}`,
-            body: event.summary,
-            foot:
-              event.dates.state === "TO_BE_CONFIRMED"
-                ? DATES_TO_BE_CONFIRMED_LABEL
-                : "Date confirmed",
-            more: "What it is, who it is for",
-          }))}
-        />
-      </Section>
-
-      <Section title="Why no dates are shown" id="dates">
-        <p>
-          Every one of these events runs on an annual cycle, and the date for
-          the next one is set by the board once the venue and the calendar are
-          settled. Until that happens the page says the date is to be
-          confirmed.
-        </p>
-        <p>
-          That is a deliberate choice over the alternative, which is a page
-          headed with a year that has already gone. A stale year tells a
-          visitor that nobody is looking after this, and it is the fastest way
-          to lose a sponsor who was about to write to us.
-        </p>
-      </Section>
-
-      <Section title="Taking part" id="taking-part">
-        <p>
-          Sponsorship is handled through the Foundation, because a sponsorship
-          is a gift to the charitable entity and a ticket is not. Online
-          registration is not built yet, so entries go through the Events
-          Chair.
-        </p>
-        <OutboundLinks
-          items={[
-            {
-              href: "/donate/sponsor",
-              label: "Sponsor an event",
-              note: "Arranged by the Fundraising Chair, through the Foundation",
-            },
-            {
-              href: "/jsoa/contact",
-              label: "Ask about entering",
-              note: "Events Chair. Online registration is not built yet.",
-            },
-            {
-              href: "/jsoa/contact",
-              label: "Volunteer at an event",
-              note: "Events Chair",
-            },
-          ]}
-        />
-      </Section>
-
-      <Section title="Other family events" id="other">
-        <p>
-          The Association also funds smaller family events through the year,
-          including a Trunk or Treat in the autumn. They are announced to
-          members rather than listed here, because they are sized for the
-          community rather than for the public.
-        </p>
-      </Section>
+          };
+        })}
+      />
     </PublicShell>
   );
 }

@@ -32,17 +32,18 @@ const CARD_IMAGE: Record<string, "association-hero" | "foundation-hero" | undefi
  * here was the third time of asking, and it was costing about 150px at the
  * top of a page whose whole job is to be a menu.
  *
- * The two-entity note became the fourth card. It is the distinction the
- * entire structure rests on and burying it behind a click would undo work
- * done deliberately, so it stays visible and costs no scroll.
+ * The two-entity note was briefly a fourth card and the board removed it:
+ * three lines of effort means three cards, and a fourth dilutes the one
+ * thing this page is for. The distinction it carried is not lost, it is on
+ * /jsof/why-the-foundation and in the footer's crossover on every page.
  */
 export default function MissionPage() {
   const cards = LINES_OF_EFFORT.map((line, index) => ({
     key: line.slug,
-    index: index + 1,
+    eyebrow: String(index + 1).padStart(2, "0"),
     title: line.title,
     statement: line.statement,
-    by: line.carriedBy === "JSOA" ? "The Association" : "The Foundation",
+    foot: line.carriedBy === "JSOA" ? "The Association" : "The Foundation",
     href: line.href,
     image: CARD_IMAGE[line.slug],
   }));
@@ -55,22 +56,7 @@ export default function MissionPage() {
     >
       <PageHead eyebrow="Mission" title="What we do" />
 
-      <EffortCards
-        items={[
-          ...cards,
-          {
-            key: "two-entities",
-            index: 4,
-            title: "Two organizations, one board",
-            statement:
-              "Two of the three are charitable work and belong to the " +
-              "Foundation, a separate 501(c)(3). The third is ours. The two " +
-              "never share a ledger, a donor record or a receipt.",
-            by: "Which one should I give to?",
-            href: "/jsof/why-the-foundation",
-          },
-        ]}
-      />
+      <EffortCards items={cards} />
     </PublicShell>
   );
 }
