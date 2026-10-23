@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 
 import {
+  ActionBar,
   Bullets,
   Callout,
   Facts,
-  OutboundLinks,
   PageHead,
   Section,
   Steps,
@@ -20,36 +20,64 @@ export const metadata: Metadata = {
 };
 
 /**
- * Membership, for the Association side.
+ * Membership.
  *
- * Two things the live site gets wrong are fixed here. It calls the $200 a
- * "membership fee" without saying what it is not, and it sends applicants
- * offsite to Submittable. Both are stated plainly instead.
+ * The three steps were a paragraph each. They are now a line each, which is
+ * what a step is for: the reasoning behind them is real and worth keeping,
+ * but it belongs in the application itself, at the moment it applies, not
+ * stacked up in front of somebody deciding whether to start.
+ *
+ * Two things stay long. The dues callout, because the live site's habit of
+ * implying dues are deductible is the single most expensive misunderstanding
+ * on it. And the sponsor line, because "we will not tell you whether that
+ * person is a member" is the anti-oracle rule, and a reader who does not
+ * know that will read the silence as a bug.
  */
 export default function MembershipPage() {
   return (
     <PublicShell
       entity="JSOA"
       currentPath="/jsoa/membership"
-      crumbs={[{ href: "/jsoa", label: "Association" }]}
+      crumbs={[{ href: "/jsoa/membership", label: "Membership" }]}
     >
       <PageHead
-        eyebrow="Association · 501(c)(19)"
-        title="Membership"
-        lede="Membership is open to the people who have served in and alongside the command, and it is confirmed by a member before any payment is taken."
+        eyebrow="Membership"
+        title="Join the Association"
+        lede="One payment, no renewal. An existing member confirms your application before anything is charged."
       />
+
+      <ActionBar
+        items={[
+          { key: "apply", label: "Apply for membership", href: "/apply" },
+          { key: "ask", label: "Ask about eligibility", href: "/jsoa/contact" },
+        ]}
+      />
+
+      <Section title="Three steps" id="how">
+        <Steps
+          items={[
+            { lead: "Apply.", detail: "Who you are, your connection to the command, and your sponsor." },
+            { lead: "Your sponsor confirms.", detail: "A current member vouches for you." },
+            { lead: "Pay.", detail: "$200, once. Taken on the payment provider's own page." },
+          ]}
+        />
+        <p>
+          We will not tell you whether the person you named is a member. That
+          would turn this form into a way of checking the roster.
+        </p>
+      </Section>
 
       <Section title="Who may join" id="eligibility">
         <Bullets
           items={[
-            "Service members and civilians currently assigned to JSOC or an associated unit.",
-            "Former service members and civilians of JSOC or an associated unit who served two years and left in good standing.",
-            "Augmentees, considered case by case. Tell us about your service and the Vice President, Membership will come back to you.",
+            "Serving at JSOC or an associated unit, military or civilian.",
+            "Formerly at JSOC or an associated unit, two years' service, left in good standing.",
+            "Augmentees, case by case.",
           ]}
         />
         <p>
-          Membership is open to all eligible personnel regardless of race,
-          colour, creed, religion, age, sex, disability or national origin.
+          Open to all eligible personnel regardless of race, colour, creed,
+          religion, age, sex, disability or national origin.
         </p>
       </Section>
 
@@ -57,54 +85,17 @@ export default function MembershipPage() {
         <Facts
           rows={[
             { label: "Membership", value: "$200, one time" },
-            { label: "Renewal", value: "None. It is not billed again." },
-            { label: "Deductible", value: "No. See below." },
+            { label: "Renewal", value: "None" },
+            { label: "Tax deductible", value: "No" },
           ]}
         />
-        <Callout title="Membership is not a charitable contribution">
+        <Callout title="Dues are not a charitable contribution">
           <p>
-            The $200 buys membership of the Association, and no receipt from us
-            will describe it as a deductible gift. If a deductible gift is what
-            you want, that is the Joint Special Operations Foundation, which is
-            a separate 501(c)(3).
+            The $200 buys membership, and no receipt from us will describe it
+            as a deductible gift. If that is what you want, give to the Joint
+            Special Operations Foundation instead. It is a separate 501(c)(3).
           </p>
         </Callout>
-      </Section>
-
-      <Section title="How an application works" id="how">
-        <Steps
-          items={[
-            {
-              lead: "You apply.",
-              detail:
-                "Name, how you are connected to the command, and who is sponsoring you.",
-            },
-            {
-              lead: "Your sponsor confirms it.",
-              detail:
-                "A current member vouches for the application. We will not tell you whether the person you named is a member, because that would make this form a way of checking the roster.",
-            },
-            {
-              lead: "Then, and only then, payment.",
-              detail:
-                "Nothing is charged to an applicant nobody has stood behind. Payment is taken on the provider's own hosted page and card details never reach this site.",
-            },
-          ]}
-        />
-        <OutboundLinks
-          items={[
-            {
-              href: "/apply",
-              label: "Apply for membership",
-              note: "Sponsor confirmation first, payment second",
-            },
-            {
-              href: "/jsoa/contact",
-              label: "Ask about eligibility",
-              note: "Vice President, Membership",
-            },
-          ]}
-        />
       </Section>
     </PublicShell>
   );
