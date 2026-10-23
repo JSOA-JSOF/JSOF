@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { DoorLink } from "./DoorLink";
 import styles from "./page.module.css";
 
 /**
@@ -27,7 +27,7 @@ export default function FrontDoor() {
   return (
     <div className={styles.shell}>
       <main className={styles.split}>
-        <Link
+        <DoorLink
           href="/jsoa"
           className={`${styles.door} ${styles.assoc}`}
           style={{ "--photo": `url("${ASSOCIATION_PHOTO}")` } as React.CSSProperties}
@@ -43,9 +43,9 @@ export default function FrontDoor() {
             <span className={styles.meta}>501(c)(19) veterans organization</span>
             <span className={styles.enter}>Membership</span>
           </span>
-        </Link>
+        </DoorLink>
 
-        <Link
+        <DoorLink
           href="/jsof"
           className={`${styles.door} ${styles.found}`}
           style={{ "--photo": `url("${FOUNDATION_PHOTO}")` } as React.CSSProperties}
@@ -61,7 +61,7 @@ export default function FrontDoor() {
             <span className={styles.meta}>501(c)(3) public charity</span>
             <span className={styles.enter}>Sponsor or donate</span>
           </span>
-        </Link>
+        </DoorLink>
 
         {/* Decorative and never over either door's click target. */}
         <div className={styles.crest} aria-hidden="true">

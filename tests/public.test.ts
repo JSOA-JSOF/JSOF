@@ -227,8 +227,12 @@ describe("the public tier carries no member-identifying field", () => {
     // component that may render an <img> is Banner, and Banner resolves its
     // source from src/app/(public)/media.ts, where every entry carries an
     // OPSEC review. A page cannot name a path of its own.
+    // Two components may render an <img>: the shared blocks, and the opening
+    // sequence, which puts the crest over the film. Both resolve from the
+    // manifest, which is what the next test checks. A page still may not.
+    const MAY_RENDER_IMAGES = ["blocks.tsx", "Intro.tsx"];
     for (const file of RENDERED_SOURCES) {
-      if (file.path.endsWith("blocks.tsx")) continue;
+      if (MAY_RENDER_IMAGES.some((name) => file.path.endsWith(name))) continue;
       expect(/<img\b/.test(file.text), file.path).toBe(false);
       expect(/backgroundImage/.test(file.text), file.path).toBe(false);
     }
@@ -323,14 +327,21 @@ describe("the public tier carries no member-identifying field", () => {
   it("renders no image Banner cannot account for", () => {
     // Every <img> in the one component allowed to have one must take its src
     // from the manifest rather than from a literal.
-    const blocks = RENDERED_SOURCES.find((file) => file.path.endsWith("blocks.tsx"));
-    if (!blocks) throw new Error("blocks.tsx is missing from the public sources");
-    const imgTags = blocks.text.match(/<img\b[\s\S]*?\/>/g) ?? [];
-    expect(imgTags.length, "no img element in the public blocks").toBeGreaterThan(0);
-    // Each one must take its source from the manifest rather than a literal.
-    for (const tag of imgTags) {
-      expect(tag, "an img does not resolve through the manifest").toMatch(/PUBLIC_IMAGES[.[]/);
+    const sources = RENDERED_SOURCES.filter(
+      (file) => file.path.endsWith("blocks.tsx") || file.path.endsWith("Intro.tsx"),
+    );
+    expect(sources.length, "the files allowed to render images are missing").toBe(2);
+    let total = 0;
+    for (const file of sources) {
+      const imgTags = file.text.match(/<img\b[\s\S]*?\/>/g) ?? [];
+      for (const tag of imgTags) {
+        expect(tag, `${file.path}: an img does not resolve through the manifest`).toMatch(
+          /PUBLIC_IMAGES[.[]/,
+        );
+        total += 1;
+      }
     }
+    expect(total, "no img element found at all").toBeGreaterThan(0);
   });
 
   it("publishes offices, and the contact type has no field for a person", () => {

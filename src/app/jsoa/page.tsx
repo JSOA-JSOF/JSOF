@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { Hero } from "@/app/(public)/blocks";
+import { Intro } from "@/app/(public)/Intro";
 import { PublicShell } from "@/app/(public)/PublicShell";
 import { JSOA_PROFILE } from "@/app/(public)/entities";
 
@@ -33,6 +34,19 @@ export const metadata: Metadata = {
 export default function AssociationHome() {
   return (
     <PublicShell entity="JSOA" currentPath={JSOA_PROFILE.home}>
+      <Intro
+        title="Joint Special Operations Association"
+        mission={[
+          "The Joint Special Operations Association is an organization " +
+            "designed to bring together people with the common interest of " +
+            "supporting JSOC and the organizations that make up the JSOC " +
+            "enterprise, the unit members and their families.",
+          "The JSOA does not have paid employees. It is operated by a group " +
+            "of dedicated volunteers. We are a 501(c)(19) tax-exempt " +
+            "organization.",
+        ]}
+      />
+
       <Hero
         full
         eyebrow="Association · 501(c)(19)"
