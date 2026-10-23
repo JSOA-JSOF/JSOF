@@ -37,7 +37,7 @@ import styles from "./intro.module.css";
  * and mission follow over the next 3.5s. So the sequence runs past the film,
  * and this is the moment it settles.
  */
-const HOLD_AT_MS = 13_700;
+const HOLD_AT_MS = 13_400;
 
 /** A stalled video must not hold the page: this is the hard stop. */
 const STALL_LIMIT_MS = 18_000;

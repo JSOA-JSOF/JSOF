@@ -19,10 +19,11 @@
      The type then follows the black rather than competing with it, which is
      why the sequence runs past the film to about 13.5s. */
   --veil-delay: 0s;
-  --veil-run: 10s;
-  --title-delay: 10.1s;
-  --crest-delay: 10.5s;
-  --mission-delay: 11.1s;
+  --veil-run: 9.6s;
+  /* The logo leads, then the name, then the mission. */
+  --crest-delay: 9.7s;
+  --title-delay: 10.2s;
+  --mission-delay: 10.8s;
   --type-run: 2.4s;
 
   position: fixed;
@@ -64,11 +65,15 @@
   z-index: 1;
   background: var(--dark);
   opacity: 0;
-  /* Weighted late on purpose. Roughly a third dark by eight seconds, so the
-     action stays readable through the boarding, then closing decisively over
-     the last two. A linear fade would be half dark by five and would bury
-     the part worth watching. */
-  animation: fadeIn var(--veil-run) cubic-bezier(0.65, 0, 0.85, 0.15) forwards;
+  /* An exponential ease-in, which is the only curve that does what was
+     asked: barely anything for the first seven seconds, then closing the
+     whole gap in the last three.
+
+     Roughly: 4% dark at 5s, 12% at 7s, 35% at 8.5s, black at 9.6s. The
+     picture is effectively untouched through the part worth watching and
+     then goes decisively. A linear fade would be half dark by five seconds
+     and would bury the boarding. */
+  animation: fadeIn var(--veil-run) cubic-bezier(0.76, 0, 0.88, 0.05) forwards;
   animation-delay: var(--veil-delay);
 }
 
