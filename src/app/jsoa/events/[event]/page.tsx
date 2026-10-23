@@ -2,59 +2,69 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import {
-  Bullets,
-  Callout,
+  ActionBar,
   Facts,
-  OutboundLinks,
+  MemberWall,
   PageHead,
-  Paragraphs,
   Section,
 } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
-import { DATES_TO_BE_CONFIRMED_LABEL, EVENTS, eventBySlug } from "@/app/(public)/events";
-
-/**
- * One page per event, at a real URL per event.
- *
- * The three pages are generated from `events.ts` rather than written out, so
- * the "dates to be confirmed" state cannot be correct on two of them and
- * stale on the third. That is exactly how the live site got into its current
- * state: three separate pages, three different years.
- */
-
-type EventParams = { params: Promise<{ event: string }> };
+import { EVENTS, eventBySlug } from "@/app/(public)/events";
+import { PHOTO_SUBMISSION } from "@/app/(public)/photos";
 
 export function generateStaticParams() {
   return EVENTS.map((event) => ({ event: event.slug }));
 }
 
-export async function generateMetadata({ params }: EventParams): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ event: string }>;
+}): Promise<Metadata> {
   const { event: slug } = await params;
   const event = eventBySlug(slug);
-  if (!event) return { title: "Event not found · JSOA" };
-
-  const dateLine =
-    event.dates.state === "TO_BE_CONFIRMED"
-      ? `${DATES_TO_BE_CONFIRMED_LABEL}. ${event.dates.typicalTiming}`
-      : `Confirmed for ${event.dates.startsAt}.`;
-
+  if (!event) return { title: "Event · JSOA" };
   return {
     title: `${event.title} · JSOA`,
-    description: `${event.summary} ${dateLine}`,
+    description: event.summary,
     alternates: { canonical: `/jsoa/events/${event.slug}` },
-    openGraph: {
-      title: `${event.title} · JSOA`,
-      description: event.summary,
-      url: `/jsoa/events/${event.slug}`,
-      type: "website",
-    },
   };
 }
 
-export default async function EventPage({ params }: EventParams) {
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** Split by hand: `new Date` parses as UTC and renders local, a day early. */
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/**
+ * One event.
+ *
+ * Three actions, then the five questions anyone has about an event, then
+ * photographs. Everything that used to be prose about pricing structure and
+ * what the day involves has gone: it is the sort of thing that belongs in
+ * the registration flow, not on the page someone opens to find out when it
+ * is.
+ */
+export default async function EventPage({
+  params,
+}: {
+  params: Promise<{ event: string }>;
+}) {
   const { event: slug } = await params;
   const event = eventBySlug(slug);
   if (!event) notFound();
+
+  const dates = event.dates;
+  const when =
+    dates.state === "CONFIRMED" ? formatDay(dates.startsAt) : "Not yet confirmed";
+  const where = dates.state === "CONFIRMED" ? dates.venue : "Not yet confirmed";
 
   return (
     <PublicShell
@@ -67,114 +77,54 @@ export default async function EventPage({ params }: EventParams) {
     >
       <PageHead eyebrow={event.kind} title={event.title} lede={event.summary} />
 
-      {event.dates.state === "TO_BE_CONFIRMED" ? (
-        <Callout
-          title={DATES_TO_BE_CONFIRMED_LABEL}
-          marker="Not yet set"
-          tone="warn"
-        >
-          <p>
-            {event.dates.typicalTiming} The date for the next one has not been
-            confirmed. It is set by the {event.dates.confirmedBy}, and this page
-            is where it will appear.
-          </p>
-          <p>
-            We would rather say this than show you last year&rsquo;s date. If
-            you need to plan around it, write to the {event.dates.confirmedBy}
-            {" "}
-            and ask to be told when it is set.
-          </p>
-        </Callout>
-      ) : (
-        <Callout title="Confirmed">
-          <p>
-            {event.dates.startsAt} at {event.dates.venue}.
-          </p>
-        </Callout>
-      )}
+      <ActionBar
+        items={[
+          {
+            key: "play",
+            label: "Register to take part",
+            href: event.registration?.href,
+            unavailable: "Online registration is not built yet. Ask the Events Chair.",
+          },
+          { key: "sponsor", label: "Sponsor this event", href: event.sponsorship.href },
+          { key: "volunteer", label: "Volunteer", href: "/jsoa/contact" },
+        ]}
+      />
 
-      <Section title="What it is" id="what-it-is">
-        <Paragraphs items={event.whatItIs} />
-      </Section>
-
-      <Section title="Who it is for" id="who-it-is-for">
-        <Bullets items={event.whoItIsFor} />
-      </Section>
-
-      <Section title="What it costs, and why it is priced that way" id="pricing">
-        <p>{event.pricingNote}</p>
-      </Section>
-
-      <Section title="Registration and sponsorship" id="taking-part">
-        <p>
-          Neither is handled on this page. Registration goes through the store,
-          and sponsorship through the Foundation, because a sponsorship is a
-          gift to the charitable entity and a ticket is not.
-        </p>
-        <OutboundLinks
-          items={[
-            ...(event.registration
-              ? [
-                  {
-                    href: event.registration.href,
-                    label: event.registration.label,
-                    note: "Opens when the date is confirmed",
-                  },
-                ]
-              : []),
-            {
-              href: event.sponsorship.href,
-              label: event.sponsorship.label,
-              note: "Fundraising Chair, through the Foundation",
-            },
-            ...(event.registration
-              ? []
-              : [
-                  {
-                    href: "/jsoa/contact",
-                    label: "Ask about taking part",
-                    note: "Events Chair. Online registration is not built yet.",
-                  },
-                ]),
-          ]}
-        />
-      </Section>
-
-      <Section title="Volunteering" id="volunteering">
-        <p>{event.volunteering}</p>
-        <OutboundLinks
-          items={[
-            {
-              href: "/jsoa/contact",
-              label: "Offer to help at this event",
-              note: "Events Chair",
-            },
-          ]}
-        />
-      </Section>
-
-      <Section title="At a glance" id="at-a-glance">
+      <Section title="The details" id="details">
         <Facts
           rows={[
-            { label: "Event", value: event.title },
-            { label: "Kind", value: event.kind },
+            { label: "What", value: event.kind },
+            { label: "When", value: when },
+            { label: "Where", value: where },
+            { label: "Who", value: event.whoItIsFor[0] ?? "Open to the community" },
             {
-              label: "Dates",
+              label: "Why",
               value:
-                event.dates.state === "TO_BE_CONFIRMED"
-                  ? `${DATES_TO_BE_CONFIRMED_LABEL}. ${event.dates.typicalTiming}`
-                  : `${event.dates.startsAt}, ${event.dates.venue}`,
-            },
-            { label: "Run by", value: "Joint Special Operations Association, 501(c)(19)" },
-            {
-              label: "Confirmed by",
-              value:
-                event.dates.state === "TO_BE_CONFIRMED"
-                  ? event.dates.confirmedBy
-                  : "Events Chair",
+                "Proceeds support the three lines of effort: the memorial, " +
+                "scholarships, and the events that hold the community together.",
             },
           ]}
         />
+      </Section>
+
+      <Section title="Photographs" id="photographs">
+        <ActionBar
+          items={[
+            {
+              key: "submit",
+              label: "Send us your photos",
+              href: PHOTO_SUBMISSION.href ?? undefined,
+              unavailable: PHOTO_SUBMISSION.whyClosed,
+            },
+          ]}
+        />
+        <MemberWall title={`Photographs from previous ${event.title}s`}>
+          <p>
+            The archive is for members. Member sign-in is not built yet, so
+            there is nothing to sign in to at the moment. When it is, this is
+            where the galleries will be.
+          </p>
+        </MemberWall>
       </Section>
     </PublicShell>
   );

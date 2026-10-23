@@ -765,6 +765,7 @@ describe("every public page is findable", () => {
         "/jsof/mission",
         "/jsof/partners",
         "/jsof/scholarships",
+        "/jsof/scholarships/[programme]",
         "/jsof/why-the-foundation",
       ].sort(),
     );

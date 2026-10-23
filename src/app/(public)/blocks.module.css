@@ -867,3 +867,83 @@
   line-height: 1.45;
   margin-top: 2px;
 }
+
+/* ---- Event actions ---- */
+
+.actions {
+  list-style: none;
+  margin: clamp(16px, 2.4vw, 26px) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.actionLink,
+.actionOff {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 13px 22px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.98rem;
+  text-decoration: none;
+}
+
+.actionLink {
+  background: var(--hue);
+  color: var(--panel);
+}
+
+.actionLink:hover,
+.actionLink:focus-visible {
+  filter: brightness(1.12);
+}
+
+/* Not a button: there is nowhere to go. It says so rather than looking
+   clickable and disappointing. */
+.actionOff {
+  border: 1px dashed var(--line);
+  color: var(--mute);
+  font-weight: 500;
+}
+
+.actionWhy {
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+/* ---- Member wall ---- */
+
+.wall {
+  margin-top: clamp(26px, 3.5vw, 40px);
+  padding: clamp(20px, 2.6vw, 32px);
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.wallMark {
+  display: inline-block;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hue);
+  margin-bottom: 10px;
+}
+
+.wallTitle {
+  font-family: var(--display);
+  font-weight: var(--display-weight);
+  font-size: 1.2rem;
+  margin: 0 0 8px;
+}
+
+.wallBody p {
+  color: var(--ink-2);
+  margin: 0;
+  font-size: 0.94rem;
+  line-height: 1.55;
+}

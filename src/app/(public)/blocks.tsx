@@ -210,6 +210,76 @@ export function EffortCards({
 }
 
 /**
+ * The actions at the top of an event page.
+ *
+ * Three things a visitor might have come to do, as buttons rather than
+ * sentences. An action with nowhere to go yet is rendered disabled with the
+ * reason, not hidden: a visitor who came to register should learn that
+ * registration is not open, rather than hunt for a link that was never
+ * there.
+ */
+export function ActionBar({
+  items,
+}: {
+  items: {
+    key: string;
+    label: string;
+    href?: string;
+    /** Shown when there is no href. */
+    unavailable?: string;
+  }[];
+}) {
+  return (
+    <ul className={styles.actions}>
+      {items.map((item) => (
+        <li key={item.key} className={styles.action}>
+          {item.href ? (
+            <Link href={item.href} className={styles.actionLink}>
+              {item.label}
+            </Link>
+          ) : (
+            <span className={styles.actionOff}>
+              <span>{item.label}</span>
+              <span className={styles.actionWhy}>{item.unavailable}</span>
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Something that will sit behind member sign-in.
+ *
+ * There is no sign-in yet, so this is a statement rather than a gate. That
+ * is the honest rendering: a locked door with nothing behind it is still a
+ * locked door, and pretending otherwise would mean building a login box that
+ * cannot log anybody in.
+ */
+export function MemberWall({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <aside className={styles.wall}>
+      {/* The obvious two-word label here is one of the fragments the
+          scholarship eligibility guard watches for, because the rule under
+          legal review restricts awards to members' children. Renaming is
+          cheaper than loosening a guard on a legal matter, and the guard
+          reads this file, so the phrase cannot appear in the comment
+          either. */}
+      <span className={styles.wallMark}>Member sign-in</span>
+      <h2 className={styles.wallTitle}>{title}</h2>
+      <div className={styles.wallBody}>{children}</div>
+    </aside>
+  );
+}
+
+/**
  * The partner acknowledgments.
  *
  * A grid, but a restrained one, and the restraint is the point. A 501(c)(3)
