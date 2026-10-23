@@ -1,0 +1,259 @@
+/*
+ * The drop page's own tokens.
+ *
+ * It does not inherit the public shell's, on purpose. This page is served
+ * on its own at an event and has to keep working whatever happens to the
+ * site around it, so everything it needs is in this file.
+ */
+.page {
+  --gold: #c8a349;
+  --ink: #faf8f4;
+  --ink-2: #b9b3a6;
+  --black: #0b0a08;
+  --panel: #15130f;
+  --line: #2a2620;
+  --ok: #7fb069;
+  --bad: #d4766a;
+
+  min-height: 100dvh;
+  background: var(--black);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+  /* Nothing below the fold on a phone except the uploader. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.film {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--black);
+}
+
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Keeps the type legible over whatever frame happens to be under it. */
+.filmVeil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(11, 10, 8, 0.55) 0%,
+    rgba(11, 10, 8, 0.15) 45%,
+    rgba(11, 10, 8, 0.92) 100%
+  );
+}
+
+.filmText {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 0 clamp(16px, 5vw, 40px) clamp(14px, 3vw, 28px);
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: clamp(0.56rem, 2.4vw, 0.7rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.5rem, 7.5vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.where {
+  margin: 4px 0 0;
+  font-size: clamp(0.78rem, 3.2vw, 0.95rem);
+  color: var(--ink-2);
+}
+
+.tap {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  background: rgba(11, 10, 8, 0.6);
+  color: var(--gold);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.panel {
+  flex: 1;
+  padding: clamp(20px, 5vw, 40px) clamp(16px, 5vw, 40px) clamp(32px, 6vw, 56px);
+  max-width: 44rem;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.heading {
+  margin: 0 0 6px;
+  font-size: clamp(1.15rem, 5vw, 1.6rem);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.lede {
+  margin: 0 0 clamp(16px, 4vw, 24px);
+  color: var(--ink-2);
+  font-size: clamp(0.9rem, 3.6vw, 1rem);
+  line-height: 1.5;
+}
+
+.zone {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: clamp(22px, 6vw, 34px) 18px;
+  text-align: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.zoneOn {
+  border-color: var(--gold);
+  background: #1c1813;
+}
+
+.choose {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  background: var(--gold);
+  color: var(--black);
+  font-size: 1rem;
+  font-weight: 650;
+  /* A thumb-sized target. People are holding a drink. */
+  padding: 15px 26px;
+  min-height: 48px;
+  cursor: pointer;
+}
+
+.choose:active {
+  transform: translateY(1px);
+}
+
+.zoneNote {
+  margin: 12px 0 0;
+  color: var(--ink-2);
+  font-size: 0.84rem;
+}
+
+.input {
+  display: none;
+}
+
+.credit {
+  display: block;
+  margin-top: clamp(16px, 4vw, 22px);
+}
+
+.creditLabel {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+}
+
+.creditInput {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  /* 16px exactly: anything smaller makes iOS zoom the page on focus. */
+  font-size: 16px;
+  padding: 12px 14px;
+}
+
+.creditInput:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.rows {
+  list-style: none;
+  margin: clamp(18px, 4vw, 24px) 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.86rem;
+}
+
+.rowName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+.rowState {
+  flex: none;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.waiting,
+.sending {
+  color: var(--ink-2);
+}
+
+.sent {
+  color: var(--ok);
+}
+
+.failed {
+  color: var(--bad);
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: right;
+}
+
+.done {
+  margin: clamp(16px, 4vw, 22px) 0 0;
+  color: var(--ok);
+  font-size: 0.95rem;
+}
+
+.small {
+  margin: clamp(22px, 5vw, 30px) 0 0;
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+@media (min-width: 760px) {
+  .film {
+    aspect-ratio: 21 / 9;
+    max-height: 56dvh;
+  }
+}

@@ -10,11 +10,31 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  // Event photographs, for /drop. Private: nothing serves out of this
+  // bucket and the upload route has no GET.
+  //
+  // Commented out because R2 is not enabled on the account yet, and a
+  // binding to a bucket that does not exist fails the whole deploy. The
+  // upload route already treats a missing binding as "not switched on yet"
+  // and says so, so the page ships and waits rather than breaking.
+  //
+  // To switch it on:
+  //   1. Cloudflare dashboard, R2, Enable. It needs a card on file even
+  //      for the free tier, and nothing is charged under 10GB.
+  //   2. npx wrangler r2 bucket create jsoa-event-photos
+  //   3. Uncomment the four lines below and deploy.
+  //
+  // "r2_buckets": [
+  //   { "binding": "EVENT_PHOTOS", "bucket_name": "jsoa-event-photos" }
+  // ],
   "vars": {
-    // Gates the routes that depend on persistence we have not built. See
-    // src/middleware.ts. Set to "live" only once there is a real database
-    // and real authentication.
-    "STAGE": "public-beta"
+    // Which gate is up. See src/middleware.ts.
+    //
+    //   "mvp"         the front door, both films, and the event drops
+    //   "public-beta" the whole public tier, board and apply held back
+    //   "live"        nothing held back. Needs a real database and real
+    //                 authentication first.
+    "STAGE": "mvp"
   },
   "observability": {
     "enabled": true
