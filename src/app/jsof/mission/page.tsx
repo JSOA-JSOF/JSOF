@@ -45,7 +45,7 @@ export default function FoundationMissionPage() {
       <PageHead
         eyebrow="Mission"
         title="What your gift funds"
-        lede="Three things, all of them charitable work. Gifts to the Foundation are tax-deductible and can be restricted to any one of them."
+        lede="Three things, all charitable. Gifts are tax-deductible and can be restricted to any one of them."
       />
 
       <EffortCards
@@ -63,9 +63,9 @@ export default function FoundationMissionPage() {
       <Callout title="What the Foundation does not fund">
         <Bullets
           items={[
-            "The Association's own operations. The Foundation is not a fundraising arm for a membership organization.",
-            "Members' events. The ball, the golf tournament and the triathlon are member benefits, paid for by the Association from dues, tickets and event sponsorship.",
-            "Anything where the benefit runs to members because they are members rather than to a charitable class.",
+            "The Association's day to day running.",
+            "Members' events. The ball, the golf and the triathlon are member benefits, and the Association pays for them.",
+            "Anything that benefits members because they are members.",
           ]}
         />
       </Callout>

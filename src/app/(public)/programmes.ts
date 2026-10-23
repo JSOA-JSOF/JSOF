@@ -80,9 +80,7 @@ export const PROGRAMMES: Programme[] = [
       "phase is dedicated; later phases will take in enabling forces, " +
       "international partners, military working dogs, and members of the " +
       "command who died while assigned from causes other than combat.",
-    funds:
-      "The next phases of the memorial, and the upkeep of what is already " +
-      "built.",
+    funds: "The next phases, and upkeep of what is built.",
     runBy: "JSOF",
     fundedBy: "JSOF",
     impact: [
@@ -109,9 +107,9 @@ export const PROGRAMMES: Programme[] = [
       "Awards for study at accredited institutions, decided by a committee " +
       "on a written application. A reviewer related to an applicant cannot " +
       "open that applicant's file.",
-    funds:
-      "Scholarship awards, paid to the institution. The Foundation does not " +
-      "publish the names of applicants or recipients.",
+    // The promise never to name recipients lives on the scholarships pages,
+    // where somebody is deciding whether to apply. On a card it is ballast.
+    funds: "Awards paid straight to the institution.",
     runBy: "JSOF",
     fundedBy: "JSOF",
     impact: [
@@ -145,9 +143,7 @@ export const PROGRAMMES: Programme[] = [
     what:
       "Direct help for families of the fallen, and for families under strain " +
       "from illness or injury.",
-    funds:
-      "Assistance to families in genuine need, on a written request, decided " +
-      "by the office that holds it.",
+    funds: "Help for families in genuine need, on a written request.",
     runBy: "JSOA",
     fundedBy: "JSOF",
     fundingNote:
