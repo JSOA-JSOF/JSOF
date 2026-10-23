@@ -16,11 +16,11 @@ export const metadata: Metadata = {
 /** All three lines of effort now have a photograph. */
 const CARD_IMAGE: Record<
   string,
-  "association-hero" | "scholarship-award" | "memorial" | undefined
+  "family-support" | "scholarship-award" | "memorial" | undefined
 > = {
   "memorialize-the-fallen": "memorial",
   "scholarships-and-grants": "scholarship-award",
-  "family-events-and-support": "association-hero",
+  "family-events-and-support": "family-support",
 };
 
 /**

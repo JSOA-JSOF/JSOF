@@ -73,6 +73,19 @@ export const PUBLIC_IMAGES = {
     depicts: "NO_PEOPLE",
     note: "The association crest. An emblem, with no people in it at all.",
   },
+  "family-support": {
+    src: "/media/family-support.webp",
+    reviewed: "2026-10-23",
+    depicts: "SYNTHETIC",
+    focus: "center 45%",
+    note:
+      "Volunteers bringing food to a grieving family. Recognisable faces " +
+      "including children, and the most emotionally loaded image on the " +
+      "site. Classified SYNTHETIC because the board confirmed these images " +
+      "are generated. A real photograph of a real family at the worst " +
+      "moment of their lives could not go here on any consent, which is why " +
+      "the distinction matters more here than anywhere.",
+  },
   "scholarship-award": {
     src: "/media/scholarship-award.webp",
     reviewed: "2026-10-23",
