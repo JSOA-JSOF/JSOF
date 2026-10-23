@@ -1,67 +1,61 @@
 import type { Metadata } from "next";
 
-import {
-  Banner,
-  Bullets,
-  Facts,
-  OutboundLinks,
-  PageHead,
-  ProgrammeCards,
-  Section,
-} from "@/app/(public)/blocks";
+import { Bullets, Callout, EffortCards, PageHead } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
-import { ALL_VOLUNTEER_NOTE } from "@/app/(public)/mission";
 import { programmesFundedBy } from "@/app/(public)/programmes";
 
 export const metadata: Metadata = {
-  title: "Mission — JSOF",
+  title: "Mission · JSOF",
   description:
     "The Joint Special Operations Foundation is the 501(c)(3) charitable " +
     "entity for the JSOC community. What it funds, and what it may not.",
   alternates: { canonical: "/jsof/mission" },
 };
 
+/** The one photograph that suits a Foundation programme. */
+const CARD_IMAGE: Record<string, "foundation-hero" | undefined> = {
+  scholarships: "foundation-hero",
+  memorial: undefined,
+  "family-aid": undefined,
+};
+
+/**
+ * The Foundation's mission, as a menu.
+ *
+ * Same pattern as the Association's: three cards, one fact each, detail
+ * behind the click. What stays in prose is the list of things the Foundation
+ * may not fund, which is the part most charities leave out and the part that
+ * keeps this one a charity. Turning that into a card would make it look like
+ * another option rather than a boundary.
+ */
 export default function FoundationMissionPage() {
+  const funded = programmesFundedBy("JSOF");
+
   return (
     <PublicShell
       entity="JSOF"
       currentPath="/jsof/mission"
-      crumbs={[{ href: "/jsof", label: "Foundation" }]}
+      crumbs={[{ href: "/jsof/mission", label: "Mission" }]}
     >
       <PageHead
-        eyebrow="Foundation · 501(c)(3)"
-        title="Our mission"
-        lede="To fund the charitable work of the JSOC community: recognizing the fallen, educating their families, and helping families in genuine need."
+        eyebrow="Mission"
+        title="What your gift funds"
+        lede="Three things, all of them charitable work. Gifts to the Foundation are tax-deductible and can be restricted to any one of them."
       />
 
-      <Banner image="foundation-hero" />
+      <EffortCards
+        items={funded.map((programme, index) => ({
+          key: programme.slug,
+          eyebrow: String(index + 1).padStart(2, "0"),
+          title: programme.title,
+          statement: programme.funds ?? programme.what,
+          foot: programme.runBy === "JSOF" ? "Run by the Foundation" : "Run by the Association",
+          href: programme.href,
+          image: CARD_IMAGE[programme.slug],
+        }))}
+      />
 
-      <Section title="What the Foundation is" id="what-it-is">
-        <p>
-          The Foundation is a 501(c)(3) public charity and a separate legal
-          entity from the Joint Special Operations Association. It has its own
-          books, its own treasurer and its own receipts, and it shares a
-          volunteer board with the Association and nothing else.
-        </p>
-        <Facts
-          rows={[
-            { label: "Subsection", value: "501(c)(3) public charity" },
-            { label: "Gifts", value: "Tax-deductible, and may be restricted to a fund" },
-            { label: "Members", value: "None. The Foundation does not take dues." },
-            { label: "Staff", value: "None. Every office is a volunteer post." },
-          ]}
-        />
-      </Section>
-
-      <Section title="What it funds" id="funds" wide>
-        <ProgrammeCards programmes={programmesFundedBy("JSOF")} view="funds" />
-      </Section>
-
-      <Section title="What it does not fund" id="limits">
-        <p>
-          This is the part most charities leave out, and it is the part that
-          keeps the Foundation a charity.
-        </p>
+      <Callout title="What the Foundation does not fund">
         <Bullets
           items={[
             "The Association's own operations. The Foundation is not a fundraising arm for a membership organization.",
@@ -69,17 +63,7 @@ export default function FoundationMissionPage() {
             "Anything where the benefit runs to members because they are members rather than to a charitable class.",
           ]}
         />
-        <p>{ALL_VOLUNTEER_NOTE}</p>
-        <OutboundLinks
-          items={[
-            {
-              href: "/jsof/why-the-foundation",
-              label: "Why give here rather than to the Association",
-              note: "What each entity may do with a gift, and what your receipt will say",
-            },
-          ]}
-        />
-      </Section>
+      </Callout>
     </PublicShell>
   );
 }

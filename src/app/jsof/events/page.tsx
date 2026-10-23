@@ -1,97 +1,97 @@
 import type { Metadata } from "next";
 
-import {
-  Bullets,
-  Callout,
-  OutboundLinks,
-  PageHead,
-  Section,
-} from "@/app/(public)/blocks";
+import { Callout, EffortCards, OutboundLinks, PageHead } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
 import { EVENTS } from "@/app/(public)/events";
 
 export const metadata: Metadata = {
-  title: "Event sponsorship — JSOF",
+  title: "Sponsorship · JSOF",
   description:
-    "What a company can sponsor across the JSOC community's events, and what " +
-    "the difference is between a sponsorship and advertising.",
+    "What a company can sponsor across the JSOC community's events, and the " +
+    "difference between an acknowledgment and advertising.",
   alternates: { canonical: "/jsof/events" },
 };
 
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/** Split by hand, not by `new Date`: that parses as UTC and renders local,
+ *  which shows the day before across the Americas. */
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
 /**
- * Events, from the Foundation's side: what a company can sponsor.
+ * Sponsorship, from the Foundation's side.
  *
- * The events themselves belong to the Association. This page exists because
- * sponsorship is where the two entities actually touch, and where the IRC
- * 513(i) line sits. Tiers are not published here, because the board has not
- * yet decided which benefits fall on which side of that line, and publishing
- * a tier sheet that later has to be withdrawn is worse than publishing none.
- * See docs/ENTITY-SPLIT.md.
+ * The events belong to the Association; this page exists because sponsorship
+ * is where the two entities touch and where the IRC 513(i) line sits. The
+ * cards are the same menu pattern as everywhere else, and the one thing that
+ * stays in prose is the acknowledgment-versus-advertising distinction, which
+ * is the whole reason a sponsor should read this before signing.
  */
 export default function FoundationEventsPage() {
   return (
     <PublicShell
       entity="JSOF"
       currentPath="/jsof/events"
-      crumbs={[{ href: "/jsof", label: "Foundation" }]}
+      crumbs={[{ href: "/jsof/events", label: "Events" }]}
     >
       <PageHead
-        eyebrow="Foundation · 501(c)(3)"
-        title="Sponsorship"
-        lede="The events belong to the Association. Sponsorship is arranged through the Foundation, because that is where the question of what a sponsor receives has to be answered."
+        eyebrow="Sponsorship"
+        title="What you can sponsor"
+        lede="The events belong to the Association. Sponsorship runs through the Foundation, because that is where what a sponsor receives has to be answered. From $2,500."
       />
 
-      <Section title="What there is to sponsor" id="what" wide>
-        <ul>
-          {EVENTS.map((event) => (
-            <li key={event.slug}>
-              <strong>{event.title}</strong>. {event.summary}
-            </li>
-          ))}
-        </ul>
-        <OutboundLinks
-          items={[
-            {
-              href: "/jsoa/events",
-              label: "The events themselves",
-              note: "Dates, tickets, and what happens on the day",
-            },
-          ]}
-        />
-      </Section>
+      <EffortCards
+        items={EVENTS.map((event) => {
+          const dates = event.dates;
+          return {
+            key: event.slug,
+            eyebrow:
+              dates.state === "CONFIRMED"
+                ? formatDay(dates.startsAt)
+                : "Date to be confirmed",
+            accent: dates.state === "CONFIRMED",
+            title: event.title,
+            statement: event.summary,
+            foot: dates.state === "CONFIRMED" ? dates.venue : event.kind,
+            href: "/donate/sponsor",
+          };
+        })}
+      />
 
-      <Section title="Acknowledgment, or advertising" id="the-line">
+      <Callout title="Acknowledgment, or advertising">
         <p>
-          There is a line in the tax code between the two, and which side a
-          sponsorship falls on decides whether the payment is deductible and
-          whether it creates taxable income for us. We would rather tell you
-          before you sign than after.
+          There is a line in the tax code between the two, and which side your
+          sponsorship falls on decides whether the payment is deductible. An
+          acknowledgment is your name, logo, locations and product lines,
+          stated without endorsement, and it is deductible. Advertising is
+          comparative claims, pricing or an endorsement, and it is not, as
+          well as creating taxable income for us. Beyond a small safe harbour
+          the test applies to the whole payment rather than the part above the
+          line, so one oversized benefit changes how all of it is treated.
         </p>
-        <Bullets
-          items={[
-            "An acknowledgment is your name, logo, locations and product lines, stated without endorsement. That is a qualified sponsorship, and it is deductible.",
-            "Advertising is comparative claims, price information, or an endorsement of your product. That is not a deductible gift, and it can create unrelated business income for the Foundation.",
-            "The test is all or nothing beyond a small safe harbour. One oversized benefit can change the treatment of the whole payment, not just the part above the line.",
-          ]}
-        />
-        <Callout title="Tiers are not published yet" marker="Awaiting a board decision">
-          <p>
-            We have not published a sponsorship tier sheet, because the board
-            has not finished deciding which benefits sit on which side of that
-            line. Rather than publish tiers we would then have to withdraw, the
-            Fundraising Chair will talk it through with you directly.
-          </p>
-        </Callout>
-        <OutboundLinks
-          items={[
-            {
-              href: "/jsof/contact",
-              label: "Talk to the Fundraising Chair",
-              note: "Sponsorship, by office",
-            },
-          ]}
-        />
-      </Section>
+      </Callout>
+
+      <OutboundLinks
+        items={[
+          {
+            href: "/donate/sponsor",
+            label: "How sponsorship works",
+            note: "What you receive, and what your receipt will say",
+          },
+          {
+            href: "/jsof/contact",
+            label: "Talk to the Fundraising Chair",
+            note: "Sponsorship, by office",
+          },
+        ]}
+      />
     </PublicShell>
   );
 }
