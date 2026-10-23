@@ -1,15 +1,8 @@
 import type { Metadata } from "next";
 
-import {
-  Bullets,
-  Facts,
-  OutboundLinks,
-  PageHead,
-  Section,
-  SubHead,
-} from "@/app/(public)/blocks";
+import { EffortCards, PageHead } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
-import { ALL_VOLUNTEER_NOTE, LINES_OF_EFFORT, MISSION_STATEMENT } from "@/app/(public)/mission";
+import { LINES_OF_EFFORT } from "@/app/(public)/mission";
 
 export const metadata: Metadata = {
   title: "Mission and lines of effort · JSOA",
@@ -20,114 +13,64 @@ export const metadata: Metadata = {
   alternates: { canonical: "/jsoa/mission" },
 };
 
+/** Only two photographs can lawfully be published, so only two cards get one. */
+const CARD_IMAGE: Record<string, "association-hero" | "foundation-hero" | undefined> = {
+  "memorialize-the-fallen": undefined,
+  "scholarships-and-grants": "foundation-hero",
+  "family-events-and-support": "association-hero",
+};
+
+/**
+ * The mission, as a menu that fits one screen.
+ *
+ * Two things were cut to get it there, both measured rather than guessed:
+ * the page used to begin its cards 413px down a 900px viewport, and to run
+ * 644px past the fold.
+ *
+ * The mission statement is gone from the head. It is not lost: it opens the
+ * home page and it is the centre of the opening sequence, so printing it
+ * here was the third time of asking, and it was costing about 150px at the
+ * top of a page whose whole job is to be a menu.
+ *
+ * The two-entity note became the fourth card. It is the distinction the
+ * entire structure rests on and burying it behind a click would undo work
+ * done deliberately, so it stays visible and costs no scroll.
+ */
 export default function MissionPage() {
+  const cards = LINES_OF_EFFORT.map((line, index) => ({
+    key: line.slug,
+    index: index + 1,
+    title: line.title,
+    statement: line.statement,
+    by: line.carriedBy === "JSOA" ? "The Association" : "The Foundation",
+    href: line.href,
+    image: CARD_IMAGE[line.slug],
+  }));
+
   return (
     <PublicShell
       entity="JSOA"
       currentPath="/jsoa/mission"
       crumbs={[{ href: "/jsoa/mission", label: "Mission" }]}
     >
-      <PageHead
-        eyebrow="Mission"
-        title="What the Association is for"
-        lede={MISSION_STATEMENT}
+      <PageHead eyebrow="Mission" title="What we do" />
+
+      <EffortCards
+        items={[
+          ...cards,
+          {
+            key: "two-entities",
+            index: 4,
+            title: "Two organizations, one board",
+            statement:
+              "Two of the three are charitable work and belong to the " +
+              "Foundation, a separate 501(c)(3). The third is ours. The two " +
+              "never share a ledger, a donor record or a receipt.",
+            by: "Which one should I give to?",
+            href: "/jsof/why-the-foundation",
+          },
+        ]}
       />
-
-      <Section title="Three lines of effort" id="lines-of-effort">
-        <p>
-          The mission narrows to three things. They have not changed, and the
-          value of keeping the list to three is that anyone can hold it in
-          their head: memorialize the fallen, educate the families, and keep
-          the community together.
-        </p>
-        {LINES_OF_EFFORT.map((line) => (
-          <div key={line.slug}>
-            <SubHead>{line.title}</SubHead>
-            <p>{line.statement}</p>
-            <p>{line.detail}</p>
-            <Facts
-              rows={[
-                {
-                  label: "Carried by",
-                  value:
-                    line.carriedBy === "JSOA"
-                      ? "Joint Special Operations Association, 501(c)(19)"
-                      : "Joint Special Operations Foundation, 501(c)(3)",
-                },
-                {
-                  label: "Gifts for this go to",
-                  value:
-                    line.carriedBy === "JSOA"
-                      ? "the Association. A gift here is not deductible as a charitable contribution."
-                      : "the Foundation, where the gift is deductible and can be restricted to this line of effort.",
-                },
-              ]}
-            />
-          </div>
-        ))}
-      </Section>
-
-      <Section title="Two organizations, one board" id="two-entities">
-        <p>
-          There are two legal entities and they are not interchangeable. This
-          trips people up, including people who have been around the
-          organization for years, so it is worth stating plainly.
-        </p>
-        <Bullets
-          items={[
-            "The Association is a 501(c)(19) veterans' organization. It holds membership, dues, events and the store.",
-            "The Foundation is a 501(c)(3) public charity. It holds the scholarships, the memorial and charitable giving.",
-            "They share a volunteer board and share nothing else. Separate books, separate donor records, separate receipts.",
-            "Any figure that spans both is shown as two labelled columns. It is never added into one number.",
-          ]}
-        />
-        <p>
-          The practical consequence for a donor: the entity you give to
-          determines whether the gift is deductible and what it may be spent
-          on. The Foundation page sets out why a charitable gift belongs there.
-        </p>
-      </Section>
-
-      <Section title="How the work gets done" id="volunteers">
-        <p>{ALL_VOLUNTEER_NOTE}</p>
-        <p>
-          That is also why response times on the contact page are measured in
-          business days rather than hours. An office answers when the person
-          holding it is off shift.
-        </p>
-      </Section>
-
-      <Section title="Where to go next" id="next">
-        <OutboundLinks
-          items={[
-            {
-              href: "/jsoa/events",
-              label: "Events",
-              note: "Ball, golf tournament, youth triathlon",
-            },
-            {
-              href: "/jsoa/family-support",
-              label: "Family support",
-              note: "What it covers and how to ask",
-            },
-            {
-              href: "/jsof/scholarships",
-              label: "Scholarships",
-              note: "The three programmes and the cycle",
-            },
-            {
-              href: "/jsof/memorial",
-              label: "Memorial and pavers",
-              note: "The plaza, and how a paver is dedicated",
-            },
-            {
-              href: "/apply",
-              label: "Apply for membership",
-              note: "Sponsorship required",
-            },
-          ]}
-        />
-      </Section>
     </PublicShell>
   );
 }

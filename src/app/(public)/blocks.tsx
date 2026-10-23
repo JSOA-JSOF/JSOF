@@ -132,6 +132,68 @@ export function ProgrammeCards({
 }
 
 /**
+ * The three lines of effort, as three numbered cards.
+ *
+ * A menu, not a document. Each card carries a number, a title, one sentence
+ * and which entity does the work, and then gets out of the way: everything
+ * else lives behind the click, on the page that owns it. The whole card is
+ * the target, not a "read more" at the bottom of it.
+ *
+ * `image` is optional and deliberately so. An image-led card is only better
+ * than a text one when the image is good, and this organization has two
+ * photographs it can lawfully publish. A card without one gets a composed
+ * graphic treatment rather than a stock photograph standing in for work that
+ * means something, which is the failure mode this avoids.
+ */
+export function EffortCards({
+  items,
+}: {
+  items: {
+    key: string;
+    /** Rendered as 01, 02, 03. */
+    index: number;
+    title: string;
+    statement: string;
+    /** "Association" or "Foundation", shown so the split is never implicit. */
+    by: string;
+    href: string;
+    image?: PublicImageKey;
+  }[];
+}) {
+  return (
+    <ol className={styles.efforts}>
+      {items.map((item) => {
+        const photo = item.image ? publicImage(item.image) : null;
+        return (
+          <li key={item.key} className={styles.effort}>
+            <Link href={item.href} className={styles.effortLink}>
+              {photo ? (
+                <span
+                  className={styles.effortPhoto}
+                  aria-hidden="true"
+                  style={{
+                    backgroundImage: `url("${photo.src}")`,
+                    backgroundPosition: photo.focus ?? "center",
+                  }}
+                />
+              ) : null}
+              <span className={styles.effortBody}>
+                <span className={styles.effortNumber}>
+                  {String(item.index).padStart(2, "0")}
+                </span>
+                <span className={styles.effortTitle}>{item.title}</span>
+                <span className={styles.effortStatement}>{item.statement}</span>
+                <span className={styles.effortBy}>{item.by}</span>
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
  * The crest, for the masthead.
  *
  * Decorative: the wordmark beside it carries the name. It lives here rather

@@ -652,3 +652,122 @@
   line-height: 1.55;
   color: var(--dark-ink-2);
 }
+
+/* ---- The three lines of effort ----
+
+   Full-bleed out of the gutter, three abreast on a wide screen, stacked on a
+   phone. Sized so all three fit a laptop viewport without scrolling, which is
+   the point of the pattern: the page is a menu rather than a document. */
+
+.efforts {
+  list-style: none;
+  margin: clamp(20px, 3vw, 36px) calc(var(--gutter) * -1) 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  background: var(--line);
+  border-block: 1px solid var(--line);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}
+
+.effort {
+  position: relative;
+  display: flex;
+  background: var(--ground);
+  min-height: clamp(240px, 38vh, 400px);
+}
+
+.effortLink {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  padding: clamp(20px, 2.4vw, 32px);
+  text-decoration: none;
+  color: var(--ink);
+  overflow: hidden;
+}
+
+/* Grey at rest, colour under the cursor, the same move as the front door so
+   the two read as one site. */
+.effortPhoto {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: grayscale(1) brightness(0.52);
+  transform: scale(1);
+  transition: filter 420ms ease, transform 620ms ease;
+}
+
+.effortLink:hover .effortPhoto,
+.effortLink:focus-visible .effortPhoto {
+  filter: grayscale(0) brightness(0.62);
+  transform: scale(1.04);
+}
+
+/* A card with no photograph. Composed rather than apologetic: the number
+   carries it, on the entity's own tint. */
+.effortLink:not(:has(.effortPhoto)) {
+  background: var(--hue-tint);
+}
+
+.effortBody {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* On a photograph the words sit on the dark scrim, so they take the light
+   ink; without one they sit on the tint and keep the page's ink. */
+.effortLink:has(.effortPhoto) .effortBody {
+  color: var(--dark-ink);
+}
+
+.effortNumber {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.2em;
+  color: var(--hue);
+}
+
+.effortLink:has(.effortPhoto) .effortNumber {
+  color: var(--hue-on-dark);
+}
+
+.effortTitle {
+  font-family: var(--display);
+  font-weight: var(--display-weight);
+  font-size: clamp(1.3rem, 2.1vw, 1.9rem);
+  line-height: 1.08;
+  letter-spacing: var(--display-tracking);
+}
+
+.effortStatement {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  max-width: 34ch;
+  opacity: 0.88;
+}
+
+.effortBy {
+  margin-top: 4px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.68;
+}
+
+/* No pointer: the card you have scrolled to is the one you are looking at.
+   Same reasoning as the front door. */
+@media (hover: none) {
+  .effortPhoto {
+    filter: grayscale(0) brightness(0.56);
+    transform: none;
+  }
+}
