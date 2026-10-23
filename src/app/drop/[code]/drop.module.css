@@ -211,6 +211,133 @@
   display: none;
 }
 
+/*
+ * The tray: chosen, not sent.
+ *
+ * Thumbnails rather than filenames, because IMG_4812.HEIC tells nobody
+ * which shot it is, and the whole point of the step is being able to see
+ * what you are about to hand over.
+ */
+.tray {
+  margin-top: clamp(18px, 4vw, 24px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: clamp(14px, 3.5vw, 18px);
+  background: var(--panel);
+}
+
+.trayHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trayTitle {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 650;
+}
+
+.trayHead .again {
+  margin: 0;
+  padding: 4px 2px;
+}
+
+.trayNote {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: 0.8rem;
+}
+
+.grid {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #221e18;
+}
+
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Sits over the corner of the thumbnail, at a size a thumb can hit. */
+.drop {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(11, 10, 8, 0.72);
+  color: var(--ink);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The review grid reuses .tile and .thumb. These are its own. */
+.thumbWait {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(100deg, #221e18 30%, #2c2720 50%, #221e18 70%);
+  background-size: 300% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -300% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumbWait {
+    animation: none;
+  }
+}
+
+.creditTag {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 6px;
+  background: rgba(11, 10, 8, 0.74);
+  color: var(--ink-2);
+  font-size: 0.62rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.errorNote {
+  margin: 14px 0 0;
+  color: var(--bad);
+  font-size: 0.88rem;
+}
+
+.sendAll {
+  display: block;
+  width: 100%;
+  margin-top: clamp(16px, 4vw, 22px);
+}
+
 .credit {
   display: block;
   margin-top: clamp(16px, 4vw, 22px);

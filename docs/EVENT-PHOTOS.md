@@ -14,11 +14,18 @@ It closes on 6 November 2026 on its own.
 
 ## Getting the photographs back
 
-Two ways.
+Three ways, in the order you will want them.
 
-**The dashboard**, for a look: Cloudflare, R2, `jsoa-event-photos`, folder
-`golf-2026/`. Fine for checking something arrived. Painful for two thousand
-files.
+**The review page**, for looking:
+
+    https://thejsof.org/drop/golf26-k7n2xqvp4m/review
+
+Paste the drop key and it shows everything that has come in, as
+thumbnails, with whoever asked for the credit under each one. Tap a
+photograph to download it. The key goes in a header rather than the URL,
+so it does not end up in browser history or in a screenshot of the
+address bar, and it is held for the tab only: closing the tab forgets it.
+Nothing links to this page.
 
 **The script**, for the real collection:
 
@@ -27,10 +34,14 @@ DROP_ADMIN_KEY='...' scripts/collect-photos.sh golf26-k7n2xqvp4m
 ```
 
 That writes into `event-photos/golf26-k7n2xqvp4m/`: every photograph, plus
-a `manifest.csv` giving the filename, the credit the sender asked for, what
-the file was called on their phone, and when it arrived. Run it again later
-and it skips what it already has, so the stragglers who get home and
+a `manifest.csv` giving the filename, the credit the sender asked for,
+what the file was called on their phone, and when it arrived. Run it again
+later and it skips what it already has, so the stragglers who get home and
 remember on Sunday cost one more run and nothing else.
+
+**The dashboard**, for everything else: Cloudflare, R2,
+`jsoa-event-photos`, folder `golf-2026/`. This is the one that can delete
+things.
 
 `DROP_ADMIN_KEY` is a Worker secret, not a thing to paste into a shared
 document. It is already set. To replace it:
@@ -102,6 +113,15 @@ organization should be collecting by accident.
 **One request per photograph, two at a time, one retry.** A dropped
 connection at photograph nine costs photograph nine, not the first eight.
 Closing the page loses nothing that already said sent.
+
+**Nothing is sent until they press send.** Choosing photographs fills a
+tray of thumbnails with a cross on each one, and the upload begins when
+they press the button under it. Sending on selection is one tap fewer and
+the wrong trade: on a phone the picker is a grid of stamps, picking the
+wrong shot or thirty when you meant three is the normal case, and the only
+undo would be asking the board to delete it. For a photograph of other
+people at an Association event, that is a bad place to put the undo
+button.
 
 **Nothing is published.** The upload route has no GET. The two routes that
 read are behind a key the board holds and the sign does not carry, and the

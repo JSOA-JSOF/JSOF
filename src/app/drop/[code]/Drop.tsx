@@ -43,6 +43,20 @@ type Row = {
   error?: string;
 };
 
+/** A photograph chosen but not yet sent. */
+type Picked = {
+  id: string;
+  file: File;
+  /** An object URL for the thumbnail. Revoked when the item leaves. */
+  preview: string;
+};
+
+function isPhotograph(file: File): boolean {
+  return file.type
+    ? file.type.startsWith("image/")
+    : /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
+}
+
 /** Longest edge, JPEG, stripped of everything the camera wrote into it. */
 async function shrink(file: File): Promise<Blob> {
   // `from-image` applies the EXIF rotation, which is also how the rotation
@@ -100,6 +114,7 @@ async function send(code: string, file: File, credit: string): Promise<void> {
 export function Drop({ drop }: { drop: DropConfig }) {
   const [stage, setStage] = useState<"film" | "upload">("film");
   const [ended, setEnded] = useState(false);
+  const [picked, setPicked] = useState<Picked[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [credit, setCredit] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -120,53 +135,94 @@ export function Drop({ drop }: { drop: DropConfig }) {
     void element.play().catch(() => setNeedsTap(true));
   }, []);
 
-  const queue = useCallback(
-    (files: FileList | File[]) => {
-      const picked = Array.from(files).filter((file) =>
-        file.type ? file.type.startsWith("image/") : /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name),
-      );
-      if (picked.length === 0) return;
+  // Choosing adds to a tray. Nothing leaves the handset until the person
+  // presses send.
+  //
+  // It used to upload the moment the picker closed, which is fewer taps
+  // and the wrong trade. On a phone the picker is a grid of thumbnails the
+  // size of a stamp, and picking the wrong shot, or thirty shots when you
+  // meant three, is the normal case rather than the careless one. Sending
+  // on selection means the only way to take something back is to ask the
+  // board to delete it, and for a photograph of other people at an
+  // Association event that is a bad place to put the undo button.
+  const choose = useCallback((files: FileList | File[]) => {
+    const chosen = Array.from(files).filter(isPhotograph);
+    if (chosen.length === 0) return;
+    setPicked((current) => {
+      // The same photograph twice is a double tap, not an intention.
+      const seen = new Set(current.map((item) => `${item.file.name}:${item.file.size}`));
+      const added = chosen
+        .filter((file) => !seen.has(`${file.name}:${file.size}`))
+        .map((file) => ({
+          id: crypto.randomUUID(),
+          file,
+          preview: URL.createObjectURL(file),
+        }));
+      return [...current, ...added];
+    });
+  }, []);
 
-      const added: Row[] = picked.map((file) => ({
-        id: crypto.randomUUID(),
-        name: file.name,
+  const remove = useCallback((id: string) => {
+    setPicked((current) => {
+      const going = current.find((item) => item.id === id);
+      if (going) URL.revokeObjectURL(going.preview);
+      return current.filter((item) => item.id !== id);
+    });
+  }, []);
+
+  const clear = useCallback(() => {
+    setPicked((current) => {
+      for (const item of current) URL.revokeObjectURL(item.preview);
+      return [];
+    });
+  }, []);
+
+  const sendAll = useCallback(() => {
+    setPicked((current) => {
+      if (current.length === 0) return current;
+
+      const added: Row[] = current.map((item) => ({
+        id: item.id,
+        name: item.file.name,
         state: "waiting",
       }));
-      setRows((current) => [...current, ...added]);
+      setRows((rowsNow) => [...rowsNow, ...added]);
 
       const mark = (id: string, patch: Partial<Row>) =>
-        setRows((current) =>
-          current.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+        setRows((rowsNow) =>
+          rowsNow.map((row) => (row.id === id ? { ...row, ...patch } : row)),
         );
 
-      // Two at a time. One is slow on a good connection and four of them
+      // Two at a time. One is slow on a good connection, and four of them
       // fighting over a course wifi access point is slower than two.
-      const jobs = picked.map((file, index) => ({ file, row: added[index]! }));
+      const jobs = [...current];
       const lanes = Array.from({ length: Math.min(2, jobs.length) }, async () => {
         for (;;) {
           const job = jobs.shift();
           if (!job) return;
-          mark(job.row.id, { state: "sending" });
+          mark(job.id, { state: "sending" });
           try {
             await send(drop.code, job.file, creditRef.current);
-            mark(job.row.id, { state: "sent" });
+            mark(job.id, { state: "sent" });
           } catch (first) {
             try {
               await send(drop.code, job.file, creditRef.current);
-              mark(job.row.id, { state: "sent" });
+              mark(job.id, { state: "sent" });
             } catch (second) {
-              mark(job.row.id, {
+              mark(job.id, {
                 state: "failed",
                 error: second instanceof Error ? second.message : String(first),
               });
             }
+          } finally {
+            URL.revokeObjectURL(job.preview);
           }
         }
       });
       void Promise.all(lanes);
-    },
-    [drop.code],
-  );
+      return [];
+    });
+  }, [drop.code]);
 
   const sent = rows.filter((row) => row.state === "sent").length;
   const failed = rows.filter((row) => row.state === "failed").length;
@@ -257,7 +313,7 @@ export function Drop({ drop }: { drop: DropConfig }) {
               onDrop={(event) => {
                 event.preventDefault();
                 setDragging(false);
-                queue(event.dataTransfer.files);
+                choose(event.dataTransfer.files);
               }}
             >
               <button
@@ -265,7 +321,7 @@ export function Drop({ drop }: { drop: DropConfig }) {
                 className={styles.choose}
                 onClick={() => input.current?.click()}
               >
-                Choose photos
+                {picked.length > 0 ? "Add more photos" : "Choose photos"}
               </button>
               <p className={styles.zoneNote}>or drag them in</p>
               <input
@@ -275,11 +331,47 @@ export function Drop({ drop }: { drop: DropConfig }) {
                 multiple
                 className={styles.input}
                 onChange={(event) => {
-                  if (event.target.files) queue(event.target.files);
+                  if (event.target.files) choose(event.target.files);
                   event.target.value = "";
                 }}
               />
             </div>
+
+            {picked.length > 0 ? (
+              <div className={styles.tray}>
+                <div className={styles.trayHead}>
+                  <h2 className={styles.trayTitle}>
+                    {picked.length} ready to send
+                  </h2>
+                  <button type="button" className={styles.again} onClick={clear}>
+                    Clear
+                  </button>
+                </div>
+                <p className={styles.trayNote}>
+                  Nothing has been sent yet. Take any of these out before you do.
+                </p>
+                <ul className={styles.grid}>
+                  {picked.map((item) => (
+                    <li key={item.id} className={styles.tile}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.preview}
+                        alt={item.file.name}
+                        className={styles.thumb}
+                      />
+                      <button
+                        type="button"
+                        className={styles.drop}
+                        aria-label={`Remove ${item.file.name}`}
+                        onClick={() => remove(item.id)}
+                      >
+                        &#215;
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <label className={styles.credit}>
               <span className={styles.creditLabel}>Your name, if you want the credit</span>
@@ -293,6 +385,16 @@ export function Drop({ drop }: { drop: DropConfig }) {
                 onChange={(event) => setCredit(event.target.value)}
               />
             </label>
+
+            {picked.length > 0 ? (
+              <button
+                type="button"
+                className={`${styles.choose} ${styles.sendAll}`}
+                onClick={sendAll}
+              >
+                Send {picked.length} {picked.length === 1 ? "photo" : "photos"}
+              </button>
+            ) : null}
 
             {rows.length > 0 ? (
               <ul className={styles.rows}>
