@@ -9,6 +9,8 @@
 declare global {
   interface CloudflareEnv {
     EVENT_PHOTOS?: R2Bucket;
+    /** The board's key for reading a drop back out. A Worker secret. */
+    DROP_ADMIN_KEY?: string;
     STAGE?: string;
   }
 }

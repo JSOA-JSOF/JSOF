@@ -14,10 +14,11 @@ import {
  * connections, and a batch that fails at file nine loses the first eight;
  * one at a time means a retry costs one photograph.
  *
- * Nothing is read back out through this route. The board collects the
- * photographs from the bucket, which is private, and nothing an attendee
- * sends appears anywhere on the site. That is the promise the page makes
- * and this is the half of it that has to be true in code: there is no GET.
+ * Nothing is read back out through this route, and nothing an attendee
+ * sends appears anywhere on the site. That is the promise the page makes,
+ * and this is the half of it that has to be true in code: this file has no
+ * GET, and the two routes that do read are behind a key the board holds
+ * and the sign does not carry. See ./manifest and ./object.
  */
 
 export const dynamic = "force-dynamic";

@@ -9,3 +9,4 @@ coverage/
 # Cloudflare adapter build output
 .open-next/
 .wrangler/
+event-photos/
