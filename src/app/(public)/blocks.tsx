@@ -203,6 +203,50 @@ export function EffortCards({
 }
 
 /**
+ * The partner acknowledgments.
+ *
+ * A grid, but a restrained one, and the restraint is the point. A 501(c)(3)
+ * acknowledging a sponsor may state their name, logo, locations and product
+ * lines; the moment it adds praise, comparison or an inducement it becomes
+ * advertising, which costs the sponsor their deduction and can create
+ * taxable income here. So each card carries the organization, a factual
+ * statement of what they do with the Foundation if there is one, and a link.
+ *
+ * `relationship` is null for two of the three, and renders as nothing.
+ * Absence is the correct output: an adjective would not be.
+ */
+export function PartnerCards({
+  items,
+}: {
+  items: { slug: string; organization: string; url: string; relationship: string | null }[];
+}) {
+  return (
+    <ul className={styles.offices}>
+      {items.map((partner) => (
+        <li key={partner.slug} className={styles.office}>
+          <h3 className={styles.officeRole}>{partner.organization}</h3>
+          {partner.relationship ? (
+            <p className={styles.officeRemit}>{partner.relationship}</p>
+          ) : (
+            <p className={styles.officeRemit} />
+          )}
+          <div className={styles.officeFoot}>
+            <a
+              className={styles.officeMail}
+              href={partner.url}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {partner.url.replace(/^https?:\/\//, "")}
+            </a>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
  * The crest, for the masthead.
  *
  * Decorative: the wordmark beside it carries the name. It lives here rather
