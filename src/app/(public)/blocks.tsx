@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ContactRole } from "./contact-roles";
 import { PUBLIC_MAILBOXES, SECRETARY_MAILBOX } from "./contact-roles";
 import { PUBLIC_IMAGES, publicImage, type PublicImageKey } from "./media";
+import { sponsorLogo, type SponsorLogoKey } from "./sponsor-logos";
 import type { Programme } from "./programmes";
 import styles from "./blocks.module.css";
 
@@ -342,6 +343,100 @@ export function PartnerCards({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * The sponsor wall, by level.
+ *
+ * Built to look right with no logos at all, because for most of its life
+ * that is what it will be: a sponsor list arrives as names long before
+ * anybody collects twenty-four image files. So the name is the unit and
+ * the mark is an optional addition to it, rather than a wall of marks
+ * with holes in it.
+ *
+ * Eagle gets more room than Gold, and Gold more than Silver. That is the
+ * whole of what the levels buy here, and it is what the board at the
+ * course does too.
+ */
+/**
+ * One sponsor's mark.
+ *
+ * Its own component so the manifest lookup sits inside the tag that uses
+ * it. The test that every image resolves through a manifest reads the
+ * `<img>` itself, and it should: a lookup three lines above, assigned to
+ * a variable, is exactly the shape that lets a literal path creep in
+ * later without the test noticing.
+ */
+function SponsorMark({ logo, label }: { logo: SponsorLogoKey; label: string }) {
+  return (
+    <span className={styles.sponsorPlate}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={sponsorLogo(logo).src}
+        alt={label}
+        className={styles.sponsorLogo}
+      />
+    </span>
+  );
+}
+
+export function SponsorWall({
+  levels,
+  sponsors,
+}: {
+  levels: { key: string; label: string }[];
+  sponsors: {
+    slug: string;
+    organization: string;
+    level: string;
+    url: string | null;
+    logo: SponsorLogoKey | null;
+  }[];
+}) {
+  return (
+    <div className={styles.wall}>
+      {levels.map((level) => {
+        const here = sponsors.filter((sponsor) => sponsor.level === level.key);
+        if (here.length === 0) return null;
+        return (
+          <section key={level.key} className={styles.tier}>
+            <h2 className={styles.tierName}>{level.label}</h2>
+            <ul className={`${styles.tierList} ${styles[`tier_${level.key}`] ?? ""}`}>
+              {here.map((sponsor) => {
+                const body = (
+                  <>
+                    {sponsor.logo ? (
+                      <SponsorMark
+                        logo={sponsor.logo}
+                        label={sponsor.organization}
+                      />
+                    ) : null}
+                    <span className={styles.sponsorName}>{sponsor.organization}</span>
+                  </>
+                );
+                return (
+                  <li key={sponsor.slug} className={styles.sponsor}>
+                    {sponsor.url ? (
+                      <a
+                        className={styles.sponsorLink}
+                        href={sponsor.url}
+                        rel="noopener noreferrer"
+                        target="_blank"
+                      >
+                        {body}
+                      </a>
+                    ) : (
+                      <span className={styles.sponsorLink}>{body}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
   );
 }
 

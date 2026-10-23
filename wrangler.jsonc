@@ -42,7 +42,7 @@
     //   "public-beta" the whole public tier, board and apply held back
     //   "live"        nothing held back. Needs a real database and real
     //                 authentication first.
-    "STAGE": "mvp"
+    "STAGE": "public-beta"
   },
   "observability": {
     "enabled": true

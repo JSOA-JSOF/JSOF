@@ -55,6 +55,11 @@ export default function PartnersPage() {
             note: "Tiers, benefit valuation, and the approved wording",
           },
           {
+            href: "/jsof/sponsors",
+            label: "This year's sponsors",
+            note: "Everyone who paid for the 2026 Golf Tournament, by level",
+          },
+          {
             href: "/donate/sponsor",
             label: "Sponsor an event",
             note: "From $2,500, through the Fundraising Chair",

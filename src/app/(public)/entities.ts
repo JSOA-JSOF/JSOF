@@ -94,6 +94,7 @@ export const JSOF_PROFILE: EntityProfile = {
     { href: "/jsof/events", label: "Events" },
     { href: "/jsof/scholarships", label: "Scholarships" },
     { href: "/donate", label: "Donate", ownedBy: "foundation" },
+    { href: "/jsof/sponsors", label: "Sponsors" },
     { href: "/jsof/partners", label: "Partners" },
     { href: "/jsof/contact", label: "Contact" },
   ],

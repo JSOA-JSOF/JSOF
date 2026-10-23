@@ -972,3 +972,130 @@
   font-size: 0.94rem;
   line-height: 1.55;
 }
+
+/*
+ * The sponsor wall.
+ *
+ * Designed to read as a donor board rather than a logo grid, because
+ * that is what it is for most of its life: names arrive long before
+ * twenty-four image files do. A mark, where there is one, sits above the
+ * name rather than replacing it, so a row with two logos and four names
+ * still lines up.
+ */
+.wall {
+  margin: clamp(18px, 2.5vw, 28px) 0 0;
+}
+
+.tier + .tier {
+  margin-top: clamp(26px, 4vw, 40px);
+}
+
+.tierName {
+  font-family: var(--display);
+  font-size: clamp(0.78rem, 2.2vw, 0.9rem);
+  font-weight: var(--display-weight);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hue);
+  margin: 0 0 14px;
+  padding-bottom: 9px;
+  border-bottom: var(--rule-weight) var(--rule-style) var(--line);
+}
+
+.tierList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* The levels differ in how much room a name gets, which is the whole of
+   what they buy on this page. */
+.tier_eagle {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+}
+
+.tier_gold {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+}
+
+.tier_silver {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+}
+
+.sponsor {
+  background: var(--panel);
+}
+
+.sponsorLink {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  padding: clamp(16px, 2.4vw, 26px) 14px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+a.sponsorLink:hover .sponsorName {
+  color: var(--hue);
+}
+
+/*
+ * A fixed box, and the mark contained inside it.
+ *
+ * The box sets the size and the logo fills it, rather than the logo
+ * bringing its own. Several of these are SVGs whose intrinsic size is
+ * whatever the owner's header happened to need: Onebrief's is 97 pixels
+ * wide, which left it a third the size of everything beside it. Sizing
+ * from the box gives twenty-four marks of different proportions the same
+ * optical weight, which is the only thing making a logo wall look
+ * deliberate.
+ */
+.sponsorPlate {
+  display: block;
+  width: 100%;
+  max-width: 180px;
+  height: 46px;
+}
+
+.tier_eagle .sponsorPlate {
+  max-width: 230px;
+  height: 66px;
+}
+
+.tier_silver .sponsorPlate {
+  max-width: 150px;
+  height: 40px;
+}
+
+.sponsorLogo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.sponsorName {
+  font-family: var(--display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: 1.2;
+  font-size: 0.95rem;
+}
+
+.tier_eagle .sponsorName {
+  font-size: 1.12rem;
+}
+
+.tier_silver .sponsorName {
+  font-size: 0.88rem;
+}

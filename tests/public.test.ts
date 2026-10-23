@@ -23,6 +23,8 @@ import { DATA_CLASSES, ROLES, type DataClass } from "../src/lib/authz/model";
 import * as membershipState from "../src/lib/membership/state";
 
 import { PUBLIC_IMAGES, publicImage } from "../src/app/(public)/media";
+import { sponsorLogo } from "../src/app/(public)/sponsor-logos";
+import { GOLF_2026_SPONSORS, SPONSOR_LEVELS } from "../src/app/(public)/sponsors";
 import { PROGRAMMES } from "../src/app/(public)/programmes";
 import { ENTITY_PROFILES, JSOA_PROFILE, JSOF_PROFILE } from "../src/app/(public)/entities";
 import {
@@ -93,6 +95,7 @@ const PUBLIC_CONTENT = {
   events: EVENTS,
   linesOfEffort: LINES_OF_EFFORT,
   partners: PARTNERS,
+  sponsors: GOLF_2026_SPONSORS,
   scholarshipPrograms: SCHOLARSHIP_PROGRAMS,
   applicationWindow: APPLICATION_WINDOW,
   eligibility: ELIGIBILITY_PLACEHOLDER,
@@ -324,9 +327,14 @@ describe("the public tier carries no member-identifying field", () => {
     }
   });
 
-  it("renders no image Banner cannot account for", () => {
-    // Every <img> in the one component allowed to have one must take its src
-    // from the manifest rather than from a literal.
+  it("renders no image a manifest cannot account for", () => {
+    // Every <img> in the files allowed to have one must take its src from a
+    // manifest rather than from a literal. There are two, and they answer
+    // different questions: ./media records the OPSEC review for a
+    // photograph, ./sponsor-logos records whose trademark a logo is and
+    // whether we may show it. A logo filed under the OPSEC manifest would
+    // mean writing a meaningless review note, which is how a real control
+    // turns into a formality.
     const sources = RENDERED_SOURCES.filter(
       (file) => file.path.endsWith("blocks.tsx") || file.path.endsWith("Intro.tsx"),
     );
@@ -335,8 +343,8 @@ describe("the public tier carries no member-identifying field", () => {
     for (const file of sources) {
       const imgTags = file.text.match(/<img\b[\s\S]*?\/>/g) ?? [];
       for (const tag of imgTags) {
-        expect(tag, `${file.path}: an img does not resolve through the manifest`).toMatch(
-          /PUBLIC_IMAGES[.[]/,
+        expect(tag, `${file.path}: an img does not resolve through a manifest`).toMatch(
+          /PUBLIC_IMAGES[.[]|publicImage\(|sponsorLogo\(/,
         );
         total += 1;
       }
@@ -746,6 +754,41 @@ describe("partner entries are acknowledgment only", () => {
     }
   });
 
+  it("gives every sponsor a level and nothing that reads as advertising", () => {
+    const levels = new Set(SPONSOR_LEVELS.map((level) => level.key));
+    const slugs = new Set<string>();
+    for (const sponsor of GOLF_2026_SPONSORS) {
+      // The shape is the control. There is no description field, so there
+      // is nowhere for an adjective about a company to be written.
+      expect(Object.keys(sponsor).sort()).toEqual(
+        ["level", "logo", "organization", "slug", "url"].sort(),
+      );
+      expect(levels.has(sponsor.level), `${sponsor.slug}: unknown level`).toBe(true);
+      expect(slugs.has(sponsor.slug), `${sponsor.slug}: listed twice`).toBe(false);
+      slugs.add(sponsor.slug);
+      if (sponsor.url !== null) {
+        expect(sponsor.url.startsWith("https://")).toBe(true);
+      }
+    }
+  });
+
+  it("records whose mark each sponsor logo is before showing it", () => {
+    const owners = new Map(
+      GOLF_2026_SPONSORS.map((sponsor) => [sponsor.slug, sponsor.organization]),
+    );
+    for (const sponsor of GOLF_2026_SPONSORS) {
+      if (sponsor.logo === null) continue;
+      const mark = sponsorLogo(sponsor.logo);
+      // The mark belongs to them, not to us, and the record has to say so.
+      expect(mark.owner).toBe(owners.get(sponsor.slug));
+      expect(mark.src.startsWith("/media/"), `${sponsor.slug}: not a local file`).toBe(
+        true,
+      );
+      expect(mark.source.length).toBeGreaterThan(10);
+      expect(/^\d{4}-\d{2}-\d{2}$/.test(mark.reviewed)).toBe(true);
+    }
+  });
+
   it("states a relationship only where there is a fact to state", () => {
     const withRelationship = PARTNERS.filter((partner) => partner.relationship !== null);
     expect(withRelationship.map((partner) => partner.slug)).toEqual(["patriot-foundation"]);
@@ -782,6 +825,7 @@ describe("every public page is findable", () => {
         "/jsof/partners",
         "/jsof/scholarships",
         "/jsof/scholarships/[programme]",
+        "/jsof/sponsors",
         "/jsof/why-the-foundation",
       ].sort(),
     );
