@@ -11,13 +11,19 @@
 
 .intro {
   --intro-film: 10s;
-  /* A beat of clean picture before anything begins. */
-  --veil-delay: 1s;
-  --veil-run: 9s;
-  --title-delay: 5.6s;
-  --crest-delay: 6.2s;
-  --mission-delay: 7.4s;
-  --type-run: 3.4s;
+  /* The veil runs the exact length of the film and lands on its last frame.
+     Nothing is spent: the whole ten seconds is watchable, the boarding is
+     seen, and the picture is gone at the moment it ends rather than three
+     seconds early.
+
+     The type then follows the black rather than competing with it, which is
+     why the sequence runs past the film to about 13.5s. */
+  --veil-delay: 0s;
+  --veil-run: 10s;
+  --title-delay: 10.1s;
+  --crest-delay: 10.5s;
+  --mission-delay: 11.1s;
+  --type-run: 2.4s;
 
   position: fixed;
   inset: 0;
@@ -58,7 +64,11 @@
   z-index: 1;
   background: var(--dark);
   opacity: 0;
-  animation: fadeIn var(--veil-run) cubic-bezier(0.7, 0, 0.84, 0) forwards;
+  /* Weighted late on purpose. Roughly a third dark by eight seconds, so the
+     action stays readable through the boarding, then closing decisively over
+     the last two. A linear fade would be half dark by five and would bury
+     the part worth watching. */
+  animation: fadeIn var(--veil-run) cubic-bezier(0.65, 0, 0.85, 0.15) forwards;
   animation-delay: var(--veil-delay);
 }
 

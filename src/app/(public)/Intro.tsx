@@ -30,11 +30,17 @@ import styles from "./intro.module.css";
  * Reduced motion skips the whole thing.
  */
 
-/** When the composition is complete. Must match the animation timings. */
-const HOLD_AT_MS = 10_400;
+/**
+ * When the composition is complete. Must match the animation timings.
+ *
+ * The film is 10s and the veil lands on its final frame; the title, crest
+ * and mission follow over the next 3.5s. So the sequence runs past the film,
+ * and this is the moment it settles.
+ */
+const HOLD_AT_MS = 13_700;
 
 /** A stalled video must not hold the page: this is the hard stop. */
-const STALL_LIMIT_MS = 15_000;
+const STALL_LIMIT_MS = 18_000;
 
 /**
  * Set by the front door at the moment a door is clicked, and consumed here.
@@ -55,7 +61,31 @@ export function Intro({
   /** Fades in at the foot. One paragraph or several. */
   mission: string[];
 }) {
-  const [state, setState] = useState<"checking" | "playing" | "held" | "done">("checking");
+  /**
+   * Decided during render, not in an effect.
+   *
+   * An effect runs after the first paint, so the white page was showing for
+   * a frame before the black took over. Reading the flag in the initialiser
+   * means the sequence is either there on the very first paint or never
+   * mounts at all, and there is no flash either way.
+   *
+   * `window` is absent on the server, where this always renders nothing.
+   */
+  const [state, setState] = useState<"checking" | "playing" | "held" | "done">(() => {
+    if (typeof window === "undefined") return "checking";
+    let cameThroughTheDoor = false;
+    try {
+      cameThroughTheDoor = sessionStorage.getItem(FROM_DOOR_KEY) === "1";
+      // Consumed at once: one arrival, one showing, and a refresh replays
+      // nothing.
+      sessionStorage.removeItem(FROM_DOOR_KEY);
+    } catch {
+      cameThroughTheDoor = false;
+    }
+    if (!cameThroughTheDoor) return "done";
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return "done";
+    return "playing";
+  });
   const videoRef = useRef<HTMLVideoElement>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,28 +97,15 @@ export function Intro({
   }, []);
 
   useEffect(() => {
-    let cameThroughTheDoor = false;
-    try {
-      cameThroughTheDoor = sessionStorage.getItem(FROM_DOOR_KEY) === "1";
-      // Consumed immediately, so a refresh or a later visit to this page
-      // does not replay it. One arrival, one showing.
-      sessionStorage.removeItem(FROM_DOOR_KEY);
-    } catch {
-      cameThroughTheDoor = false;
-    }
-
-    if (!cameThroughTheDoor || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setState("done");
-      return;
-    }
-
-    setState("playing");
+    if (state !== "playing") return;
     holdTimer.current = setTimeout(() => setState("held"), HOLD_AT_MS);
     stallTimer.current = setTimeout(() => setState("held"), STALL_LIMIT_MS);
     return () => {
       if (holdTimer.current) clearTimeout(holdTimer.current);
       if (stallTimer.current) clearTimeout(stallTimer.current);
     };
+    // Runs once: `state` only ever leaves "playing" by the timers below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
