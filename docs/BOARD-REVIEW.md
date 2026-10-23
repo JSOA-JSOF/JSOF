@@ -228,3 +228,58 @@ statements, the scholarship publication promise, and the restraint on
 `/jsof/memorial`. Four reviewers went out of their way to say the writing on
 the memorial page is the best on the site. The problem there is everything
 around it, not the page.
+
+## 9. The recommendations, numbered
+
+Stable numbers so they can be referred to in a meeting. R1 to R12 block a
+public reading of the site. R13 onward do not.
+
+### Blocking
+
+| # | Recommendation | Whose finding |
+|---|---|---|
+| R1 | Decide which entity owns the memorial asset and its capital campaign, then make one memorial fund in that entity and retire the other | Treasurer, Secretary, Memorial |
+| R2 | Decide what the golf fund pays for: charitable proceeds only, or move the fund to the Association | Treasurer |
+| R3 | Build one programme and entity register, and render every page from it instead of restating it | Treasurer, Secretary |
+| R4 | On `/jsof/mission`, show the funding entity where a donor needs it, not the running entity | Secretary, Treasurer |
+| R5 | Send the sponsor advertising and deduction wording to counsel. Do not rewrite it in-house | Fundraising, Secretary |
+| R6 | Send the paver wording to counsel, set the paver price and the good-faith value of the inscription | Memorial |
+| R7 | Publish both EINs, or remove the deductibility claims until they are published | Treasurer, Secretary |
+| R8 | Reconcile the two different North Carolina disclosure strings to one, and confirm the number with the Branch | Secretary |
+| R9 | Carry that disclosure at the point of solicitation, not only on the acknowledgment | Secretary |
+| R10 | Make every control that cannot complete its action inert with a note: apply, give to the memorial, member sign-in | Scholarships, Memorial, Sales, VP Membership |
+| R11 | Route the mailboxes, including one each for the Memorial and Scholarships chairs, or withdraw the published reply times | Memorial, Scholarships, Secretary |
+| R12 | Resolve demo against live. Either drop the "Demo build" badge or `noindex` the site and disable the payment steps | Secretary, Webmaster |
+
+### After that
+
+| # | Recommendation | Whose finding |
+|---|---|---|
+| R13 | A `/governance` page: legal names, state and year of incorporation, EINs, 990s, licence number, conflict-of-interest policy, and the shared board stated plainly | Secretary, Treasurer |
+| R14 | Add "Why the Foundation" to the JSOF nav and footer. It is the only page with the correct tax qualifier and nothing links to it | Secretary |
+| R15 | Add "Memorial" to the JSOF nav, and link it from the `/jsof` hero and from the Memorial Chair's contact entry | Memorial |
+| R16 | One shared scholarship block on all three programme pages: how an application is handled, the dates policy, and the publication promise | Scholarships |
+| R17 | Give the North Carolina Patriot Star page its own callout. Our legal hold and our calendar do not govern a Patriot Foundation award | Scholarships |
+| R18 | Drop "You will get an answer about your own situation" from the eligibility placeholder. It is a private ruling on an unpublished standard | Scholarships |
+| R19 | A fulfilment step in the store: recipient, email, address, and a required size or colour per garment | Sales |
+| R20 | State shipping and the free-shipping threshold up front, and stop charging postage on an emailed gift certificate | Sales |
+| R21 | Resolve sales tax from a postcode, and either wire `postalCode` into the order or stop saying it is kept | Sales |
+| R22 | A quantity stepper in the cart, and make "Keep shopping" carry the cart | Sales |
+| R23 | A sponsorship tier sheet: price, benefits, fair market value, deductible amount, and the named payee entity per tier | Fundraising, Treasurer |
+| R24 | Serve `/_next/static/**` immutable and `/media/**` with a real max-age | Webmaster |
+| R25 | A sitemap, and a `robots.txt` that contains at least one directive | Webmaster |
+| R26 | Fix the 3.04:1 contrast on `/jsof/scholarships` by dropping the layered opacity | Webmaster |
+| R27 | One `h1` on the front door. It currently has two and therefore none | Webmaster |
+| R28 | A branded 404 with a way back into the site | Webmaster |
+| R29 | Canonicals on `/`, `/donate` and `/store`, and trim the nine over-long meta descriptions | Webmaster |
+| R30 | One date format across both event listings, and link the Foundation's event cards to the event pages | Webmaster |
+
+### Already done
+
+| # | Recommendation | Whose finding |
+|---|---|---|
+| R31 | Close the store's member gate, which `?viewer=good-standing` opened on the live site | Sales, VP Membership |
+| R32 | "Closes close in the middle of February" on all three scholarship cards | Scholarships, Secretary, Webmaster |
+| R33 | Partner logos, with the rights record | (asked for separately) |
+| R34 | Force Network's link, which pointed at a registrar's parking page | Webmaster |
+| R35 | Heading levels on `/jsof/partners`, which skipped `h1` to `h3` | Webmaster |
