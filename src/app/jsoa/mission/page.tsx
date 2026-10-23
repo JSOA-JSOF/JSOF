@@ -13,9 +13,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/jsoa/mission" },
 };
 
-/** Only two photographs can lawfully be published, so only two cards get one. */
-const CARD_IMAGE: Record<string, "association-hero" | "foundation-hero" | undefined> = {
-  "memorialize-the-fallen": undefined,
+/** All three lines of effort now have a photograph. */
+const CARD_IMAGE: Record<
+  string,
+  "association-hero" | "foundation-hero" | "memorial" | undefined
+> = {
+  "memorialize-the-fallen": "memorial",
   "scholarships-and-grants": "foundation-hero",
   "family-events-and-support": "association-hero",
 };

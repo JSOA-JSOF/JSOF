@@ -73,6 +73,16 @@ export const PUBLIC_IMAGES = {
     depicts: "NO_PEOPLE",
     note: "The association crest. An emblem, with no people in it at all.",
   },
+  memorial: {
+    src: "/media/memorial.webp",
+    reviewed: "2026-10-23",
+    depicts: "NO_PEOPLE",
+    // The plinth is the subject; the wall sits behind it.
+    focus: "center 60%",
+    note:
+      "The memorial wall and its plinth. Nobody is in the frame at all, " +
+      "and the name plates carry no legible names.",
+  },
   "event-triathlon": {
     src: "/media/event-triathlon.webp",
     reviewed: "2026-10-23",

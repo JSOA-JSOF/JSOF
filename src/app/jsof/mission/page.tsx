@@ -12,10 +12,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/jsof/mission" },
 };
 
-/** The one photograph that suits a Foundation programme. */
-const CARD_IMAGE: Record<string, "foundation-hero" | undefined> = {
+/** Family aid is the one programme with no photograph, and should stay
+ *  that way: it is families in crisis, and there is no image of that we
+ *  could publish. */
+const CARD_IMAGE: Record<string, "foundation-hero" | "memorial" | undefined> = {
   scholarships: "foundation-hero",
-  memorial: undefined,
+  memorial: "memorial",
   "family-aid": undefined,
 };
 
