@@ -1,5 +1,5 @@
-import Link from "next/link";
-
+import { PageHead } from "@/app/(public)/blocks";
+import { PublicShell } from "@/app/(public)/PublicShell";
 import { listPublicFundOptions } from "@/lib/donations/actions";
 import styles from "./donate.module.css";
 import DonateFlow, { type FundOption } from "./DonateFlow";
@@ -26,24 +26,23 @@ export default function DonatePage() {
   ];
 
   return (
-    <div className={styles.page} style={{ ["--hue" as string]: "var(--jsof)" }}>
-      <header className={styles.bar}>
-        <Link href="/" className={styles.back}>
-          ← Both entities
-        </Link>
-        <span className={styles.status}>Give</span>
-      </header>
-
-      <div className={styles.body}>
-        <h1 className={styles.title}>Make a gift</h1>
-        <p className={styles.lede}>
-          Four steps. You choose the organization, the amount, and which funds
-          the money goes to. Card details are entered on the payment
-          provider&rsquo;s own page, not here.
-        </p>
-
+    <PublicShell
+      entity="JSOF"
+      currentPath="/donate"
+      crumbs={[{ href: "/donate", label: "Donate" }]}
+    >
+      <PageHead
+        eyebrow="Foundation · 501(c)(3)"
+        title="Make a gift"
+        lede={
+          "Four steps. You choose the amount and which funds the money goes " +
+          "to. Card details are entered on the payment provider's own page, " +
+          "never here."
+        }
+      />
+      <div className={styles.page}>
         <DonateFlow funds={funds} />
       </div>
-    </div>
+    </PublicShell>
   );
 }

@@ -39,22 +39,37 @@ export type PublicEvent = {
   dates: EventDates;
   /** How the price is put together, and why it is put together that way. */
   pricingNote: string;
-  registration: OutboundRoute;
+  /**
+   * Where to register. `null` where there is nowhere to send anyone yet.
+   *
+   * Ticketing is not built, and /store/tickets returned 404 on the live site
+   * while events linked to it. Same reasoning as `ApplyRoute` in
+   * scholarships.ts: a link that cannot take a registration is worse than an
+   * honest absence, and pointing it at the merchandise catalogue instead
+   * would just move the lie.
+   */
+  registration: OutboundRoute | null;
   sponsorship: OutboundRoute;
   volunteering: string;
 };
 
+/**
+ * Sponsorship enquiries go to the office, not to a tier sheet.
+ *
+ * This pointed at /donate/sponsor, which does not exist and returned 404 on
+ * the live site. Tiers are not published because the board has not settled
+ * which benefits fall on which side of the IRC 513(i) line, and publishing a
+ * sheet we then have to withdraw is worse than publishing none. See
+ * docs/ENTITY-SPLIT.md.
+ */
 const SPONSORSHIP: OutboundRoute = {
   href: "/donate/sponsor",
-  label: "Sponsorship packages",
+  label: "Sponsor this event",
   ownedBy: "foundation",
 };
 
-const REGISTRATION: OutboundRoute = {
-  href: "/store/tickets",
-  label: "Registration and tickets",
-  ownedBy: "store",
-};
+/** Ticketing is not built. See the note on `registration` above. */
+const REGISTRATION = null;
 
 export const EVENTS: PublicEvent[] = [
   {
@@ -103,8 +118,8 @@ export const EVENTS: PublicEvent[] = [
     title: "Joint Special Operations Golf Tournament",
     kind: "Charity golf",
     summary:
-      "A one-day charity golf tournament whose proceeds fund the memorial, " +
-      "scholarships, and family events.",
+      "A one-day charity golf tournament supporting JSOC warriors and their " +
+      "families. Honor, support, strength.",
     whatItIs: [
       "A one-day tournament, open to the public as well as to the JSOC " +
         "community. Teams enter, companies sponsor holes, and the proceeds go " +
@@ -118,9 +133,9 @@ export const EVENTS: PublicEvent[] = [
       "Members and their guests.",
     ],
     dates: {
-      state: "TO_BE_CONFIRMED",
-      typicalTiming: "Usually held in the spring.",
-      confirmedBy: "Events Chair",
+      state: "CONFIRMED",
+      startsAt: "2026-10-23",
+      venue: "Fayetteville, North Carolina",
     },
     pricingNote:
       "The entry fee buys participation, and a fee to participate sits " +

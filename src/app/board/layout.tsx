@@ -10,6 +10,23 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
+/**
+ * Never prerendered.
+ *
+ * Every board screen is a function of who is signed in, so there is no such
+ * thing as a correct static version of one. Next tried to build them anyway
+ * and ran straight into `assertDevOnly()`, which refuses to let the dev
+ * persona switcher into a production build. That guard is right and stays:
+ * the fix is to stop asking for a static render, not to weaken it.
+ *
+ * At runtime these routes are rewritten to /not-yet by src/middleware.ts for
+ * as long as STAGE is not "live", so this code does not execute in the
+ * preview at all. If the middleware were ever removed, the guard would still
+ * throw rather than serve a screen with fake authentication, which is the
+ * right way round to fail.
+ */
+export const dynamic = "force-dynamic";
+
 const NAV = [
   { href: "/board", label: "Overview" },
   { href: "/board/membership", label: "Membership" },

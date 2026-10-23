@@ -106,3 +106,20 @@ export type PublicImageKey = keyof typeof PUBLIC_IMAGES;
  *      promises never to identify one. That is a tension in the editorial
  *      line rather than a breach, and it is the board's call.
  */
+
+/**
+ * Read an entry as a `PublicImage`.
+ *
+ * `PUBLIC_IMAGES` is `as const satisfies`, which keeps each entry's literal
+ * type exact. That is what makes an unreviewed image a type error, and it is
+ * worth keeping. The cost is that an entry which omits an optional field does
+ * not have that property at all, so reading `.focus` straight off the union
+ * fails to compile for the entries that never declared one.
+ *
+ * This accessor widens a single entry to the declared shape, where the
+ * optional fields exist and are simply undefined. Call it rather than
+ * indexing the object when you need an optional field.
+ */
+export function publicImage(key: PublicImageKey): PublicImage {
+  return PUBLIC_IMAGES[key];
+}

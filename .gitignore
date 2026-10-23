@@ -5,3 +5,7 @@ node_modules/
 *.tsbuildinfo
 coverage/
 .DS_Store
+
+# Cloudflare adapter build output
+.open-next/
+.wrangler/

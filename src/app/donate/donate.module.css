@@ -1,6 +1,8 @@
+/* No longer the page: this sits inside PublicShell, which owns the full-height
+   layout. Keeping min-height here forced a second viewport inside the first
+   and left a screen of empty black under the content. It is now just a
+   container, kept so the --hue it carries still applies. */
 .page {
-  min-height: 100vh;
-  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }

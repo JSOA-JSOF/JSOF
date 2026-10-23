@@ -57,20 +57,22 @@ export default function EventsIndex() {
 
       <Section title="Taking part" id="taking-part">
         <p>
-          Registration and sponsorship are handled elsewhere on this site. Both
-          open when the dates are confirmed.
+          Sponsorship is handled through the Foundation, because a sponsorship
+          is a gift to the charitable entity and a ticket is not. Online
+          registration is not built yet, so entries go through the Events
+          Chair.
         </p>
         <OutboundLinks
           items={[
             {
-              href: "/store/tickets",
-              label: "Registration and tickets",
-              note: "Opens with the confirmed dates",
+              href: "/donate/sponsor",
+              label: "Sponsor an event",
+              note: "Arranged by the Fundraising Chair, through the Foundation",
             },
             {
-              href: "/donate/sponsor",
-              label: "Sponsorship packages",
-              note: "Arranged by the Fundraising Chair, through the Foundation",
+              href: "/jsoa/contact",
+              label: "Ask about entering",
+              note: "Events Chair. Online registration is not built yet.",
             },
             {
               href: "/jsoa/contact",

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import type { ContactRole } from "./contact-roles";
 import { SECRETARY_MAILBOX } from "./contact-roles";
-import { PUBLIC_IMAGES, type PublicImageKey } from "./media";
+import { PUBLIC_IMAGES, publicImage, type PublicImageKey } from "./media";
 import type { Programme } from "./programmes";
 import styles from "./blocks.module.css";
 
@@ -61,7 +61,7 @@ export function Banner({
         src={PUBLIC_IMAGES[image].src}
         alt=""
         className={styles.bannerImage}
-        style={{ objectPosition: PUBLIC_IMAGES[image].focus ?? "center" }}
+        style={{ objectPosition: publicImage(image).focus ?? "center" }}
       />
       {caption ? <figcaption className={styles.bannerCaption}>{caption}</figcaption> : null}
     </figure>
@@ -174,7 +174,7 @@ export function Hero({
    */
   full?: boolean;
 }) {
-  const photo = PUBLIC_IMAGES[image];
+  const photo = publicImage(image);
   const paragraphs = lede === undefined ? [] : Array.isArray(lede) ? lede : [lede];
   return (
     <header className={`${styles.hero} ${full ? styles.heroFull : ""}`}>

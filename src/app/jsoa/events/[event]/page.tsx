@@ -113,16 +113,29 @@ export default async function EventPage({ params }: EventParams) {
         </p>
         <OutboundLinks
           items={[
-            {
-              href: event.registration.href,
-              label: event.registration.label,
-              note: "Opens when the date is confirmed",
-            },
+            ...(event.registration
+              ? [
+                  {
+                    href: event.registration.href,
+                    label: event.registration.label,
+                    note: "Opens when the date is confirmed",
+                  },
+                ]
+              : []),
             {
               href: event.sponsorship.href,
               label: event.sponsorship.label,
               note: "Fundraising Chair, through the Foundation",
             },
+            ...(event.registration
+              ? []
+              : [
+                  {
+                    href: "/jsoa/contact",
+                    label: "Ask about taking part",
+                    note: "Events Chair. Online registration is not built yet.",
+                  },
+                ]),
           ]}
         />
       </Section>

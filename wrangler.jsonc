@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jsoa-jsof-platform",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  // nodejs_compat is required by the adapter: Next's server code expects a
+  // Node runtime, and this is the shim layer that gives it one on workerd.
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    // Gates the routes that depend on persistence we have not built. See
+    // src/middleware.ts. Set to "live" only once there is a real database
+    // and real authentication.
+    "STAGE": "public-beta"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

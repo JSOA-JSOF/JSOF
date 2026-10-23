@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { PublicShell } from "@/app/(public)/PublicShell";
+
 import { formatCents } from "@/lib/store/cart";
 import { DEV_SWITCHER_WARNING, DEV_VIEWERS } from "@/lib/store/dev";
 import type { Product, PublicProduct } from "@/lib/store/types";
@@ -9,6 +11,18 @@ import styles from "./store.module.css";
 /** The Association hue, set once so everything below reads var(--hue). */
 export const HUE_STYLE = { ["--hue" as string]: "var(--jsoa)" };
 
+/**
+ * The store's shell, now the Association's shell.
+ *
+ * This used to render its own bar and its own chrome, which meant a member
+ * clicking "Store" in the nav landed on something that looked like a
+ * different website: no crest, no navigation, and no way back except the
+ * browser button. The store is the Association's, so it uses the
+ * Association's shell like every other page of it.
+ *
+ * `status` is kept in the signature and rendered as a breadcrumb tail, so the
+ * seven pages calling this did not all have to change.
+ */
 export function Shell({
   crumb,
   crumbHref,
@@ -21,15 +35,18 @@ export function Shell({
   children: React.ReactNode;
 }) {
   return (
-    <div className={styles.page} style={HUE_STYLE}>
-      <header className={styles.bar}>
-        <Link href={crumbHref} className={styles.back}>
-          {`← ${crumb}`}
-        </Link>
-        <span className={styles.status}>{status}</span>
-      </header>
-      {children}
-    </div>
+    <PublicShell
+      entity="JSOA"
+      currentPath="/store"
+      crumbs={crumbHref === "/jsoa" ? [{ href: "/store", label: "Store" }] : [
+        { href: "/store", label: "Store" },
+        { href: crumbHref, label: crumb },
+      ]}
+    >
+      <div className={styles.page} style={HUE_STYLE}>
+        {children}
+      </div>
+    </PublicShell>
   );
 }
 

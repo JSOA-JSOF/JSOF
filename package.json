@@ -11,23 +11,28 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
   },
   "dependencies": {
+    "@prisma/client": "^6.16.2",
     "next": "^15.5.4",
+    "next-auth": "^5.0.0-beta.25",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "@prisma/client": "^6.16.2",
-    "next-auth": "^5.0.0-beta.25",
-    "stripe": "^18.5.0",
     "resend": "^6.0.1",
+    "stripe": "^18.5.0",
     "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.13",
     "@types/node": "^24.5.2",
     "@types/react": "^19.1.13",
     "prisma": "^6.16.2",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.152.0"
   }
 }
