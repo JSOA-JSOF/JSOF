@@ -458,33 +458,28 @@ export function Offices({ items }: { items: ContactRole[] }) {
     <ul className={styles.offices}>
       {items.map((office) => (
         <li className={styles.office} key={office.slug}>
-          <div>
-            <span className={styles.officeRole}>{office.role}</span>
-            <div className={styles.officeMeta}>
-              {office.mailboxLive ? (
-                <a className={styles.officeMail} href={`mailto:${office.mailbox}`}>
-                  {office.mailbox}
-                </a>
-              ) : (
-                <span className={styles.officePending}>
-                  Write to{" "}
-                  <a
-                    className={styles.officeMail}
-                    href={`mailto:${SECRETARY_MAILBOX}`}
-                  >
-                    {SECRETARY_MAILBOX}
-                  </a>{" "}
-                  and ask for this office.
-                </span>
-              )}
-            </div>
-            <div className={styles.officeMeta}>
-              <span className={styles.officeResponds}>
-                Replies within {office.respondsWithin}
-              </span>
-            </div>
-          </div>
+          <h3 className={styles.officeRole}>{office.role}</h3>
           <p className={styles.officeRemit}>{office.remit}</p>
+          <div className={styles.officeFoot}>
+            {office.mailboxLive ? (
+              <a className={styles.officeMail} href={`mailto:${office.mailbox}`}>
+                {office.mailbox}
+              </a>
+            ) : (
+              /* No address is printed for a mailbox that does not exist yet.
+                 A published address that bounces is worse than none, and the
+                 Secretary can route it. */
+              <span className={styles.officePending}>
+                Via{" "}
+                <a className={styles.officeMail} href={`mailto:${SECRETARY_MAILBOX}`}>
+                  the Secretary
+                </a>
+              </span>
+            )}
+            <span className={styles.officeResponds}>
+              Replies within {office.respondsWithin}
+            </span>
+          </div>
         </li>
       ))}
     </ul>
