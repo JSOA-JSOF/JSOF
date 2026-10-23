@@ -156,7 +156,12 @@ export function EffortCards({
      */
     eyebrow: string;
     title: string;
-    statement: string;
+    /**
+     * Optional. An event card carries a date, a name and a place and
+     * nothing else: the summary is on the event's own page, one click away,
+     * and three cards of prose is the thing this pattern replaced.
+     */
+    statement?: string;
     /** The quiet line at the foot: whose work it is, or what kind of thing. */
     foot: string;
     href: string;
@@ -191,7 +196,9 @@ export function EffortCards({
                   {item.eyebrow}
                 </span>
                 <span className={styles.effortTitle}>{item.title}</span>
-                <span className={styles.effortStatement}>{item.statement}</span>
+                {item.statement ? (
+                  <span className={styles.effortStatement}>{item.statement}</span>
+                ) : null}
                 <span className={styles.effortBy}>{item.foot}</span>
               </span>
             </Link>

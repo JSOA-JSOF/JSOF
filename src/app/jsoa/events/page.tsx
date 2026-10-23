@@ -75,8 +75,7 @@ export default function EventsIndex() {
                 : "Date to be confirmed",
             accent: confirmed,
             title: event.title,
-            statement: event.summary,
-            foot: dates.state === "CONFIRMED" ? dates.venue : event.kind,
+            foot: dates.state === "CONFIRMED" ? dates.venue : "Venue to be confirmed",
             href: `/jsoa/events/${event.slug}`,
             image: CARD_IMAGE[event.slug],
           };

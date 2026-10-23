@@ -789,6 +789,11 @@
   opacity: 0.88;
 }
 
+/* A card with no statement: date, name, place, and air between them. */
+.effortBody:not(:has(.effortStatement)) .effortTitle {
+  margin-bottom: 2px;
+}
+
 .effortBy {
   margin-top: 4px;
   font-family: "IBM Plex Mono", ui-monospace, monospace;

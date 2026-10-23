@@ -65,8 +65,7 @@ export default function FoundationEventsPage() {
                 : "Date to be confirmed",
             accent: dates.state === "CONFIRMED",
             title: event.title,
-            statement: event.summary,
-            foot: dates.state === "CONFIRMED" ? dates.venue : event.kind,
+            foot: dates.state === "CONFIRMED" ? dates.venue : "Venue to be confirmed",
             href: "/donate/sponsor",
             image: CARD_IMAGE[event.slug],
           };
