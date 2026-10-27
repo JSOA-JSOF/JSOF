@@ -1,0 +1,93 @@
+# The gate.
+#
+# There was none until now, and the week that prompted it is the
+# argument for it: three defects were found by people reading code and
+# none by a test run. Two separation-of-duties controls that reported
+# success when they refused, and an identity resolver that honoured a
+# query parameter in production. All three would have been caught here.
+#
+# What blocks and what only warns is a deliberate split. A gate that
+# fails for things nobody can fix today is a gate people learn to
+# bypass, and that habit costs more than the checks are worth. So
+# everything below either blocks for a reason somebody can act on, or
+# it reports and does not block.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push supersedes the first. Nothing here is worth finishing
+# for a commit that has already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # `ci` and not `install`: it fails if package-lock.json and
+      # package.json disagree, which is the only way to notice that
+      # somebody committed one without the other.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # The whole suite, not a subset. A module that only runs its own
+      # tests finds out at integration.
+      - name: Test
+        run: npm test
+
+      # Blocks on a high or critical advisory with no current waiver.
+      # See security/waivers.json and scripts/audit-gate.mjs.
+      - name: Dependency advisories
+        run: node scripts/audit-gate.mjs
+
+      # Last, because it is the slowest and the three above find more.
+      - name: Build
+        run: npm run build
+
+  # Reports and never blocks. These are worth seeing on every change and
+  # none of them is a reason to stop a deploy.
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Every advisory, including the waived and the low
+        run: npm audit --omit=dev || true
+
+      - name: Dependencies nothing imports
+        run: |
+          for pkg in $(node -p "Object.keys(require('./package.json').dependencies).join(' ')"); do
+            if ! grep -rqF "$pkg" src tests 2>/dev/null; then
+              echo "::warning::$pkg is a dependency and nothing in src or tests imports it"
+            fi
+          done
+
+      - name: Migrations without a matching repository change
+        run: |
+          echo "migrations: $(ls migrations/*.sql | wc -l)"
+          ls migrations/*.sql

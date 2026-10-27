@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Advisories the build is allowed to ship with, each with a reason and",
+    "a date the decision expires. An expired waiver fails the build exactly",
+    "like an unknown advisory: living with a known problem is a decision",
+    "somebody has to re-make, not one that gets inherited by whoever is on",
+    "shift. Checked by scripts/audit-gate.mjs."
+  ],
+  "advisories": [
+    {
+      "package": "postcss",
+      "severity": "high",
+      "because": "Transitive through next. The advisory is XSS via unescaped </style> in the CSS stringifier, which needs attacker-controlled CSS reaching the build; all CSS here is authored in the repository and none is user supplied. The only fix is a major bump of next, which is not something to do inside a security patch.",
+      "raisedOn": "2026-10-27",
+      "until": "2027-01-31",
+      "owner": "Webmaster",
+      "review": "Bump next deliberately, on its own, with the full suite and a deploy behind it."
+    }
+  ]
+}
