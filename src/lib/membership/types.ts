@@ -28,9 +28,19 @@ import type { MembershipState } from "./state";
  * places, which is the difference between billing somebody once and billing
  * them every year.
  *
- * Not a charitable contribution; the receipt says so. Whether the figure
- * should stay a lifetime payment is a board question and sits on the
- * membership Planning tab.
+ * Not a charitable contribution; the receipt says so.
+ *
+ * Settled on 27 October 2026: membership is a one-time payment. That
+ * had been an open question in three places at once, and two of them
+ * were telling applicants the wrong thing. /jsoa/membership said "One
+ * payment, no renewal" while the application form and its confirmation
+ * both said "$200 a year", so somebody could read the correct price on
+ * Monday and be told a different one at the moment they submitted.
+ *
+ * The consequence worth knowing: there is no renewal, so there is
+ * nothing to remind anybody about and nothing is ever owed after the
+ * first payment. Contracted lines E17, E19 and E29 are written around
+ * a cycle that does not exist. See docs/BUILD-ORDER.md.
  */
 export const DUES_AMOUNT_CENTS = 20_000;
 export const DUES_CURRENCY = "USD" as const;

@@ -406,7 +406,7 @@ function StepReview({ draft }: { draft: Application }) {
       )}
 
       <p className={styles.note}>
-        Dues are $200 a year and are not a charitable contribution. Nothing is charged now.
+        Dues are $200, once, and are not a charitable contribution. Nothing is charged now.
         If your sponsor confirms, you get a payment link. If they do not, or if the three days
         run out, the membership chair looks at your application instead. Either way you hear
         from us within four days.

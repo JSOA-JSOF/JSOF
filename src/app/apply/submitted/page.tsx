@@ -54,8 +54,9 @@ export default async function SubmittedPage() {
         </p>
 
         <p className={styles.note}>
-          Nothing has been charged. Dues are $200 a year, they are due only after an
-          application is accepted, and they are not a charitable contribution.
+          Nothing has been charged. Dues are $200, paid once and not renewed, they are
+          due only after an application is accepted, and they are not a charitable
+          contribution.
         </p>
 
         <div className={styles.actions}>
