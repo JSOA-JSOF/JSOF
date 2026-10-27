@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { EffortCards, PageHead } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
-import { EVENTS } from "@/app/(public)/events";
+import { EVENTS, eventWhen } from "@/app/(public)/events";
 
 export const metadata: Metadata = {
   title: "Events · JSOA",
@@ -22,11 +22,6 @@ const CARD_IMAGE: Record<
   triathlon: "event-triathlon",
 };
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
 /**
  * Format an ISO date without touching the Date constructor.
  *
@@ -35,12 +30,6 @@ const MONTHS = [
  * is the single most important fact on the card, being off by one is not a
  * rounding error. The string is already the three numbers we want.
  */
-function formatDay(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return `${d} ${MONTHS[m - 1]} ${y}`;
-}
-
 /**
  * Events, as a menu.
  *
@@ -64,20 +53,15 @@ export default function EventsIndex() {
 
       <EffortCards
         items={EVENTS.map((event) => {
-          // Narrowed on the discriminant itself: assigning the check to a
-          // boolean first loses it, because TypeScript does not track the
-          // boolean back to the union.
-          const dates = event.dates;
-          const confirmed = dates.state === "CONFIRMED";
+          const when = eventWhen(event.dates);
           return {
             key: event.slug,
-            eyebrow:
-              dates.state === "CONFIRMED"
-                ? formatDay(dates.startsAt)
-                : "Date to be confirmed",
-            accent: confirmed,
+            eyebrow: when.when,
+            // The hue means "this is a fact", which a date that has
+            // already happened is.
+            accent: when.settled,
             title: event.title,
-            foot: dates.state === "CONFIRMED" ? dates.venue : "Venue to be confirmed",
+            foot: when.where,
             href: `/jsoa/events/${event.slug}`,
             image: CARD_IMAGE[event.slug],
           };

@@ -9,7 +9,7 @@ import {
   Section,
 } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
-import { EVENTS, eventBySlug } from "@/app/(public)/events";
+import { EVENTS, eventBySlug, eventWhen } from "@/app/(public)/events";
 import { PHOTO_SUBMISSION } from "@/app/(public)/photos";
 
 export function generateStaticParams() {
@@ -31,18 +31,7 @@ export async function generateMetadata({
   };
 }
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
 /** Split by hand: `new Date` parses as UTC and renders local, a day early. */
-function formatDay(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return `${d} ${MONTHS[m - 1]} ${y}`;
-}
-
 /**
  * One event.
  *
@@ -61,10 +50,7 @@ export default async function EventPage({
   const event = eventBySlug(slug);
   if (!event) notFound();
 
-  const dates = event.dates;
-  const when =
-    dates.state === "CONFIRMED" ? formatDay(dates.startsAt) : "Not yet confirmed";
-  const where = dates.state === "CONFIRMED" ? dates.venue : "Not yet confirmed";
+  const { when, where } = eventWhen(event.dates);
 
   return (
     <PublicShell

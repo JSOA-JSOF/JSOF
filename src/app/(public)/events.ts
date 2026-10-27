@@ -25,6 +25,26 @@ export type EventDates =
       /** ISO date. Rendered in America/New_York at the point of use. */
       startsAt: string;
       venue: string;
+    }
+  | {
+      /**
+       * It has happened.
+       *
+       * A third state, because the two that existed could not describe
+       * the day after an event. CONFIRMED went stale the morning after
+       * the tournament and the test caught it, which was the test
+       * working; moving the date to next year would have been the
+       * tempting fix and a lie, and reverting to TO_BE_CONFIRMED would
+       * have thrown away the fact that it happened at all.
+       *
+       * An event that has been held is not an absence. It is the best
+       * evidence the Association has that it does what it says, and the
+       * page should say so rather than going quiet until next year.
+       */
+      state: "HELD";
+      /** ISO date it was held. */
+      startsAt: string;
+      venue: string;
     };
 
 export type PublicEvent = {
@@ -133,7 +153,7 @@ export const EVENTS: PublicEvent[] = [
       "Members and their guests.",
     ],
     dates: {
-      state: "CONFIRMED",
+      state: "HELD",
       startsAt: "2026-10-23",
       venue: "Fayetteville, North Carolina",
     },
@@ -197,3 +217,71 @@ export const EVENTS_STANDFIRST =
 
 /** The exact wording for an unconfirmed date. One string, used everywhere. */
 export const DATES_TO_BE_CONFIRMED_LABEL = "Dates to be confirmed";
+
+/**
+ * The exact wording for an event that has happened. One string, again.
+ *
+ * Note what it does not do: link to the photographs. The gallery and the
+ * upload page are reached with the same code, so publishing a link to
+ * one publishes the ability to post to the other, and that code is
+ * deliberately only on a printed sign. Giving the gallery its own
+ * separate code would fix that and is the right move if the board wants
+ * the photographs linked from a public page.
+ */
+export const DATE_HELD_PREFIX = "Held";
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** An ISO date as a person reads it. No zero padding, no slashes. */
+export function formatDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+export type EventWhen = {
+  /** The date line: a date, "Held 23 October 2026", or the absence. */
+  when: string;
+  where: string;
+  /** True only for a date that is a fact, which is what the hue means. */
+  settled: boolean;
+  past: boolean;
+};
+
+/**
+ * How an event's timing reads, in one place.
+ *
+ * It was in four places, each testing `state === "CONFIRMED"` and
+ * treating everything else as unconfirmed. Adding HELD therefore made
+ * the tournament render as "Not yet confirmed" the day after it was
+ * played, which is worse than the stale date it replaced, and the type
+ * checker had nothing to say because every comparison was still valid.
+ * One function, so the next state added cannot do that again.
+ */
+export function eventWhen(dates: EventDates): EventWhen {
+  if (dates.state === "CONFIRMED") {
+    return {
+      when: formatDay(dates.startsAt),
+      where: dates.venue,
+      settled: true,
+      past: false,
+    };
+  }
+  if (dates.state === "HELD") {
+    return {
+      when: `${DATE_HELD_PREFIX} ${formatDay(dates.startsAt)}`,
+      where: dates.venue,
+      settled: true,
+      past: true,
+    };
+  }
+  return {
+    when: DATES_TO_BE_CONFIRMED_LABEL,
+    where: "Venue to be confirmed",
+    settled: false,
+    past: false,
+  };
+}

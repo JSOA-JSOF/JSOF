@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { Callout, EffortCards, OutboundLinks, PageHead } from "@/app/(public)/blocks";
 import { PublicShell } from "@/app/(public)/PublicShell";
-import { EVENTS } from "@/app/(public)/events";
+import { EVENTS, eventWhen } from "@/app/(public)/events";
 
 export const metadata: Metadata = {
   title: "Sponsorship · JSOF",
@@ -21,19 +21,8 @@ const CARD_IMAGE: Record<
   triathlon: "event-triathlon",
 };
 
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
 /** Split by hand, not by `new Date`: that parses as UTC and renders local,
  *  which shows the day before across the Americas. */
-function formatDay(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return `${d} ${MONTHS[m - 1]} ${y}`;
-}
-
 /**
  * Sponsorship, from the Foundation's side.
  *
@@ -62,12 +51,12 @@ export default function FoundationEventsPage() {
           return {
             key: event.slug,
             eyebrow:
-              dates.state === "CONFIRMED"
-                ? formatDay(dates.startsAt)
+              eventWhen(dates).settled
+                ? eventWhen(dates).when
                 : "Date to be confirmed",
-            accent: dates.state === "CONFIRMED",
+            accent: eventWhen(dates).settled,
             title: event.title,
-            foot: dates.state === "CONFIRMED" ? dates.venue : "Venue to be confirmed",
+            foot: eventWhen(dates).where,
             href: "/donate/sponsor",
             image: CARD_IMAGE[event.slug],
           };

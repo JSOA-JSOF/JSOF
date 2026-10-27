@@ -33,7 +33,7 @@ import {
   JSOF_CONTACTS,
   type ContactRole,
 } from "../src/app/(public)/contact-roles";
-import { EVENTS, eventBySlug } from "../src/app/(public)/events";
+import { eventWhen, EVENTS, eventBySlug } from "../src/app/(public)/events";
 import { LINES_OF_EFFORT } from "../src/app/(public)/mission";
 import { PARTNERS } from "../src/app/(public)/partners";
 import {
@@ -653,13 +653,40 @@ describe("event pages state that dates are unconfirmed rather than showing a sta
       if (event.dates.state === "TO_BE_CONFIRMED") {
         expect(event.dates.confirmedBy).toBe("Events Chair");
         expect(event.dates.typicalTiming.length).toBeGreaterThan(0);
-      } else {
-        expect(/^\d{4}-\d{2}-\d{2}$/.test(event.dates.startsAt), event.slug).toBe(true);
-        expect(event.dates.venue.length, event.slug).toBeGreaterThan(0);
+        continue;
+      }
+      expect(/^\d{4}-\d{2}-\d{2}$/.test(event.dates.startsAt), event.slug).toBe(true);
+      expect(event.dates.venue.length, event.slug).toBeGreaterThan(0);
+      if (event.dates.state === "CONFIRMED") {
         expect(
           event.dates.startsAt >= today,
-          `${event.slug} publishes a date that has already passed: ${event.dates.startsAt}`,
+          `${event.slug} publishes a date that has already passed: say HELD instead`,
         ).toBe(true);
+      } else {
+        // HELD is the day-after state, and it has to actually be the day
+        // after. An event marked held before it happens is the same stale
+        // claim in the other direction.
+        expect(
+          event.dates.startsAt < today,
+          `${event.slug} is marked held but has not happened yet`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("says an event has been held rather than going quiet about it", () => {
+    // The failure this replaces: the tournament stayed CONFIRMED with a
+    // past date, and the first fix anybody reaches for is to move the
+    // date to next year, which publishes a date nobody has set.
+    for (const event of EVENTS) {
+      const when = eventWhen(event.dates);
+      expect(when.when.length, event.slug).toBeGreaterThan(0);
+      expect(when.where.length, event.slug).toBeGreaterThan(0);
+      if (event.dates.state === "HELD") {
+        expect(when.past, event.slug).toBe(true);
+        expect(when.when.startsWith("Held "), event.slug).toBe(true);
+        // A past date is still a fact, so it keeps the hue.
+        expect(when.settled, event.slug).toBe(true);
       }
     }
   });
