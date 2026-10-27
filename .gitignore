@@ -10,3 +10,7 @@ coverage/
 .open-next/
 .wrangler/
 event-photos/
+
+# Agent worktrees. Each is its own checkout; they must never be
+# committed into the repository they are a copy of.
+.claude/worktrees/
