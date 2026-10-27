@@ -98,11 +98,31 @@ Break-glass access logs and notifies the President and Secretary.
 ## Stack
 
 - Next.js (app router), TypeScript, React
-- Postgres via Prisma
-- Auth.js with TOTP MFA required for every non-public tier
+- Cloudflare D1 (SQLite), US region ENAM. See the note below.
+- Email link plus TOTP, implemented directly. See the note below.
 - Stripe, separate accounts per entity, for dues and donations
 - Resend for transactional mail (vouch requests, receipts, notices)
 - US-hosted. Confirm before adding any vendor.
+
+Two departures from what this section used to say, recorded here rather
+than left to be discovered.
+
+**Postgres became D1.** The Worker already runs on Cloudflare, so
+Postgres would have meant a third-party host to clear as US-hosted, a
+second bill, and a network hop to the database on every request. D1 is
+SQLite rather than Postgres and its reporting is weaker, which at a few
+hundred members and a decade of minutes does not bite. Reconsider if
+cross-entity reporting ever needs real window functions.
+
+**Auth.js became our own session layer.** Auth.js brings its own session
+model, and we had already designed `session`, `login_token` and
+`credential` around single-use hashed tokens and a separate MFA gate.
+Running both would have meant two notions of a session, with the policy
+layer reading one and the adapter writing the other. What is not
+hand-rolled is the hard part: HMAC comes from WebCrypto, and the TOTP
+implementation is checked against every published vector in RFC 4226 and
+RFC 6238 in `tests/auth.test.ts`. If that stops being true, replace it
+with a dependency.
 
 ## Module ownership
 

@@ -1,0 +1,151 @@
+/* Its own tokens: the sign-in screen is reached from an email, often on
+   a phone, and must not depend on the public shell being loaded. */
+.page {
+  --gold: #c8a349;
+  --ink: #faf8f4;
+  --ink-2: #b9b3a6;
+  --black: #0b0a08;
+  --panel: #15130f;
+  --line: #2a2620;
+  --bad: #d4766a;
+
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 5vw, 48px);
+  background: var(--black);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.card {
+  width: 100%;
+  max-width: 26rem;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.title {
+  margin: 0 0 14px;
+  font-size: clamp(1.4rem, 5vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.body {
+  margin: 0 0 20px;
+  color: var(--ink-2);
+  line-height: 1.6;
+  font-size: 0.95rem;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+}
+
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  /* 16px exactly: anything smaller makes iOS zoom on focus. */
+  font-size: 16px;
+  padding: 13px 14px;
+}
+
+.input:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.codeInput {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 22px;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.button {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--gold);
+  color: var(--black);
+  font-size: 1rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.sent {
+  margin: 16px 0 0;
+  color: var(--gold);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.error {
+  margin: 16px 0 0;
+  color: var(--bad);
+  font-size: 0.9rem;
+}
+
+.secret {
+  margin: 0 0 12px;
+  padding: 14px;
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+  background: var(--panel);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  word-break: break-all;
+  text-align: center;
+}
+
+.small {
+  margin: 18px 0 0;
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.details {
+  margin: 14px 0 20px;
+  color: var(--ink-2);
+  font-size: 0.8rem;
+}
+
+.code {
+  display: block;
+  margin-top: 8px;
+  word-break: break-all;
+  font-size: 0.72rem;
+  color: var(--ink-2);
+}
+
+.link {
+  color: var(--gold);
+}
