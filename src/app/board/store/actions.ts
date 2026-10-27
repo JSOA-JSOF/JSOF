@@ -47,7 +47,7 @@ export async function recordCountAction(formData: FormData): Promise<void> {
   }
 
   try {
-    boardRecordPhysicalCount(subject, { sku, quarter, countedUnits });
+    await boardRecordPhysicalCount(subject, { sku, quarter, countedUnits });
   } catch (error) {
     if (error instanceof AuthzError && error.code === "SELF_APPROVAL") {
       backTo(
@@ -78,7 +78,7 @@ export async function approveRefundAction(formData: FormData): Promise<void> {
   const refundId = String(formData.get("refund") ?? "");
 
   try {
-    boardApproveRefund(subject, refundId);
+    await boardApproveRefund(subject, refundId);
   } catch (error) {
     if (error instanceof AuthzError && error.code === "SELF_APPROVAL") {
       backTo(

@@ -208,6 +208,23 @@ function toFund(row: FundRow): Fund {
  * is the single place that crosses between them. `kind` is the authority on
  * direction because it is what every caller already branches on.
  */
+/**
+ * The convention this module actually uses: a magnitude, with the
+ * direction in `kind`. See the note in `toLedgerEntry`.
+ */
+function positiveMagnitude(value: unknown, id: string): number {
+  const amount = int(value);
+  if (amount < 0) {
+    throw new Error(
+      `ledger entry ${id} has a negative amount_cents. This module stores a ` +
+        `magnitude and carries the direction in \`kind\`; a signed row means ` +
+        `something wrote against a different convention and the totals cannot ` +
+        `be trusted until it is reconciled.`,
+    );
+  }
+  return amount;
+}
+
 function toLedgerEntry(row: LedgerRow): LedgerEntry {
   return {
     id: text(row.id),
@@ -217,7 +234,18 @@ function toLedgerEntry(row: LedgerRow): LedgerEntry {
     account: text(row.account),
     kind: text(row.kind) as LedgerKind,
     memo: text(row.memo),
-    amountCents: Math.abs(int(row.amount_cents)),
+    // Not Math.abs.
+    //
+    // 0008's comment says this column is signed; types.ts says it is
+    // always positive with `kind` carrying the direction. Both cannot
+    // be true, and absorbing the difference with abs() is the worst of
+    // the three options: a correctly-stored reversal of a credit comes
+    // back as a second credit and doubles the figure instead of
+    // cancelling it. Nothing can write one today, because the module
+    // has no ledger write path at all, so this is a trap rather than a
+    // live defect. It refuses rather than guessing, so whoever adds
+    // that write path finds out here instead of in a reconciliation.
+    amountCents: positiveMagnitude(row.amount_cents, text(row.id)),
     minuteRef: row.minute_ref ?? null,
     enteredById: text(row.entered_by_id),
   };
