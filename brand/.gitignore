@@ -1,0 +1,9 @@
+# Raw capture: large, and the processed copy in public/media is what the
+# site actually uses. Keep the originals on the Desktop or in the
+# Association's own storage, not in the repository.
+photos/*
+video/*
+!photos/.gitkeep
+!video/.gitkeep
+
+# Everything else here is artwork and reference, and is tracked.
