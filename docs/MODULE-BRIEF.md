@@ -45,29 +45,81 @@ no writing, no importing its components.
 ## Do not
 
 - Do not run `npm install` or add a dependency. The toolchain is fixed.
-- Do not touch `prisma/`. Persistence lands in a later pass (see below).
+- Do not write a migration. `migrations/` has one owner; see below.
 - Do not commit, branch, or run git commands.
 - Do not weaken, re-implement, or work around anything in `src/lib/authz/`.
 - Do not add a third-party script, font host, analytics tag or pixel.
 
-## Data: repository interface + seed, no database yet
+## Phases, and why the lanes stop working for a while
 
-This is a demo build. Persistence is deliberately deferred so the demo runs with
-no database and so six agents do not fight over one schema.
+The lane model above worked because of one sentence that used to be in
+this file: persistence was deferred *so that six agents would not fight
+over one schema*. That is no longer true. The database exists, and the
+work left is exactly the thing that was deferred. Fanning six agents out
+onto it now produces six incompatible migrations and six guesses at the
+same session shape.
 
-Each module defines, in its own `src/lib/<module>/`:
+So the remaining work goes in three phases, and only two of them fan out.
+
+### Phase 1. The spine. One agent, no fan-out.
+
+Two things that everything else is shaped by:
+
+1. **The schema**, for all six modules at once, in one numbered migration
+   sequence. Not per module, because the foreign keys cross modules: an
+   order points at a member, every audit row points at a person.
+2. **Authentication and the session**, replacing the dev role switcher
+   that currently stands in for it everywhere.
+
+This cannot be parallelised and should not be attempted. Two agents both
+writing `0003_*.sql` is a conflict that silently loses a table, and a
+repository cannot be ported against a schema that is still moving.
+
+### Phase 2. The ports. Six agents, one per module.
+
+Each module implements its existing `repository.ts` interface against D1,
+in its own lane, behind the same interface. This is the ideal fan-out:
+the lanes are already disjoint, the interface is already fixed and was
+written for this swap, and each module already has a test file that
+proves the behaviour.
+
+A module that finds it needs a schema change **reports it and stops**. It
+does not write a migration. One owner for `migrations/`, in every phase.
+
+### Phase 3. The new surfaces. Three or four agents.
+
+Communications, the inbox queue screens, the member self-service portal,
+and the CI and security gate. These touch different paths and no shared
+state, so they run together. Communications is a new lane and needs a
+line in the ownership table before it starts.
+
+## Data: the repository interface, now against D1
+
+Each module has, in `src/lib/<module>/`:
 
 1. `types.ts` — the domain types. Money is `amountCents: number`, integer,
    always. Every record that can belong to an entity carries
    `entity: Entity` from `@/lib/authz/model`.
-2. `repository.ts` — an interface describing the reads and writes your module
-   needs, plus an in-memory implementation backed by seed data.
-3. `seed.ts` — realistic but clearly fictional data. Real-looking names are
-   fine; do not use the actual board members' names from the live site, and do
-   not invent financial figures attributed to the real organizations.
+2. `repository.ts` — the interface, plus the in-memory implementation
+   backed by seed data. **Keep both.** The in-memory one is what the test
+   suite runs against, and it is what makes 818 tests fast enough to run
+   on every change.
+3. `seed.ts` — realistic but clearly fictional data. Real-looking names
+   are fine; do not use the actual board members' names from the live
+   site, and do not invent financial figures attributed to the real
+   organizations.
 
-Swapping to Prisma later should be one new file per module implementing the
-same interface.
+The D1 implementation is a new file implementing the same interface,
+selected at runtime. If porting forces a change to the interface, that is
+a finding worth reporting: it usually means the interface was describing
+the in-memory implementation rather than the module's actual needs.
+
+Conventions, which the first two migrations already follow: text ids,
+never autoincrementing integers; ISO-8601 UTC in text columns; nothing is
+ever deleted, only revoked, closed or superseded. The audit log and the
+message routes are append-only by database trigger, not by convention,
+and that is deliberate — do not add a code path that expects to update
+them.
 
 ## Authorization is not optional
 
@@ -113,6 +165,31 @@ Run, from the repo root, and make sure both pass:
     npx tsc --noEmit
     npm test
 
+The whole suite, not only your own file. Your test file passing while
+someone else's breaks is not a green build, and a module that only runs
+its own tests is a module that finds out at integration.
+
 Then report: what you built, the routes you added, what you stubbed, any place
 you had to depart from the spec, and anything you found that the spec gets
 wrong. Be specific about what is NOT done.
+
+**Say what you did not verify.** A report that reads as uniformly
+confident is the expensive kind, because the reader cannot tell which
+parts to check. If you inferred something from a type rather than running
+it, say so. If a test passes for a reason you do not fully understand,
+say that too.
+
+## What is never delegated
+
+Four things stay with a human, whatever the phase:
+
+- **`src/lib/authz/**`.** The role and capability matrix is the control
+  that several other controls are built on. It changes by review, not by
+  a module deciding it needs more access.
+- **The OPSEC and rights manifests**, `media.ts` and `sponsor-logos.ts`.
+  An agent adding an entry is an agent asserting a review happened.
+- **Anything that states a tax position or a legal obligation.** The
+  deductibility wording, the North Carolina solicitation disclosure, the
+  scholarship eligibility rule. Two of these are already with counsel.
+- **Anything with a commercial consequence**: scope, fees, what is
+  delivered against the statement of work.
