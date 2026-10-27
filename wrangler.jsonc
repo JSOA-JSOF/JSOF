@@ -35,6 +35,17 @@
   "r2_buckets": [
     { "binding": "EVENT_PHOTOS", "bucket_name": "jsoa-event-photos" }
   ],
+  // The platform database. SQLite, in ENAM, which is the US region the
+  // architecture requires. Migrations are in ./migrations and are applied
+  // with `npx wrangler d1 migrations apply jsoa-platform --remote`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jsoa-platform",
+      "database_id": "794c96b2-b144-4bf0-96ad-d007eca7fc0f",
+      "migrations_dir": "migrations"
+    }
+  ],
   "vars": {
     // Which gate is up. See src/middleware.ts.
     //
