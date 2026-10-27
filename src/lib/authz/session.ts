@@ -32,6 +32,7 @@ import {
   touchSession,
   type SessionRow,
 } from "../auth/store";
+import { database } from "../db";
 import { SESSION_COOKIE } from "../auth/tokens";
 import { DEV_COOKIE, personaById, subjectFor, type Persona } from "./personas";
 import type { Subject } from "./policy";
@@ -130,6 +131,23 @@ export async function getCurrentSubject(): Promise<Subject> {
   const live = await getLiveSession();
   if (live) return live.subject;
   if (process.env.NODE_ENV === "production") throw new NotSignedIn();
+
+  // A persona is only allowed where there is no database.
+  //
+  // The switcher mints ids like `dev:vp-membership`, which are not in
+  // `person`. Several tables reference that table, and D1 enforces
+  // foreign keys, so a chair decision recorded by a persona fails with
+  // FOREIGN KEY constraint failed at the end of a workflow that has
+  // already done its work. The membership port found this.
+  //
+  // The two bad fixes were to drop the constraint, which weakens a real
+  // control for a dev-only reason, and to write null, which drops the
+  // approver from the record that the no-self-approval rule depends on.
+  // The right line is this one: the persona switcher exists for working
+  // with no database and no mailbox, and the moment there is a database
+  // there are real identities to use.
+  if (database()) throw new NotSignedIn();
+
   return subjectFor(await getCurrentPersona());
 }
 

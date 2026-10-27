@@ -129,6 +129,18 @@ export async function atomic(
  * win, producing the same number twice. This is the usual fix: a row
  * per counter, incremented in a single statement that returns the new
  * value.
+ *
+ * Verified against D1 rather than assumed: ten concurrent allocations
+ * returned one to ten, out of order, with no duplicate.
+ *
+ * **A counter must be primed when existing records are imported.** It
+ * starts at zero, so the first allocation against a roster imported
+ * with its own numbers returns one that is already taken, and the
+ * unique index then fails the write at the end of a workflow that has
+ * already taken somebody's money. Whoever imports sets the counter to
+ * the highest number already in use. That belongs to the import and
+ * not here, because the alternative inside this function is the
+ * read-then-increment it exists to avoid.
  */
 export async function nextInSequence(name: string): Promise<number> {
   const row = await requireDatabase()
