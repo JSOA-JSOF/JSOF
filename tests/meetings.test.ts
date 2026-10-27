@@ -195,24 +195,24 @@ describe("required: a minute without an entity cannot be saved", () => {
   ];
 
   for (const { label, entity } of cases) {
-    it(`refuses a minute whose entity is ${label}`, () => {
-      const item = repo.listAgendaItems(JSOA_OCT)[0];
-      expect(() =>
+    it(`refuses a minute whose entity is ${label}`, async () => {
+      const item = (await repo.listAgendaItems(JSOA_OCT))[0];
+      await expect(
         repo.saveMinute({
           meetingId: JSOA_OCT,
           entity: entity as Entity | null | undefined,
           agendaItemId: item.id,
           discussion: "Something was said.",
         }),
-      ).toThrowError(MinuteError);
+      ).rejects.toThrowError(MinuteError);
     });
   }
 
-  it("refuses with ENTITY_REQUIRED and says which board was in session", () => {
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
+  it("refuses with ENTITY_REQUIRED and says which board was in session", async () => {
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
     let thrown: unknown;
     try {
-      repo.saveMinute({
+      await repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: null,
         agendaItemId: item.id,
@@ -226,23 +226,23 @@ describe("required: a minute without an entity cannot be saved", () => {
     expect((thrown as MinuteError).message).toMatch(/which entity's board was in session/i);
   });
 
-  it("refuses a value that is not one of the two entities", () => {
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
-    expect(() =>
+  it("refuses a value that is not one of the two entities", async () => {
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
+    await expect(
       repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: "JSOC" as Entity,
         agendaItemId: item.id,
         discussion: "Something was said.",
       }),
-    ).toThrowError(/not one of JSOA or JSOF/);
+    ).rejects.toThrowError(/not one of JSOA or JSOF/);
   });
 
-  it("refuses a minute filed into the wrong entity's book", () => {
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
+  it("refuses a minute filed into the wrong entity's book", async () => {
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
     let thrown: unknown;
     try {
-      repo.saveMinute({
+      await repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: "JSOF",
         agendaItemId: item.id,
@@ -254,23 +254,23 @@ describe("required: a minute without an entity cannot be saved", () => {
     expect((thrown as MinuteError).code).toBe("ENTITY_MISMATCH");
   });
 
-  it("writes nothing when the entity is missing", () => {
-    const before = repo.listMinutes(JSOA_OCT).length;
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
-    expect(() =>
+  it("writes nothing when the entity is missing", async () => {
+    const before = (await repo.listMinutes(JSOA_OCT)).length;
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
+    await expect(
       repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: null,
         agendaItemId: item.id,
         discussion: "Something was said.",
       }),
-    ).toThrow();
-    expect(repo.listMinutes(JSOA_OCT).length).toBe(before);
+    ).rejects.toThrow();
+    expect((await repo.listMinutes(JSOA_OCT)).length).toBe(before);
   });
 
-  it("saves once the entity is named, and stamps it on the record", () => {
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
-    const saved = repo.saveMinute({
+  it("saves once the entity is named, and stamps it on the record", async () => {
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
+    const saved = await repo.saveMinute({
       meetingId: JSOA_OCT,
       entity: "JSOA",
       agendaItemId: item.id,
@@ -280,10 +280,10 @@ describe("required: a minute without an entity cannot be saved", () => {
     expect(saved.ref.startsWith("JSOA-")).toBe(true);
   });
 
-  it("every seeded minute names its entity, and it matches its meeting", () => {
+  it("every seeded minute names its entity, and it matches its meeting", async () => {
     for (const meetingId of [JSOA_SEPT, JSOF_SEPT]) {
-      const meeting = repo.getMeeting(meetingId)!;
-      const entries = repo.listMinutes(meetingId);
+      const meeting = (await repo.getMeeting(meetingId))!;
+      const entries = await repo.listMinutes(meetingId);
       expect(entries.length).toBeGreaterThan(0);
       for (const entry of entries) {
         expect(ENTITIES).toContain(entry.entity);
@@ -294,11 +294,13 @@ describe("required: a minute without an entity cannot be saved", () => {
 });
 
 describe("required: a DECISION item closing with no motion is flagged", () => {
-  it("flags DECISION_WITHOUT_MOTION and marks the minute incomplete", () => {
-    const meeting = repo.getMeeting(JSOA_SEPT)!;
-    const items = repo.listAgendaItems(JSOA_SEPT);
+  it("flags DECISION_WITHOUT_MOTION and marks the minute incomplete", async () => {
+    const meeting = (await repo.getMeeting(JSOA_SEPT))!;
+    const items = await repo.listAgendaItems(JSOA_SEPT);
     const decision = items.find((i) => i.type === "DECISION" && i.itemNumber === 3)!;
-    const entry = repo.listMinutes(JSOA_SEPT).find((e) => e.agendaItemId === decision.id)!;
+    const entry = (await repo.listMinutes(JSOA_SEPT)).find(
+      (e) => e.agendaItemId === decision.id,
+    )!;
 
     expect(entry.motion).toBeNull();
     expect(entry.closed).toBe(true);
@@ -308,20 +310,24 @@ describe("required: a DECISION item closing with no motion is flagged", () => {
     expect(check.incomplete).toBe(true);
   });
 
-  it("does not flag a DISCUSSION item that closes with no motion", () => {
-    const meeting = repo.getMeeting(JSOA_SEPT)!;
-    const items = repo.listAgendaItems(JSOA_SEPT);
+  it("does not flag a DISCUSSION item that closes with no motion", async () => {
+    const meeting = (await repo.getMeeting(JSOA_SEPT))!;
+    const items = await repo.listAgendaItems(JSOA_SEPT);
     const discussion = items.find((i) => i.type === "DISCUSSION")!;
-    const entry = repo.listMinutes(JSOA_SEPT).find((e) => e.agendaItemId === discussion.id)!;
+    const entry = (await repo.listMinutes(JSOA_SEPT)).find(
+      (e) => e.agendaItemId === discussion.id,
+    )!;
     const check = checkMinute(entry, discussion, meeting);
     expect(check.flags).not.toContain(MINUTE_FLAGS.DECISION_WITHOUT_MOTION);
     expect(check.incomplete).toBe(false);
   });
 
-  it("does not flag a decision item that is still open", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const decision = repo.listAgendaItems(JSOA_OCT).find((i) => i.type === "DECISION")!;
-    const saved = repo.saveMinute({
+  it("does not flag a decision item that is still open", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const decision = (await repo.listAgendaItems(JSOA_OCT)).find(
+      (i) => i.type === "DECISION",
+    )!;
+    const saved = await repo.saveMinute({
       meetingId: JSOA_OCT,
       entity: "JSOA",
       agendaItemId: decision.id,
@@ -333,12 +339,12 @@ describe("required: a DECISION item closing with no motion is flagged", () => {
     );
   });
 
-  it("clears the flag once a motion is recorded", () => {
-    const meeting = repo.getMeeting(JSOA_SEPT)!;
-    const decision = repo
-      .listAgendaItems(JSOA_SEPT)
-      .find((i) => i.type === "DECISION" && i.itemNumber === 3)!;
-    const saved = repo.saveMinute({
+  it("clears the flag once a motion is recorded", async () => {
+    const meeting = (await repo.getMeeting(JSOA_SEPT))!;
+    const decision = (await repo.listAgendaItems(JSOA_SEPT)).find(
+      (i) => i.type === "DECISION" && i.itemNumber === 3,
+    )!;
+    const saved = await repo.saveMinute({
       meetingId: JSOA_SEPT,
       entity: "JSOA",
       agendaItemId: decision.id,
@@ -351,21 +357,23 @@ describe("required: a DECISION item closing with no motion is flagged", () => {
     expect(check.incomplete).toBe(false);
   });
 
-  it("keeps the whole book out of adoption while one decision is unmotioned", () => {
-    const meeting = repo.getMeeting(JSOA_SEPT)!;
+  it("keeps the whole book out of adoption while one decision is unmotioned", async () => {
+    const meeting = (await repo.getMeeting(JSOA_SEPT))!;
     const readiness = minuteBookReady(
-      repo.listAgendaItems(JSOA_SEPT),
-      repo.listMinutes(JSOA_SEPT),
+      await repo.listAgendaItems(JSOA_SEPT),
+      await repo.listMinutes(JSOA_SEPT),
       meeting,
     );
     expect(readiness.ready).toBe(false);
     expect(readiness.incompleteRefs).toContain("JSOA-2026-09-min-3");
   });
 
-  it("flags a motion recorded with no vote count", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const decision = repo.listAgendaItems(JSOA_OCT).find((i) => i.type === "DECISION")!;
-    const saved = repo.saveMinute({
+  it("flags a motion recorded with no vote count", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const decision = (await repo.listAgendaItems(JSOA_OCT)).find(
+      (i) => i.type === "DECISION",
+    )!;
+    const saved = await repo.saveMinute({
       meetingId: JSOA_OCT,
       entity: "JSOA",
       agendaItemId: decision.id,
@@ -380,11 +388,11 @@ describe("required: a DECISION item closing with no motion is flagged", () => {
 });
 
 describe("required: a recusal is recorded with a reason and surfaces in the register", () => {
-  it("refuses a recusal with no reason", () => {
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
+  it("refuses a recusal with no reason", async () => {
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
     let thrown: unknown;
     try {
-      repo.saveMinute({
+      await repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: "JSOA",
         agendaItemId: item.id,
@@ -398,9 +406,9 @@ describe("required: a recusal is recorded with a reason and surfaces in the regi
     expect((thrown as MinuteError).code).toBe("RECUSAL_REASON_REQUIRED");
   });
 
-  it("refuses a recusal whose reason is only whitespace", () => {
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
-    expect(() =>
+  it("refuses a recusal whose reason is only whitespace", async () => {
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
+    await expect(
       repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: "JSOA",
@@ -408,12 +416,12 @@ describe("required: a recusal is recorded with a reason and surfaces in the regi
         discussion: "Discussed.",
         recusals: [recusal({ reason: "   \n  " })],
       }),
-    ).toThrowError(MinuteError);
+    ).rejects.toThrowError(MinuteError);
   });
 
-  it("refuses a recusal that names nobody", () => {
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
-    expect(() =>
+  it("refuses a recusal that names nobody", async () => {
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
+    await expect(
       repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: "JSOA",
@@ -421,11 +429,11 @@ describe("required: a recusal is recorded with a reason and surfaces in the regi
         discussion: "Discussed.",
         recusals: [recusal({ personId: "" })],
       }),
-    ).toThrowError(MinuteError);
+    ).rejects.toThrowError(MinuteError);
   });
 
-  it("surfaces the seeded inter-entity recusal in the register, with its reason", () => {
-    const records = repo.listDecisions("JSOF");
+  it("surfaces the seeded inter-entity recusal in the register, with its reason", async () => {
+    const records = await repo.listDecisions("JSOF");
     const transfer = records.find((r) => r.ref === "JSOF-2026-09-min-1")!;
     expect(transfer.recusals).toHaveLength(1);
     expect(transfer.recusals[0].displayName).toBe("Marcus Ellison");
@@ -434,18 +442,20 @@ describe("required: a recusal is recorded with a reason and surfaces in the regi
     expect(transfer.recusals[0].withdrewFromRoom).toBe(true);
   });
 
-  it("surfaces the seeded scholarship conflict recusal in the register", () => {
-    const records = repo.listDecisions("JSOF");
+  it("surfaces the seeded scholarship conflict recusal in the register", async () => {
+    const records = await repo.listDecisions("JSOF");
     const criteria = records.find((r) => r.ref === "JSOF-2026-09-min-3")!;
     expect(criteria.recusals[0].basis).toBe("SCHOLARSHIP_CONFLICT");
     expect(criteria.recusals[0].reason).toMatch(/took no part/i);
   });
 
-  it("carries a newly recorded recusal through to the register with its reason intact", () => {
-    const decision = repo.listAgendaItems(JSOA_OCT).find((i) => i.type === "DECISION")!;
+  it("carries a newly recorded recusal through to the register with its reason intact", async () => {
+    const decision = (await repo.listAgendaItems(JSOA_OCT)).find(
+      (i) => i.type === "DECISION",
+    )!;
     const reason =
       "Her firm supplies the printing for this event, so she stood out of the vote.";
-    const saved = repo.saveMinute({
+    const saved = await repo.saveMinute({
       meetingId: JSOA_OCT,
       entity: "JSOA",
       agendaItemId: decision.id,
@@ -463,17 +473,19 @@ describe("required: a recusal is recorded with a reason and surfaces in the regi
       closed: true,
     });
 
-    const record = repo.listDecisions("JSOA").find((r) => r.ref === saved.ref)!;
+    const record = (await repo.listDecisions("JSOA")).find((r) => r.ref === saved.ref)!;
     expect(record.recusals).toHaveLength(1);
     expect(record.recusals[0].reason).toBe(reason);
     expect(record.recusals[0].basis).toBe("FINANCIAL_INTEREST");
     expect(record.recusals[0].withdrewFromRoom).toBe(false);
   });
 
-  it("flags a recused person who also appears as mover or seconder", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const decision = repo.listAgendaItems(JSOA_OCT).find((i) => i.type === "DECISION")!;
-    const saved = repo.saveMinute({
+  it("flags a recused person who also appears as mover or seconder", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const decision = (await repo.listAgendaItems(JSOA_OCT)).find(
+      (i) => i.type === "DECISION",
+    )!;
+    const saved = await repo.saveMinute({
       meetingId: JSOA_OCT,
       entity: "JSOA",
       agendaItemId: decision.id,
@@ -487,11 +499,11 @@ describe("required: a recusal is recorded with a reason and surfaces in the regi
     expect(check.incomplete).toBe(true);
   });
 
-  it("only counts votes against those present and not recused", () => {
-    const meeting = repo.getMeeting(JSOF_SEPT)!;
-    const item = repo.listAgendaItems(JSOF_SEPT)[0];
+  it("only counts votes against those present and not recused", async () => {
+    const meeting = (await repo.getMeeting(JSOF_SEPT))!;
+    const item = (await repo.listAgendaItems(JSOF_SEPT))[0];
     const present = meeting.attendees.filter((a) => a.present).length;
-    const saved = repo.saveMinute({
+    const saved = await repo.saveMinute({
       meetingId: JSOF_SEPT,
       entity: "JSOF",
       agendaItemId: item.id,
@@ -511,8 +523,8 @@ describe("required: a recusal is recorded with a reason and surfaces in the regi
 });
 
 describe("required: two same-evening meetings produce two separate minute records", () => {
-  it("seeds two meetings on the same date, one per entity", () => {
-    const pairs = repo.listSameDayPairs();
+  it("seeds two meetings on the same date, one per entity", async () => {
+    const pairs = await repo.listSameDayPairs();
     const septembers = pairs.find((p) => p.date === "2026-09-08")!;
     expect(septembers.meetings).toHaveLength(2);
     expect(septembers.meetings.map((m) => m.entity).sort()).toEqual(["JSOA", "JSOF"]);
@@ -522,9 +534,9 @@ describe("required: two same-evening meetings produce two separate minute record
     expect(octobers.meetings.map((m) => m.entity).sort()).toEqual(["JSOA", "JSOF"]);
   });
 
-  it("keeps the two books separate and the references distinct", () => {
-    const jsoa = repo.listMinutes(JSOA_SEPT);
-    const jsof = repo.listMinutes(JSOF_SEPT);
+  it("keeps the two books separate and the references distinct", async () => {
+    const jsoa = await repo.listMinutes(JSOA_SEPT);
+    const jsof = await repo.listMinutes(JSOF_SEPT);
 
     expect(jsoa.length).toBeGreaterThan(0);
     expect(jsof.length).toBeGreaterThan(0);
@@ -537,20 +549,20 @@ describe("required: two same-evening meetings produce two separate minute record
     expect(jsof.map((e) => e.ref)).toContain("JSOF-2026-09-min-1");
   });
 
-  it("the same item number on the same date resolves to two different minutes", () => {
-    const a = repo.getMinuteByRef("JSOA-2026-09-min-1")!;
-    const b = repo.getMinuteByRef("JSOF-2026-09-min-1")!;
+  it("the same item number on the same date resolves to two different minutes", async () => {
+    const a = (await repo.getMinuteByRef("JSOA-2026-09-min-1"))!;
+    const b = (await repo.getMinuteByRef("JSOF-2026-09-min-1"))!;
     expect(a.id).not.toBe(b.id);
     expect(a.entity).toBe("JSOA");
     expect(b.entity).toBe("JSOF");
     expect(a.discussion).not.toBe(b.discussion);
   });
 
-  it("writing the same evening's business into both books touches two records", () => {
-    const jsoaItem = repo.listAgendaItems(JSOA_OCT).find((i) => i.itemNumber === 4)!;
-    const jsofItem = repo.listAgendaItems(JSOF_OCT).find((i) => i.itemNumber === 2)!;
+  it("writing the same evening's business into both books touches two records", async () => {
+    const jsoaItem = (await repo.listAgendaItems(JSOA_OCT)).find((i) => i.itemNumber === 4)!;
+    const jsofItem = (await repo.listAgendaItems(JSOF_OCT)).find((i) => i.itemNumber === 2)!;
 
-    const sending = repo.saveMinute({
+    const sending = await repo.saveMinute({
       meetingId: JSOA_OCT,
       entity: "JSOA",
       agendaItemId: jsoaItem.id,
@@ -558,7 +570,7 @@ describe("required: two same-evening meetings produce two separate minute record
       motion: motion(),
       closed: true,
     });
-    const receiving = repo.saveMinute({
+    const receiving = await repo.saveMinute({
       meetingId: JSOF_OCT,
       entity: "JSOF",
       agendaItemId: jsofItem.id,
@@ -578,10 +590,10 @@ describe("required: two same-evening meetings produce two separate minute record
     expect(minuteRefsCrossEntities(sending.ref, receiving.ref)).toBe(true);
   });
 
-  it("never combines the two entities in the decision register", () => {
-    const all = repo.listDecisions();
-    const jsoaOnly = repo.listDecisions("JSOA");
-    const jsofOnly = repo.listDecisions("JSOF");
+  it("never combines the two entities in the decision register", async () => {
+    const all = await repo.listDecisions();
+    const jsoaOnly = await repo.listDecisions("JSOA");
+    const jsofOnly = await repo.listDecisions("JSOF");
 
     expect(jsoaOnly.every((r) => r.entity === "JSOA")).toBe(true);
     expect(jsofOnly.every((r) => r.entity === "JSOF")).toBe(true);
@@ -590,11 +602,11 @@ describe("required: two same-evening meetings produce two separate minute record
     expect(jsofOnly.length).toBeGreaterThan(0);
   });
 
-  it("names the entity on the face of each agenda notice", () => {
-    const jsoa = repo.getMeeting(JSOA_OCT)!;
-    const jsof = repo.getMeeting(JSOF_OCT)!;
-    const jsoaText = renderAgendaPlainText(jsoa, repo.listAgendaItems(JSOA_OCT));
-    const jsofText = renderAgendaPlainText(jsof, repo.listAgendaItems(JSOF_OCT));
+  it("names the entity on the face of each agenda notice", async () => {
+    const jsoa = (await repo.getMeeting(JSOA_OCT))!;
+    const jsof = (await repo.getMeeting(JSOF_OCT))!;
+    const jsoaText = renderAgendaPlainText(jsoa, await repo.listAgendaItems(JSOA_OCT));
+    const jsofText = renderAgendaPlainText(jsof, await repo.listAgendaItems(JSOF_OCT));
 
     expect(jsoaText).toContain("Joint Special Operations Association");
     expect(jsoaText).toContain("JSOA-2026-10");
@@ -606,18 +618,18 @@ describe("required: two same-evening meetings produce two separate minute record
 });
 
 describe("required: a wrong-role request to minutes fails", () => {
-  it("refuses a Webmaster, who holds NONE on member data", () => {
+  it("refuses a Webmaster, who holds NONE on member data", async () => {
     expect(() => authorizeMinuteRead(webmaster, "JSOA")).toThrowError(AuthzError);
     expect(() => authorizeGovernanceRead(webmaster, "JSOA")).toThrowError(AuthzError);
     expect(canReadMinutes(webmaster, "JSOA")).toBe(false);
   });
 
-  it("refuses a plain member", () => {
+  it("refuses a plain member", async () => {
     expect(() => authorizeMinuteRead(plainMember, "JSOA")).toThrowError(AuthzError);
     expect(readableEntities(plainMember, ENTITIES)).toEqual([]);
   });
 
-  it("refuses the Treasurer the minute book, because AGGREGATE is not row level", () => {
+  it("refuses the Treasurer the minute book, because AGGREGATE is not row level", async () => {
     let thrown: unknown;
     try {
       authorizeMinuteRead(treasurerJsoa, "JSOA");
@@ -632,12 +644,12 @@ describe("required: a wrong-role request to minutes fails", () => {
     expect(canReadMinutes(treasurerJsoa, "JSOA")).toBe(false);
   });
 
-  it("refuses VP Operations the minute book for the same reason", () => {
+  it("refuses VP Operations the minute book for the same reason", async () => {
     expect(() => authorizeMinuteRead(vpOperations, "JSOF")).toThrowError(AuthzError);
     expect(canReadGovernance(vpOperations, "JSOF")).toBe(true);
   });
 
-  it("refuses the President the WRITE, because custody is an office not a level", () => {
+  it("refuses the President the WRITE, because custody is an office not a level", async () => {
     // The President reads both books.
     expect(() => authorizeMinuteRead(president, "JSOA")).not.toThrow();
     expect(() => authorizeMinuteRead(president, "JSOF")).not.toThrow();
@@ -653,7 +665,7 @@ describe("required: a wrong-role request to minutes fails", () => {
     expect(canWriteMinutes(president, "JSOA")).toBe(false);
   });
 
-  it("refuses the wrong entity's Secretary, which is the whole point of two books", () => {
+  it("refuses the wrong entity's Secretary, which is the whole point of two books", async () => {
     expect(() => authorizeMinuteWrite(secretaryJsoaOnly, "JSOA")).not.toThrow();
     expect(() => authorizeMinuteWrite(secretaryJsoaOnly, "JSOF")).toThrowError(AuthzError);
     expect(canWriteMinutes(secretaryJsoaOnly, "JSOF")).toBe(false);
@@ -663,14 +675,14 @@ describe("required: a wrong-role request to minutes fails", () => {
     );
   });
 
-  it("refuses an otherwise-correct Secretary who has not cleared TOTP", () => {
+  it("refuses an otherwise-correct Secretary who has not cleared TOTP", async () => {
     expect(() => authorizeMinuteRead(secretaryNoMfa, "JSOA")).toThrowError(AuthzError);
     expect(() => authorizeMinuteWrite(secretaryNoMfa, "JSOA")).toThrowError(AuthzError);
     expect(() => authorizeGovernanceRead(secretaryNoMfa, "JSOA")).toThrowError(AuthzError);
     expect(canWriteMinutes(secretaryNoMfa, "JSOA")).toBe(false);
   });
 
-  it("refuses agenda writes to everyone but the Secretary of that entity", () => {
+  it("refuses agenda writes to everyone but the Secretary of that entity", async () => {
     expect(() => authorizeAgendaWrite(secretaryBoth, "JSOA")).not.toThrow();
     expect(() => authorizeAgendaWrite(secretaryBoth, "JSOF")).not.toThrow();
     for (const wrong of [president, treasurerJsoa, vpOperations, webmaster, plainMember]) {
@@ -678,7 +690,7 @@ describe("required: a wrong-role request to minutes fails", () => {
     }
   });
 
-  it("lets the Secretary of both entities read and write both books", () => {
+  it("lets the Secretary of both entities read and write both books", async () => {
     for (const entity of ENTITIES) {
       expect(() => authorizeMinuteRead(secretaryBoth, entity)).not.toThrow();
       expect(() => authorizeMinuteWrite(secretaryBoth, entity)).not.toThrow();
@@ -686,7 +698,7 @@ describe("required: a wrong-role request to minutes fails", () => {
     expect(readableEntities(secretaryBoth, ENTITIES)).toEqual(["JSOA", "JSOF"]);
   });
 
-  it("files the minute book under MEMBER_PII, which is what it contains", () => {
+  it("files the minute book under MEMBER_PII, which is what it contains", async () => {
     expect(MINUTE_BOOK_CLASS).toBe("MEMBER_PII");
   });
 });
@@ -696,13 +708,13 @@ describe("required: a wrong-role request to minutes fails", () => {
  * ================================================================== */
 
 describe("minute references", () => {
-  it("formats the documented shape", () => {
+  it("formats the documented shape", async () => {
     expect(
       formatMinuteRef({ entity: "JSOA", year: 2026, month: 10, itemNumber: 4 }),
     ).toBe(MINUTE_REF_EXAMPLE);
   });
 
-  it("adds a session suffix only from the second meeting of a month", () => {
+  it("adds a session suffix only from the second meeting of a month", async () => {
     expect(
       formatMinuteRef({ entity: "JSOF", year: 2026, month: 10, session: 1, itemNumber: 2 }),
     ).toBe("JSOF-2026-10-min-2");
@@ -711,7 +723,7 @@ describe("minute references", () => {
     ).toBe("JSOF-2026-10-S2-min-2");
   });
 
-  it("round-trips through the parser", () => {
+  it("round-trips through the parser", async () => {
     const parsed = parseMinuteRef("JSOF-2026-10-S2-min-12")!;
     expect(parsed).toMatchObject({
       entity: "JSOF",
@@ -723,7 +735,7 @@ describe("minute references", () => {
     });
   });
 
-  it("rejects references that are not references", () => {
+  it("rejects references that are not references", async () => {
     for (const bad of [
       "min-4",
       "JSOA-min-4",
@@ -740,7 +752,7 @@ describe("minute references", () => {
     }
   });
 
-  it("refuses to format an out-of-range month, year or item", () => {
+  it("refuses to format an out-of-range month, year or item", async () => {
     expect(() =>
       formatMinuteRef({ entity: "JSOA", year: 2026, month: 13, itemNumber: 1 }),
     ).toThrowError(MinuteRefError);
@@ -752,13 +764,13 @@ describe("minute references", () => {
     ).toThrowError(MinuteRefError);
   });
 
-  it("derives the reference from the meeting, so the entity cannot disagree", () => {
-    const meeting = repo.getMeeting(JSOF_OCT)!;
+  it("derives the reference from the meeting, so the entity cannot disagree", async () => {
+    const meeting = (await repo.getMeeting(JSOF_OCT))!;
     expect(minuteRefForMeeting(meeting, 3)).toBe("JSOF-2026-10-min-3");
     expect(bookRefForMeeting(meeting)).toBe("JSOF-2026-10");
   });
 
-  it("tells the treasury module when a reference pair does not cross entities", () => {
+  it("tells the treasury module when a reference pair does not cross entities", async () => {
     expect(minuteRefsCrossEntities("JSOA-2026-09-min-1", "JSOF-2026-09-min-1")).toBe(true);
     expect(minuteRefsCrossEntities("JSOA-2026-09-min-1", "JSOA-2026-09-min-2")).toBe(false);
     expect(minuteRefsCrossEntities("JSOA-2026-09-min-1", "not-a-ref")).toBe(false);
@@ -766,61 +778,61 @@ describe("minute references", () => {
 });
 
 describe("agenda", () => {
-  it("totals the estimates and adds the procedural overhead", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const items = repo.listAgendaItems(JSOA_OCT);
+  it("totals the estimates and adds the procedural overhead", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const items = await repo.listAgendaItems(JSOA_OCT);
     const totals = agendaTotals(meeting, items);
     const sum = items.reduce((acc, i) => acc + i.estimatedMinutes, 0);
     expect(totals.estimatedMinutes).toBe(sum);
     expect(totals.committedMinutes).toBe(sum + PROCEDURAL_OVERHEAD_MINUTES);
   });
 
-  it("flags the seeded October Association agenda as overrunning", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const totals = agendaTotals(meeting, repo.listAgendaItems(JSOA_OCT));
+  it("flags the seeded October Association agenda as overrunning", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const totals = agendaTotals(meeting, await repo.listAgendaItems(JSOA_OCT));
     expect(totals.overruns).toBe(true);
     expect(totals.overrunMinutes).toBeGreaterThan(0);
     expect(totals.slackMinutes).toBe(0);
   });
 
-  it("does not flag an agenda that fits, and reports the slack", () => {
-    const meeting = repo.getMeeting(JSOF_OCT)!;
-    const totals = agendaTotals(meeting, repo.listAgendaItems(JSOF_OCT));
+  it("does not flag an agenda that fits, and reports the slack", async () => {
+    const meeting = (await repo.getMeeting(JSOF_OCT))!;
+    const totals = agendaTotals(meeting, await repo.listAgendaItems(JSOF_OCT));
     expect(totals.overruns).toBe(false);
     expect(totals.overrunMinutes).toBe(0);
     expect(totals.slackMinutes).toBeGreaterThan(0);
   });
 
-  it("marks the items that begin after the scheduled close", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const schedule = agendaSchedule(meeting, repo.listAgendaItems(JSOA_OCT));
+  it("marks the items that begin after the scheduled close", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const schedule = agendaSchedule(meeting, await repo.listAgendaItems(JSOA_OCT));
     expect(schedule.some((row) => row.pastScheduledClose)).toBe(true);
     // And it is the tail of the agenda, not the head.
     expect(schedule[0].pastScheduledClose).toBe(false);
   });
 
-  it("reorders a draft agenda and renumbers item numbers only on adoption", () => {
-    const before = repo.listAgendaItems(JSOF_OCT);
+  it("reorders a draft agenda and renumbers item numbers only on adoption", async () => {
+    const before = await repo.listAgendaItems(JSOF_OCT);
     const reversed = [...before].reverse().map((i) => i.id);
-    const after = repo.reorderAgenda(JSOF_OCT, reversed);
+    const after = await repo.reorderAgenda(JSOF_OCT, reversed);
     expect(after.map((i) => i.id)).toEqual(reversed);
     // Item numbers have not moved yet.
     expect(after.map((i) => i.itemNumber).sort((a, b) => a - b)).toEqual(
       before.map((i) => i.itemNumber).sort((a, b) => a - b),
     );
-    repo.adoptAgenda(JSOF_OCT, "2026-10-13T23:50:00.000Z");
-    const adopted = repo.listAgendaItems(JSOF_OCT);
+    await repo.adoptAgenda(JSOF_OCT, "2026-10-13T23:50:00.000Z");
+    const adopted = await repo.listAgendaItems(JSOF_OCT);
     expect(adopted.map((i) => i.itemNumber)).toEqual(
       adopted.map((_, index) => index + 1),
     );
   });
 
-  it("refuses to reorder or add to an adopted agenda", () => {
-    const items = repo.listAgendaItems(JSOA_OCT);
-    expect(() =>
+  it("refuses to reorder or add to an adopted agenda", async () => {
+    const items = await repo.listAgendaItems(JSOA_OCT);
+    await expect(
       repo.reorderAgenda(JSOA_OCT, [...items].reverse().map((i) => i.id)),
-    ).toThrowError(AgendaError);
-    expect(() =>
+    ).rejects.toThrowError(AgendaError);
+    await expect(
       repo.saveAgendaItem({
         meetingId: JSOA_OCT,
         title: "Late new business",
@@ -828,12 +840,12 @@ describe("agenda", () => {
         estimatedMinutes: 5,
         type: "DISCUSSION",
       }),
-    ).toThrowError(AgendaError);
+    ).rejects.toThrowError(AgendaError);
   });
 
-  it("still allows a wording or estimate correction on an adopted agenda", () => {
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
-    const fixed = repo.saveAgendaItem({
+  it("still allows a wording or estimate correction on an adopted agenda", async () => {
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
+    const fixed = await repo.saveAgendaItem({
       id: item.id,
       meetingId: JSOA_OCT,
       title: "Roster composition against the statutory tests",
@@ -846,8 +858,8 @@ describe("agenda", () => {
     expect(fixed.estimatedMinutes).toBe(12);
   });
 
-  it("refuses a nonsense estimate or an empty title", () => {
-    expect(() =>
+  it("refuses a nonsense estimate or an empty title", async () => {
+    await expect(
       repo.saveAgendaItem({
         meetingId: JSOF_OCT,
         title: "   ",
@@ -855,8 +867,8 @@ describe("agenda", () => {
         estimatedMinutes: 10,
         type: "DISCUSSION",
       }),
-    ).toThrowError(AgendaError);
-    expect(() =>
+    ).rejects.toThrowError(AgendaError);
+    await expect(
       repo.saveAgendaItem({
         meetingId: JSOF_OCT,
         title: "Something",
@@ -864,39 +876,41 @@ describe("agenda", () => {
         estimatedMinutes: 0,
         type: "DISCUSSION",
       }),
-    ).toThrowError(AgendaError);
+    ).rejects.toThrowError(AgendaError);
   });
 
-  it("refuses to remove an item that already has a minute against it", () => {
-    const item = repo.listAgendaItems(JSOF_OCT)[0];
-    repo.saveMinute({
+  it("refuses to remove an item that already has a minute against it", async () => {
+    const item = (await repo.listAgendaItems(JSOF_OCT))[0];
+    await repo.saveMinute({
       meetingId: JSOF_OCT,
       entity: "JSOF",
       agendaItemId: item.id,
       discussion: "Discussed.",
     });
-    expect(() => repo.removeAgendaItem(JSOF_OCT, item.id)).toThrowError(RepositoryError);
+    await expect(
+      repo.removeAgendaItem(JSOF_OCT, item.id),
+    ).rejects.toThrowError(RepositoryError);
   });
 
-  it("refuses a minute against an item on the other board's agenda", () => {
-    const jsofItem = repo.listAgendaItems(JSOF_OCT)[0];
-    expect(() =>
+  it("refuses a minute against an item on the other board's agenda", async () => {
+    const jsofItem = (await repo.listAgendaItems(JSOF_OCT))[0];
+    await expect(
       repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: "JSOA",
         agendaItemId: jsofItem.id,
         discussion: "Wrong board.",
       }),
-    ).toThrowError(RepositoryError);
+    ).rejects.toThrowError(RepositoryError);
   });
 });
 
 describe("agenda distribution", () => {
-  it("states the notice period and whether it is satisfied", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("states the notice period and whether it is satisfied", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const early = buildAgendaDistribution(
       meeting,
-      repo.listAgendaItems(JSOA_OCT),
+      await repo.listAgendaItems(JSOA_OCT),
       new Date("2026-10-01T12:00:00.000Z"),
     );
     expect(early.noticeRequiredHours).toBe(noticeRequiredHours(meeting));
@@ -904,77 +918,80 @@ describe("agenda distribution", () => {
 
     const late = buildAgendaDistribution(
       meeting,
-      repo.listAgendaItems(JSOA_OCT),
+      await repo.listAgendaItems(JSOA_OCT),
       new Date("2026-10-12T12:00:00.000Z"),
     );
     expect(late.noticeSatisfied).toBe(false);
   });
 
-  it("requires shorter notice for a special meeting than a regular one", () => {
+  it("requires shorter notice for a special meeting than a regular one", async () => {
     expect(noticeRequiredHours({ session: 1 })).toBeGreaterThan(
       noticeRequiredHours({ session: 2 }),
     );
   });
 
-  it("builds a payload with no recipient addresses in it", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const distribution = buildAgendaDistribution(meeting, repo.listAgendaItems(JSOA_OCT));
+  it("builds a payload with no recipient addresses in it", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const distribution = buildAgendaDistribution(
+      meeting,
+      await repo.listAgendaItems(JSOA_OCT),
+    );
     const payload = resendPayload(meeting, distribution);
     expect(payload.to).toEqual([]);
     expect(distribution.stubbed).toBe(true);
     expect(distribution.recipientRoles.length).toBeGreaterThan(0);
   });
 
-  it("stamps the entity and the minute book on the payload headers", () => {
-    const meeting = repo.getMeeting(JSOF_OCT)!;
+  it("stamps the entity and the minute book on the payload headers", async () => {
+    const meeting = (await repo.getMeeting(JSOF_OCT))!;
     const payload = resendPayload(
       meeting,
-      buildAgendaDistribution(meeting, repo.listAgendaItems(JSOF_OCT)),
+      buildAgendaDistribution(meeting, await repo.listAgendaItems(JSOF_OCT)),
     );
     expect(payload.headers["X-Entity"]).toBe("JSOF");
     expect(payload.headers["X-Minute-Book"]).toBe("JSOF-2026-10");
     expect(payload.subject).toContain("JSOF");
   });
 
-  it("says in the notice that the agenda overruns, when it does", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const text = renderAgendaPlainText(meeting, repo.listAgendaItems(JSOA_OCT));
+  it("says in the notice that the agenda overruns, when it does", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const text = renderAgendaPlainText(meeting, await repo.listAgendaItems(JSOA_OCT));
     expect(text).toContain("OVERRUN");
   });
 
-  it("renders email HTML with no external script, stylesheet or image", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const { html } = buildAgendaDistribution(meeting, repo.listAgendaItems(JSOA_OCT));
+  it("renders email HTML with no external script, stylesheet or image", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const { html } = buildAgendaDistribution(meeting, await repo.listAgendaItems(JSOA_OCT));
     expect(html).not.toMatch(/<script/i);
     expect(html).not.toMatch(/<img/i);
     expect(html).not.toMatch(/<link\s/i);
     expect(html).toContain("JSOA-2026-10");
   });
 
-  it("escapes item titles into the HTML rather than interpolating them raw", () => {
-    repo.saveAgendaItem({
+  it("escapes item titles into the HTML rather than interpolating them raw", async () => {
+    await repo.saveAgendaItem({
       meetingId: JSOF_OCT,
       title: 'Policy on <script>alert("x")</script> wording',
       ownerRole: "SECRETARY",
       estimatedMinutes: 5,
       type: "DISCUSSION",
     });
-    const meeting = repo.getMeeting(JSOF_OCT)!;
-    const { html } = buildAgendaDistribution(meeting, repo.listAgendaItems(JSOF_OCT));
+    const meeting = (await repo.getMeeting(JSOF_OCT))!;
+    const { html } = buildAgendaDistribution(meeting, await repo.listAgendaItems(JSOF_OCT));
     expect(html).not.toMatch(/<script/i);
     expect(html).toContain("&lt;script&gt;");
   });
 });
 
 describe("transcript parser", () => {
-  it("parses Teams timecoded lines into speaker turns", () => {
+  it("parses Teams timecoded lines into speaker turns", async () => {
     const turns = parseSpeakerTurns(SAMPLE_TRANSCRIPT, []);
     expect(turns.length).toBeGreaterThan(10);
     expect(turns[0].speakerLabel).toBe("Marcus Ellison");
     expect(turns[0].timecode).not.toBeNull();
   });
 
-  it("parses plain `Name: text` lines and merges consecutive turns", () => {
+  it("parses plain `Name: text` lines and merges consecutive turns", async () => {
     const turns = parseSpeakerTurns(
       ["Ann Lee: first part.", "Ann Lee: second part.", "Bo Chen: something else."].join("\n"),
     );
@@ -982,7 +999,7 @@ describe("transcript parser", () => {
     expect(turns[0].text).toBe("first part. second part.");
   });
 
-  it("parses WebVTT with voice spans", () => {
+  it("parses WebVTT with voice spans", async () => {
     const turns = parseSpeakerTurns(
       [
         "WEBVTT",
@@ -997,7 +1014,7 @@ describe("transcript parser", () => {
     expect(turns[0].text).toBe("I move that we adjourn.");
   });
 
-  it("drops platform noise rather than minuting it", () => {
+  it("drops platform noise rather than minuting it", async () => {
     const turns = parseSpeakerTurns(
       [
         "WEBVTT",
@@ -1010,12 +1027,12 @@ describe("transcript parser", () => {
     expect(turns[0].text).toBe("right, let us begin.");
   });
 
-  it("does not treat a label like `Motion:` as a speaker", () => {
+  it("does not treat a label like `Motion:` as a speaker", async () => {
     const turns = parseSpeakerTurns("Motion: that we adjourn.\nAnn Lee: second.");
     expect(turns.map((t) => t.speakerLabel)).not.toContain("Motion");
   });
 
-  it("resolves a speaker by full name or a unique surname, and refuses to guess", () => {
+  it("resolves a speaker by full name or a unique surname, and refuses to guess", async () => {
     const attendees = [
       { personId: "p-1", displayName: "Ann Lee" },
       { personId: "p-2", displayName: "Bo Chen" },
@@ -1028,14 +1045,14 @@ describe("transcript parser", () => {
     expect(resolveSpeaker("Someone Else", attendees)).toBeNull();
   });
 
-  it("reads an explicit agenda cue, in digits or words", () => {
+  it("reads an explicit agenda cue, in digits or words", async () => {
     expect(explicitItemCue("that brings us to item four")).toBe(4);
     expect(explicitItemCue("agenda item 2, Roy")).toBe(2);
     expect(explicitItemCue("item number 11")).toBe(11);
     expect(explicitItemCue("nothing about items here")).toBeNull();
   });
 
-  it("reads a vote tally only when the transcript states one", () => {
+  it("reads a vote tally only when the transcript states one", async () => {
     expect(readTally("that is six in favour, none opposed, one abstaining")).toEqual({
       for: 6,
       against: 0,
@@ -1050,7 +1067,7 @@ describe("transcript parser", () => {
     expect(readTally("any objection? none. carried.")).toBeNull();
   });
 
-  it("reads an outcome, preferring withdrawal and tabling over carrying", () => {
+  it("reads an outcome, preferring withdrawal and tabling over carrying", async () => {
     expect(readOutcome("the motion carries")).toBe("CARRIED");
     expect(readOutcome("the motion fails")).toBe("FAILED");
     expect(readOutcome("I withdraw the motion")).toBe("WITHDRAWN");
@@ -1058,7 +1075,7 @@ describe("transcript parser", () => {
     expect(readOutcome("we talked about it")).toBeNull();
   });
 
-  it("infers a recusal basis from the stated words", () => {
+  it("infers a recusal basis from the stated words", async () => {
     expect(inferRecusalBasis("my daughter is an applicant")).toBe("SCHOLARSHIP_CONFLICT");
     expect(inferRecusalBasis("I sit on both sides of this transfer")).toBe(
       "INTER_ENTITY_TRANSFER",
@@ -1068,24 +1085,28 @@ describe("transcript parser", () => {
     expect(inferRecusalBasis("I would rather not say why")).toBe("OTHER");
   });
 
-  it("assigns turns to agenda items and leaves the opening turn unassigned", () => {
-    const turns = parseSpeakerTurns(SAMPLE_TRANSCRIPT, repo.getMeeting(JSOA_OCT)!.attendees);
-    const { segments, unassigned } = segmentByAgenda(turns, repo.listAgendaItems(JSOA_OCT));
+  it("assigns turns to agenda items and leaves the opening turn unassigned", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const turns = parseSpeakerTurns(SAMPLE_TRANSCRIPT, meeting.attendees);
+    const { segments, unassigned } = segmentByAgenda(
+      turns,
+      await repo.listAgendaItems(JSOA_OCT),
+    );
     expect(segments.filter((s) => s.turns.length > 0).length).toBeGreaterThan(3);
     // The call to order matches no item, and is not forced into one.
     expect(unassigned.length).toBeGreaterThan(0);
   });
 
-  it("produces a draft that is marked as a draft in every field it wrote", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("produces a draft that is marked as a draft in every field it wrote", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: SAMPLE_TRANSCRIPT,
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
 
-    expect(draft.sections.length).toBe(repo.listAgendaItems(JSOA_OCT).length);
+    expect(draft.sections.length).toBe((await repo.listAgendaItems(JSOA_OCT)).length);
     for (const section of draft.sections) {
       expect(section.discussion).toContain(DRAFT_MARKER);
       if (section.motion) expect(section.motion.text).toContain(DRAFT_MARKER);
@@ -1093,11 +1114,11 @@ describe("transcript parser", () => {
     }
   });
 
-  it("says it is an extract and not a summary, in the text itself", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("says it is an extract and not a summary, in the text itself", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: SAMPLE_TRANSCRIPT,
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
@@ -1106,11 +1127,11 @@ describe("transcript parser", () => {
     expect(withContent.discussion).toMatch(/verbatim/i);
   });
 
-  it("finds the motion, the mover, the seconder and the stated tally", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("finds the motion, the mover, the seconder and the stated tally", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: SAMPLE_TRANSCRIPT,
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
@@ -1122,11 +1143,11 @@ describe("transcript parser", () => {
     expect(volunteerHours.motion!.outcome).toBe("CARRIED");
   });
 
-  it("finds the recusal and keeps the verbatim sentence as the reason", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("finds the recusal and keeps the verbatim sentence as the reason", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: SAMPLE_TRANSCRIPT,
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
@@ -1140,11 +1161,11 @@ describe("transcript parser", () => {
     expect(transfer.flags).toContain(DRAFT_FLAGS.RECUSAL_NEEDS_WORDING);
   });
 
-  it("flags an item nothing was assigned to rather than inventing content", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("flags an item nothing was assigned to rather than inventing content", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: "Ann Lee: entirely unrelated conversation about nothing at all.",
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
@@ -1156,11 +1177,11 @@ describe("transcript parser", () => {
     expect(draft.itemsWithNothing.length).toBe(draft.sections.length);
   });
 
-  it("flags a missing tally on a decision that was carried by voice", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("flags a missing tally on a decision that was carried by voice", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: SAMPLE_TRANSCRIPT,
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
@@ -1169,22 +1190,22 @@ describe("transcript parser", () => {
     expect(licence.motion?.tally).toBeNull();
   });
 
-  it("warns rather than silently failing when nothing parses", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("warns rather than silently failing when nothing parses", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: "just a wall of prose with no speaker labels anywhere in it",
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
     expect(draft.warnings.length).toBeGreaterThan(0);
   });
 
-  it("takes the entity from the meeting and never from the transcript", () => {
-    const meeting = repo.getMeeting(JSOF_OCT)!;
+  it("takes the entity from the meeting and never from the transcript", async () => {
+    const meeting = (await repo.getMeeting(JSOF_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOF_OCT),
+      items: await repo.listAgendaItems(JSOF_OCT),
       // The transcript claims to be the other entity's meeting. It is ignored.
       transcript: "Ann Lee: this is the JSOA board meeting, item one, the transfer.",
       refFor: (n) => minuteRefForMeeting(meeting, n),
@@ -1197,21 +1218,21 @@ describe("transcript parser", () => {
     }
   });
 
-  it("writes drafts into the book as drafts, flagged and incomplete", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("writes drafts into the book as drafts, flagged and incomplete", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: SAMPLE_TRANSCRIPT,
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
-    const written = repo.replaceTranscriptDrafts(
+    const written = await repo.replaceTranscriptDrafts(
       JSOA_OCT,
       draftToMinuteInputs(draft, meeting),
     );
     expect(written.length).toBeGreaterThan(0);
 
-    const items = repo.listAgendaItems(JSOA_OCT);
+    const items = await repo.listAgendaItems(JSOA_OCT);
     for (const entry of written) {
       expect(entry.draft).toBe(true);
       expect(entry.entity).toBe("JSOA");
@@ -1221,31 +1242,34 @@ describe("transcript parser", () => {
       expect(check.incomplete).toBe(true);
     }
     expect(
-      minuteBookReady(items, repo.listMinutes(JSOA_OCT), meeting).ready,
+      minuteBookReady(items, await repo.listMinutes(JSOA_OCT), meeting).ready,
     ).toBe(false);
   });
 
-  it("running the parser twice replaces the drafts rather than doubling them", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("running the parser twice replaces the drafts rather than doubling them", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const items = await repo.listAgendaItems(JSOA_OCT);
     const build = () =>
       draftToMinuteInputs(
         draftFromTranscript({
           meeting,
-          items: repo.listAgendaItems(JSOA_OCT),
+          items,
           transcript: SAMPLE_TRANSCRIPT,
           refFor: (n) => minuteRefForMeeting(meeting, n),
         }),
         meeting,
       );
-    const first = repo.replaceTranscriptDrafts(JSOA_OCT, build());
-    const second = repo.replaceTranscriptDrafts(JSOA_OCT, build());
+    const first = await repo.replaceTranscriptDrafts(JSOA_OCT, build());
+    const second = await repo.replaceTranscriptDrafts(JSOA_OCT, build());
     expect(second.length).toBe(first.length);
-    expect(repo.listMinutes(JSOA_OCT).filter((e) => e.draft).length).toBe(first.length);
+    expect((await repo.listMinutes(JSOA_OCT)).filter((e) => e.draft).length).toBe(
+      first.length,
+    );
   });
 
-  it("leaves the book untouched when one draft section is refused", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const items = repo.listAgendaItems(JSOA_OCT);
+  it("leaves the book untouched when one draft section is refused", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const items = await repo.listAgendaItems(JSOA_OCT);
     const good = draftToMinuteInputs(
       draftFromTranscript({
         meeting,
@@ -1255,9 +1279,9 @@ describe("transcript parser", () => {
       }),
       meeting,
     );
-    const first = repo.replaceTranscriptDrafts(JSOA_OCT, good);
+    const first = await repo.replaceTranscriptDrafts(JSOA_OCT, good);
     expect(first.length).toBeGreaterThan(0);
-    const before = repo.listMinutes(JSOA_OCT);
+    const before = await repo.listMinutes(JSOA_OCT);
 
     // One section carries a recusal with no reason, which is a hard refusal.
     const poisoned = good.map((input, index) =>
@@ -1265,19 +1289,19 @@ describe("transcript parser", () => {
         ? { ...input, recusals: [recusal({ reason: "" })] }
         : input,
     );
-    expect(() => repo.replaceTranscriptDrafts(JSOA_OCT, poisoned)).toThrowError(
+    await expect(repo.replaceTranscriptDrafts(JSOA_OCT, poisoned)).rejects.toThrowError(
       MinuteError,
     );
 
-    const after = repo.listMinutes(JSOA_OCT);
+    const after = await repo.listMinutes(JSOA_OCT);
     expect(after.map((e) => e.ref)).toEqual(before.map((e) => e.ref));
     expect(after.map((e) => e.discussion)).toEqual(before.map((e) => e.discussion));
   });
 
-  it("never overwrites a minute the Secretary wrote", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
-    const item = repo.listAgendaItems(JSOA_OCT)[0];
-    repo.saveMinute({
+  it("never overwrites a minute the Secretary wrote", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
+    const item = (await repo.listAgendaItems(JSOA_OCT))[0];
+    await repo.saveMinute({
       meetingId: JSOA_OCT,
       entity: "JSOA",
       agendaItemId: item.id,
@@ -1286,17 +1310,17 @@ describe("transcript parser", () => {
     });
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: SAMPLE_TRANSCRIPT,
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
-    repo.replaceTranscriptDrafts(JSOA_OCT, draftToMinuteInputs(draft, meeting));
-    const kept = repo.listMinutes(JSOA_OCT).find((e) => e.agendaItemId === item.id)!;
+    await repo.replaceTranscriptDrafts(JSOA_OCT, draftToMinuteInputs(draft, meeting));
+    const kept = (await repo.listMinutes(JSOA_OCT)).find((e) => e.agendaItemId === item.id)!;
     expect(kept.source).toBe("SECRETARY");
     expect(kept.discussion).toContain("her own notes");
   });
 
-  it("knows whether a draft marker survives an edit", () => {
+  it("knows whether a draft marker survives an edit", async () => {
     expect(
       stillMarkedDraft({
         discussion: `${DRAFT_MARKER} something`,
@@ -1375,11 +1399,11 @@ describe("reading a minute out of the posted form", () => {
     return form;
   }
 
-  it("reads no motion when the motion text is empty", () => {
+  it("reads no motion when the motion text is empty", async () => {
     expect(readMotionFromForm(postedForm({}))).toBeNull();
   });
 
-  it("reads the motion, the parties and the outcome", () => {
+  it("reads the motion, the parties and the outcome", async () => {
     const parsed = readMotionFromForm(
       postedForm({
         motionText: "That the capture form be adopted.",
@@ -1394,7 +1418,7 @@ describe("reading a minute out of the posted form", () => {
     expect(parsed.outcome).toBe("TABLED");
   });
 
-  it("reads no tally when the count box is unchecked, and the count when it is", () => {
+  it("reads no tally when the count box is unchecked, and the count when it is", async () => {
     expect(
       readMotionFromForm(postedForm({ motionText: "A motion." }))!.tally,
     ).toBeNull();
@@ -1405,7 +1429,7 @@ describe("reading a minute out of the posted form", () => {
     ).toEqual({ for: 6, against: 0, abstain: 1 });
   });
 
-  it("falls back to a safe outcome and basis rather than trusting the post", () => {
+  it("falls back to a safe outcome and basis rather than trusting the post", async () => {
     expect(
       readMotionFromForm(postedForm({ motionText: "A motion.", outcome: "WHATEVER" }))!
         .outcome,
@@ -1417,7 +1441,7 @@ describe("reading a minute out of the posted form", () => {
     ).toBe("OTHER");
   });
 
-  it("refuses a negative or non-numeric vote count rather than storing one", () => {
+  it("refuses a negative or non-numeric vote count rather than storing one", async () => {
     const form = postedForm({ motionText: "A motion.", tally: { for: 1, against: 0, abstain: 0 } });
     form.set("voteFor", "-4");
     form.set("voteAgainst", "not a number");
@@ -1426,7 +1450,7 @@ describe("reading a minute out of the posted form", () => {
     expect(tally.against).toBe(0);
   });
 
-  it("reads several recusals and keeps each reason with the right person", () => {
+  it("reads several recusals and keeps each reason with the right person", async () => {
     const parsed = readRecusalsFromForm(
       postedForm({
         recusals: [
@@ -1462,7 +1486,7 @@ describe("reading a minute out of the posted form", () => {
     });
   });
 
-  it("skips a blank row without shifting the rows after it", () => {
+  it("skips a blank row without shifting the rows after it", async () => {
     const parsed = readRecusalsFromForm(
       postedForm({
         recusals: [
@@ -1476,12 +1500,12 @@ describe("reading a minute out of the posted form", () => {
     expect(parsed[0].reason).toBe("The real one.");
   });
 
-  it("lets an empty reason through so the repository can refuse it by name", () => {
+  it("lets an empty reason through so the repository can refuse it by name", async () => {
     const parsed = readRecusalsFromForm(
       postedForm({ recusals: [{ personId: "p-ellison", reason: "" }] }),
     );
     expect(parsed[0].reason).toBe("");
-    expect(() =>
+    await expect(
       repo.saveMinute({
         meetingId: JSOA_OCT,
         entity: "JSOA",
@@ -1489,10 +1513,10 @@ describe("reading a minute out of the posted form", () => {
         discussion: "Discussed.",
         recusals: parsed,
       }),
-    ).toThrowError(MinuteError);
+    ).rejects.toThrowError(MinuteError);
   });
 
-  it("refuses the parse outright if the recusal rows ever stop lining up", () => {
+  it("refuses the parse outright if the recusal rows ever stop lining up", async () => {
     const form = postedForm({
       recusals: [
         { personId: "p-ellison", reason: "First reason." },
@@ -1506,18 +1530,18 @@ describe("reading a minute out of the posted form", () => {
     expect(() => assertAlignedRows(form)).toThrowError(/wrong person/);
   });
 
-  it("distinguishes a form with no entity field from one with an empty entity", () => {
+  it("distinguishes a form with no entity field from one with an empty entity", async () => {
     expect(readEntityFromForm(postedForm({}))).toBeUndefined();
     expect(readEntityFromForm(postedForm({ entity: null }))).toBeNull();
     expect(readEntityFromForm(postedForm({ entity: "JSOA" }))).toBe("JSOA");
   });
 
-  it("reads the closed box only when it was checked", () => {
+  it("reads the closed box only when it was checked", async () => {
     expect(readClosedFromForm(postedForm({}))).toBe(false);
     expect(readClosedFromForm(postedForm({ closed: true }))).toBe(true);
   });
 
-  it("round-trips a posted form into a saved minute", () => {
+  it("round-trips a posted form into a saved minute", async () => {
     const form = postedForm({
       entity: "JSOA",
       discussion: "The capture form was discussed and moved.",
@@ -1536,7 +1560,7 @@ describe("reading a minute out of the posted form", () => {
       ],
     });
 
-    const saved = repo.saveMinute({
+    const saved = await repo.saveMinute({
       meetingId: String(form.get("meetingId")),
       entity: readEntityFromForm(form) as Entity,
       agendaItemId: String(form.get("agendaItemId")),
@@ -1551,17 +1575,17 @@ describe("reading a minute out of the posted form", () => {
     expect(saved.motion!.tally).toEqual({ for: 6, against: 0, abstain: 1 });
     expect(saved.recusals[0].reason).toBe("His firm would supply the shirts.");
 
-    const record = repo.listDecisions("JSOA").find((r) => r.ref === saved.ref)!;
+    const record = (await repo.listDecisions("JSOA")).find((r) => r.ref === saved.ref)!;
     expect(record.recusals[0].displayName).toBe("Sam Doyle");
   });
 
-  it("refuses the round trip when the form posted an empty entity", () => {
+  it("refuses the round trip when the form posted an empty entity", async () => {
     const form = postedForm({
       entity: null,
       discussion: "Something.",
       motionText: "A motion.",
     });
-    expect(() =>
+    await expect(
       repo.saveMinute({
         meetingId: String(form.get("meetingId")),
         entity: readEntityFromForm(form) as Entity | null,
@@ -1570,13 +1594,13 @@ describe("reading a minute out of the posted form", () => {
         motion: readMotionFromForm(form),
         recusals: readRecusalsFromForm(form),
       }),
-    ).toThrowError(MinuteError);
+    ).rejects.toThrowError(MinuteError);
   });
 });
 
 describe("decision register", () => {
-  it("lists only items that carry a motion", () => {
-    const records = repo.listDecisions();
+  it("lists only items that carry a motion", async () => {
+    const records = await repo.listDecisions();
     expect(records.length).toBeGreaterThan(0);
     for (const record of records) {
       expect(record.motion).not.toBeNull();
@@ -1588,8 +1612,10 @@ describe("decision register", () => {
     expect(records.map((r) => r.ref)).not.toContain("JSOA-2026-09-min-3");
   });
 
-  it("carries date, motion, vote and the minute reference on every entry", () => {
-    const record = repo.listDecisions("JSOA").find((r) => r.ref === "JSOA-2026-09-min-1")!;
+  it("carries date, motion, vote and the minute reference on every entry", async () => {
+    const record = (await repo.listDecisions("JSOA")).find(
+      (r) => r.ref === "JSOA-2026-09-min-1",
+    )!;
     expect(record.date).toBe("2026-09-08T22:00:00.000Z");
     expect(record.motion.text).toMatch(/transfer/i);
     expect(record.motion.tally).toEqual({ for: 6, against: 0, abstain: 1 });
@@ -1597,30 +1623,30 @@ describe("decision register", () => {
     expect(record.itemTitle).toBeTruthy();
   });
 
-  it("marks a decision drawn from an unreviewed draft as provisional", () => {
-    const meeting = repo.getMeeting(JSOA_OCT)!;
+  it("marks a decision drawn from an unreviewed draft as provisional", async () => {
+    const meeting = (await repo.getMeeting(JSOA_OCT))!;
     const draft = draftFromTranscript({
       meeting,
-      items: repo.listAgendaItems(JSOA_OCT),
+      items: await repo.listAgendaItems(JSOA_OCT),
       transcript: SAMPLE_TRANSCRIPT,
       refFor: (n) => minuteRefForMeeting(meeting, n),
     });
-    repo.replaceTranscriptDrafts(JSOA_OCT, draftToMinuteInputs(draft, meeting));
-    const provisional = repo.listDecisions("JSOA").filter((r) => r.provisional);
+    await repo.replaceTranscriptDrafts(JSOA_OCT, draftToMinuteInputs(draft, meeting));
+    const provisional = (await repo.listDecisions("JSOA")).filter((r) => r.provisional);
     expect(provisional.length).toBeGreaterThan(0);
   });
 });
 
 describe("compliance calendar", () => {
-  it("seeds a 990 per entity and never one combined return", () => {
-    const irs = repo.listComplianceItems().filter((i) => i.kind === "IRS");
+  it("seeds a 990 per entity and never one combined return", async () => {
+    const irs = (await repo.listComplianceItems()).filter((i) => i.kind === "IRS");
     expect(irs.map((i) => i.entity).sort()).toEqual(["JSOA", "JSOF"]);
   });
 
-  it("seeds the NC charitable solicitation renewal as annual and not self-declaring", () => {
-    const licences = repo
-      .listComplianceItems()
-      .filter((i) => i.kind === "STATE_CHARITABLE");
+  it("seeds the NC charitable solicitation renewal as annual and not self-declaring", async () => {
+    const licences = (await repo.listComplianceItems()).filter(
+      (i) => i.kind === "STATE_CHARITABLE",
+    );
     expect(licences.length).toBeGreaterThan(0);
     for (const licence of licences) {
       expect(licence.selfDeclaring).toBe(false);
@@ -1630,8 +1656,8 @@ describe("compliance calendar", () => {
     }
   });
 
-  it("seeds insurance and the domain, and names a role owner for every entry", () => {
-    const items = repo.listComplianceItems();
+  it("seeds insurance and the domain, and names a role owner for every entry", async () => {
+    const items = await repo.listComplianceItems();
     expect(items.some((i) => i.kind === "INSURANCE")).toBe(true);
     expect(items.some((i) => i.kind === "INFRASTRUCTURE")).toBe(true);
     for (const item of items) {
@@ -1641,7 +1667,7 @@ describe("compliance calendar", () => {
     }
   });
 
-  it("carries exactly one unverified entry, and it is the 2027 report", () => {
+  it("carries exactly one unverified entry, and it is the 2027 report", async () => {
     const { duties, unverified } = splitVerified(SEED_COMPLIANCE);
     expect(unverified).toHaveLength(1);
     expect(unverified[0].dueDate).toBe("2027-01-01");
@@ -1651,10 +1677,10 @@ describe("compliance calendar", () => {
     expect(duties.every((d) => d.verified)).toBe(true);
   });
 
-  it("never counts the unverified entry as a duty", () => {
+  it("never counts the unverified entry as a duty", async () => {
     const today = new Date("2026-12-01T00:00:00.000Z");
     for (const entity of ENTITIES) {
-      const items = repo.listComplianceItems(entity);
+      const items = await repo.listComplianceItems(entity);
       const counts = countsFor(items, today);
       const total =
         counts.overdue + counts.dueSoon + counts.blocked + counts.scheduled + counts.filed;
@@ -1662,67 +1688,73 @@ describe("compliance calendar", () => {
     }
   });
 
-  it("reports the unverified entry as unverified whatever the date", () => {
+  it("reports the unverified entry as unverified whatever the date", async () => {
     const item = SEED_COMPLIANCE.find((i) => !i.verified)!;
     expect(urgencyOf(item, new Date("2026-01-01T00:00:00.000Z"))).toBe("UNVERIFIED");
     expect(urgencyOf(item, new Date("2028-01-01T00:00:00.000Z"))).toBe("UNVERIFIED");
   });
 
-  it("refuses to mark an unverified obligation as filed", () => {
-    const item = repo.listComplianceItems().find((i) => !i.verified)!;
-    expect(() => repo.setComplianceStatus(item.id, "FILED")).toThrowError(RepositoryError);
-    expect(() => repo.setComplianceStatus(item.id, "BLOCKED")).not.toThrow();
+  it("refuses to mark an unverified obligation as filed", async () => {
+    const item = (await repo.listComplianceItems()).find((i) => !i.verified)!;
+    await expect(
+      repo.setComplianceStatus(item.id, "FILED"),
+    ).rejects.toThrowError(RepositoryError);
+    await expect(repo.setComplianceStatus(item.id, "BLOCKED")).resolves.toBeDefined();
   });
 
-  it("marks a verified filing as filed", () => {
-    const item = repo.listComplianceItems().find((i) => i.verified)!;
-    expect(repo.setComplianceStatus(item.id, "FILED").status).toBe("FILED");
+  it("marks a verified filing as filed", async () => {
+    const item = (await repo.listComplianceItems()).find((i) => i.verified)!;
+    expect((await repo.setComplianceStatus(item.id, "FILED")).status).toBe("FILED");
   });
 });
 
 describe("repository hygiene", () => {
-  it("hands out copies, so a caller cannot mutate the book by accident", () => {
-    const first = repo.getMeeting(JSOA_SEPT)!;
+  it("hands out copies, so a caller cannot mutate the book by accident", async () => {
+    const first = (await repo.getMeeting(JSOA_SEPT))!;
     first.entity = "JSOF";
     first.attendees[0].present = !first.attendees[0].present;
-    const second = repo.getMeeting(JSOA_SEPT)!;
+    const second = (await repo.getMeeting(JSOA_SEPT))!;
     expect(second.entity).toBe("JSOA");
 
-    const entries = repo.listMinutes(JSOA_SEPT);
+    const entries = await repo.listMinutes(JSOA_SEPT);
     entries[0].discussion = "tampered";
-    expect(repo.listMinutes(JSOA_SEPT)[0].discussion).not.toBe("tampered");
+    expect((await repo.listMinutes(JSOA_SEPT))[0].discussion).not.toBe("tampered");
   });
 
-  it("starts each test from the same seed", () => {
-    expect(repo.listMeetings()).toHaveLength(4);
-    expect(repo.listMinutes(JSOA_SEPT)).toHaveLength(4);
-    expect(repo.listMinutes(JSOF_SEPT)).toHaveLength(3);
-    expect(repo.listMinutes(JSOA_OCT)).toHaveLength(0);
+  it("starts each test from the same seed", async () => {
+    expect(await repo.listMeetings()).toHaveLength(4);
+    expect(await repo.listMinutes(JSOA_SEPT)).toHaveLength(4);
+    expect(await repo.listMinutes(JSOF_SEPT)).toHaveLength(3);
+    expect(await repo.listMinutes(JSOA_OCT)).toHaveLength(0);
   });
 
-  it("refuses an attendance change for someone not on that board", () => {
-    expect(() => repo.setAttendance(JSOA_SEPT, "p-okonjo", true)).toThrowError(
+  it("refuses an attendance change for someone not on that board", async () => {
+    await expect(repo.setAttendance(JSOA_SEPT, "p-okonjo", true)).rejects.toThrowError(
       RepositoryError,
     );
-    expect(() => repo.setAttendance(JSOA_SEPT, "p-whitfield", false)).not.toThrow();
+    await expect(
+      repo.setAttendance(JSOA_SEPT, "p-whitfield", false),
+    ).resolves.toBeDefined();
   });
 
-  it("refuses a minute against a meeting that does not exist", () => {
-    expect(() =>
+  it("refuses a minute against a meeting that does not exist", async () => {
+    await expect(
       repo.saveMinute({
         meetingId: "m-not-real",
         entity: "JSOA",
         agendaItemId: "i-not-real",
         discussion: "Nothing.",
       }),
-    ).toThrowError(RepositoryError);
+    ).rejects.toThrowError(RepositoryError);
   });
 
-  it("carries no money figure anywhere in the seed", () => {
+  it("carries no money figure anywhere in the seed", async () => {
     const serialised = JSON.stringify({
-      meetings: repo.listMeetings(),
-      minutes: [JSOA_SEPT, JSOF_SEPT].flatMap((id) => repo.listMinutes(id)),
-      compliance: repo.listComplianceItems(),
+      meetings: await repo.listMeetings(),
+      minutes: (
+        await Promise.all([JSOA_SEPT, JSOF_SEPT].map((id) => repo.listMinutes(id)))
+      ).flat(),
+      compliance: await repo.listComplianceItems(),
     });
     expect(serialised).not.toMatch(/amountCents/);
     expect(serialised).not.toMatch(/\$[0-9]/);
@@ -1743,9 +1775,9 @@ const NOW = new Date("2026-10-06T12:00:00.000Z");
 const NEARER = new Date("2026-12-01T12:00:00.000Z");
 
 describe("workspace overview: tasks are derived and say what they block", () => {
-  it("lifts every dashboard action into a task with a reason", () => {
-    const dashboard = secretaryDashboard(secretaryBoth, NOW, repo);
-    const tasks = secretaryTasks(secretaryBoth, NOW, repo);
+  it("lifts every dashboard action into a task with a reason", async () => {
+    const dashboard = await secretaryDashboard(secretaryBoth, NOW, repo);
+    const tasks = await secretaryTasks(secretaryBoth, NOW, repo);
     expect(dashboard.actions.length).toBeGreaterThan(0);
     for (const action of dashboard.actions) {
       const task = tasks.find((t) => t.key === action.key);
@@ -1755,16 +1787,16 @@ describe("workspace overview: tasks are derived and say what they block", () => 
     }
   });
 
-  it("gives every task an urgency, a link and a reason, and none a blank", () => {
-    for (const task of secretaryTasks(secretaryBoth, NOW, repo)) {
+  it("gives every task an urgency, a link and a reason, and none a blank", async () => {
+    for (const task of await secretaryTasks(secretaryBoth, NOW, repo)) {
       expect(["overdue", "soon", "open"]).toContain(task.urgency);
       expect(task.href.startsWith("/board/")).toBe(true);
       expect(task.because.trim()).not.toBe("");
     }
   });
 
-  it("says the notice period is an assumption on every task that measures against it", () => {
-    const notices = secretaryTasks(secretaryBoth, NOW, repo).filter((t) =>
+  it("says the notice period is an assumption on every task that measures against it", async () => {
+    const notices = (await secretaryTasks(secretaryBoth, NOW, repo)).filter((t) =>
       t.key.startsWith("notice-"),
     );
     expect(notices.length).toBeGreaterThan(0);
@@ -1774,17 +1806,17 @@ describe("workspace overview: tasks are derived and say what they block", () => 
     }
   });
 
-  it("makes no task out of an unverified or blocked filing", () => {
+  it("makes no task out of an unverified or blocked filing", async () => {
     for (const when of [NOW, NEARER]) {
-      const keys = secretaryTasks(secretaryBoth, when, repo).map((t) => t.key);
+      const keys = (await secretaryTasks(secretaryBoth, when, repo)).map((t) => t.key);
       expect(keys).not.toContain("file-c-unverified-2027");
       expect(keys).not.toContain("file-c-sos-jsoa");
       expect(keys).not.toContain("file-c-sos-jsof");
     }
   });
 
-  it("names the entity on every task that belongs to one book", () => {
-    for (const task of secretaryTasks(secretaryBoth, NOW, repo)) {
+  it("names the entity on every task that belongs to one book", async () => {
+    for (const task of await secretaryTasks(secretaryBoth, NOW, repo)) {
       if (task.entity) expect(["JSOA", "JSOF"]).toContain(task.entity);
       // A task naming one book in its label must carry that book.
       if (/\bJSOA\b/.test(task.label)) expect(task.entity).toBe("JSOA");
@@ -1794,8 +1826,8 @@ describe("workspace overview: tasks are derived and say what they block", () => 
 });
 
 describe("workspace overview: the calendar never counts what nobody owes", () => {
-  it("quarantines the unverified entry and both blocked ones", () => {
-    const calendar = secretaryCalendar(secretaryBoth, NOW, repo);
+  it("quarantines the unverified entry and both blocked ones", async () => {
+    const calendar = await secretaryCalendar(secretaryBoth, NOW, repo);
     expect(calendar.unresolved.map((u) => u.key).sort()).toEqual([
       "c-sos-jsoa",
       "c-sos-jsof",
@@ -1807,8 +1839,8 @@ describe("workspace overview: the calendar never counts what nobody owes", () =>
     expect(calendar.unresolved.filter((u) => u.reason === "BLOCKED")).toHaveLength(2);
   });
 
-  it("keeps all three visible, flagged, rather than hiding them", () => {
-    const calendar = secretaryCalendar(secretaryBoth, NOW, repo);
+  it("keeps all three visible, flagged, rather than hiding them", async () => {
+    const calendar = await secretaryCalendar(secretaryBoth, NOW, repo);
     for (const entry of calendar.unresolved) {
       const item = calendar.items.find((i) => i.key === entry.key);
       expect(item, `${entry.key} vanished from the calendar`).toBeDefined();
@@ -1817,18 +1849,16 @@ describe("workspace overview: the calendar never counts what nobody owes", () =>
     }
   });
 
-  it("counts as obligations only what is verified, unfiled and unblocked", () => {
-    const calendar = secretaryCalendar(secretaryBoth, NOW, repo);
+  it("counts as obligations only what is verified, unfiled and unblocked", async () => {
+    const calendar = await secretaryCalendar(secretaryBoth, NOW, repo);
     for (const book of calendar.obligations) {
-      const expected = repo
-        .listComplianceItems(book.entity)
-        .filter(
+      const expected = (await repo.listComplianceItems(book.entity)).filter(
           (item) =>
             item.ownerRole === "SECRETARY" &&
             item.verified &&
             item.status !== "BLOCKED" &&
             item.status !== "FILED",
-        ).length;
+      ).length;
       expect(book.count).toBe(expected);
     }
     // Both books, separately, and no combined figure anywhere in the shape.
@@ -1836,15 +1866,15 @@ describe("workspace overview: the calendar never counts what nobody owes", () =>
     expect(Object.keys(calendar)).not.toContain("total");
   });
 
-  it("quarantines whatever the horizon, including when the entry falls inside it", () => {
-    const unverified = repo.listComplianceItems().find((i) => !i.verified)!;
+  it("quarantines whatever the horizon, including when the entry falls inside it", async () => {
+    const unverified = (await repo.listComplianceItems()).find((i) => !i.verified)!;
     // Inside 60 days of this date, which is when counting it would be easy.
     expect(
       Math.round(
         (Date.parse(`${unverified.dueDate}T00:00:00.000Z`) - NEARER.getTime()) / 86_400_000,
       ),
     ).toBeLessThanOrEqual(DUE_SOON_DAYS);
-    const calendar = secretaryCalendar(secretaryBoth, NEARER, repo);
+    const calendar = await secretaryCalendar(secretaryBoth, NEARER, repo);
     expect(calendar.unresolved.map((u) => u.key)).toContain(unverified.id);
     const counted = calendar.obligations.reduce((n, b) => n + b.count, 0);
     const quarantinedAsObligation = calendar.obligations.find(
@@ -1852,20 +1882,18 @@ describe("workspace overview: the calendar never counts what nobody owes", () =>
     )!;
     expect(counted).toBeGreaterThan(0);
     expect(quarantinedAsObligation.count).toBe(
-      repo
-        .listComplianceItems(unverified.entity)
-        .filter(
-          (item) =>
-            item.ownerRole === "SECRETARY" &&
-            item.verified &&
-            item.status !== "BLOCKED" &&
-            item.status !== "FILED",
-        ).length,
+      (await repo.listComplianceItems(unverified.entity)).filter(
+        (item) =>
+          item.ownerRole === "SECRETARY" &&
+          item.verified &&
+          item.status !== "BLOCKED" &&
+          item.status !== "FILED",
+      ).length,
     );
   });
 
-  it("filters the shared calendar to this office rather than copying it", () => {
-    const calendar = secretaryCalendar(secretaryBoth, NOW, repo);
+  it("filters the shared calendar to this office rather than copying it", async () => {
+    const calendar = await secretaryCalendar(secretaryBoth, NOW, repo);
     const filings = calendar.items.filter((i) => i.kind !== "MEETING");
     expect(filings.length).toBeGreaterThan(0);
     for (const item of filings) {
@@ -1877,8 +1905,8 @@ describe("workspace overview: the calendar never counts what nobody owes", () =>
 });
 
 describe("workspace dashboard: three figures, and no blended one", () => {
-  it("headlines exactly three and keeps every other figure", () => {
-    const all = secretaryDashboard(secretaryBoth, NOW, repo).kpis;
+  it("headlines exactly three and keeps every other figure", async () => {
+    const all = (await secretaryDashboard(secretaryBoth, NOW, repo)).kpis;
     const { headline, more } = splitHeadlineKpis(all);
     expect(headline).toHaveLength(3);
     expect(headline.map((k) => k.key)).toEqual([...HEADLINE_KPI_KEYS]);
@@ -1886,13 +1914,13 @@ describe("workspace dashboard: three figures, and no blended one", () => {
     expect(more.map((k) => k.key)).not.toContain(HEADLINE_KPI_KEYS[0]);
   });
 
-  it("headlines the decision that nobody wrote down", () => {
+  it("headlines the decision that nobody wrote down", async () => {
     expect(HEADLINE_KPI_KEYS).toContain("decisions-without-motion");
   });
 
-  it("reports each headline figure per book and never as one number", () => {
+  it("reports each headline figure per book and never as one number", async () => {
     const { headline } = splitHeadlineKpis(
-      secretaryDashboard(secretaryBoth, NOW, repo).kpis,
+      (await secretaryDashboard(secretaryBoth, NOW, repo)).kpis,
     );
     for (const kpi of headline) {
       expect(kpi.value, `${kpi.key} carried no figure`).not.toBeNull();
@@ -1902,15 +1930,15 @@ describe("workspace dashboard: three figures, and no blended one", () => {
     }
   });
 
-  it("measures due-soon from one constant across the module", () => {
+  it("measures due-soon from one constant across the module", async () => {
     expect(DUE_HORIZON_DAYS).toBe(DUE_SOON_DAYS);
     expect(DUE_HORIZON_DAYS).toBe(60);
   });
 });
 
 describe("workspace planning: this office's own half, and no invented inbound", () => {
-  it("separates its own items from other offices', per entity", () => {
-    const planning = secretaryPlanning(secretaryBoth, NOW, repo);
+  it("separates its own items from other offices', per entity", async () => {
+    const planning = await secretaryPlanning(secretaryBoth, NOW, repo);
     expect(planning.meetings.length).toBeGreaterThan(0);
     expect(planning.meetings.map((m) => m.meeting.entity).sort()).toEqual(["JSOA", "JSOF"]);
     for (const book of planning.meetings) {
@@ -1925,8 +1953,8 @@ describe("workspace planning: this office's own half, and no invented inbound", 
     }
   });
 
-  it("takes only the next meeting of each entity, never a merged evening", () => {
-    const planning = secretaryPlanning(secretaryBoth, NOW, repo);
+  it("takes only the next meeting of each entity, never a merged evening", async () => {
+    const planning = await secretaryPlanning(secretaryBoth, NOW, repo);
     const entities = planning.meetings.map((m) => m.meeting.entity);
     expect(new Set(entities).size).toBe(entities.length);
     for (const book of planning.meetings) {
@@ -1934,8 +1962,8 @@ describe("workspace planning: this office's own half, and no invented inbound", 
     }
   });
 
-  it("treats an item as accepted only once the agenda is adopted", () => {
-    const planning = secretaryPlanning(secretaryBoth, NOW, repo);
+  it("treats an item as accepted only once the agenda is adopted", async () => {
+    const planning = await secretaryPlanning(secretaryBoth, NOW, repo);
     for (const book of planning.meetings) {
       for (const item of [...book.mine, ...book.fromOtherRoles]) {
         expect(item.acceptedForMeetingId).toBe(book.adopted ? book.meeting.id : null);
@@ -1945,8 +1973,8 @@ describe("workspace planning: this office's own half, and no invented inbound", 
     expect(new Set(planning.meetings.map((b) => b.adopted)).size).toBe(2);
   });
 
-  it("does not claim an inbound queue no module publishes", () => {
-    const planning = secretaryPlanning(secretaryBoth, NOW, repo);
+  it("does not claim an inbound queue no module publishes", async () => {
+    const planning = await secretaryPlanning(secretaryBoth, NOW, repo);
     expect(planning.inboundQueueAvailable).toBe(false);
     expect(planning.inboundNote).toBe(INBOUND_PLANNING_NOTE);
     expect(planning.inboundNote).toMatch(/does not exist yet/i);
@@ -1954,7 +1982,7 @@ describe("workspace planning: this office's own half, and no invented inbound", 
 });
 
 describe("workspace projects: a filter over one register", () => {
-  it("returns entries of the shared register by identity, never copies", () => {
+  it("returns entries of the shared register by identity, never copies", async () => {
     const projects = secretaryProjects(secretaryBoth);
     for (const project of [...projects.owned, ...projects.contributing]) {
       expect(PROJECTS).toContain(project);
@@ -1962,7 +1990,7 @@ describe("workspace projects: a filter over one register", () => {
     expect(projects.registerSize).toBe(PROJECTS.length);
   });
 
-  it("selects what this office owns and contributes to, and nothing else", () => {
+  it("selects what this office owns and contributes to, and nothing else", async () => {
     const projects = secretaryProjects(secretaryBoth);
     for (const project of projects.owned) {
       expect(project.ownerRole).toBe("SECRETARY");
@@ -1978,7 +2006,7 @@ describe("workspace projects: a filter over one register", () => {
 });
 
 describe("workspace outside view: an empty surface with a stated reason", () => {
-  it("states no external surface rather than rendering a blank", () => {
+  it("states no external surface rather than rendering a blank", async () => {
     expect(SECRETARY_OWNED_PAGES.noExternalSurface).toBe(true);
     expect(SECRETARY_OWNED_PAGES.whyEmpty).toBeTruthy();
     expect(SECRETARY_OWNED_PAGES.whyEmpty!.length).toBeGreaterThan(80);
@@ -1986,7 +2014,7 @@ describe("workspace outside view: an empty surface with a stated reason", () => 
     expect(SECRETARY_OWNED_PAGES.items).toHaveLength(0);
   });
 
-  it("still names what is public, in both audiences, never merged", () => {
+  it("still names what is public, in both audiences, never merged", async () => {
     const surface = secretaryPublicRecord("/board/meetings/m-jsoa-2026-10/distribute");
     expect(surface.noExternalSurface).toBe(false);
     const audiences = new Set(surface.items.map((i) => i.audience));
@@ -2008,14 +2036,14 @@ describe("workspace outside view: an empty surface with a stated reason", () => 
 });
 
 describe("required: a wrong-role request to the workspace is told nothing", () => {
-  it("tells a plain member nothing, and withholds rather than zeroes", () => {
-    expect(secretaryTasks(plainMember, NOW, repo)).toHaveLength(0);
-    const calendar = secretaryCalendar(plainMember, NOW, repo);
+  it("tells a plain member nothing, and withholds rather than zeroes", async () => {
+    expect(await secretaryTasks(plainMember, NOW, repo)).toHaveLength(0);
+    const calendar = await secretaryCalendar(plainMember, NOW, repo);
     expect(calendar.items).toHaveLength(0);
     expect(calendar.obligations).toHaveLength(0);
     expect(calendar.unresolved).toHaveLength(0);
     expect(calendar.withheld).toEqual([...ENTITIES]);
-    const planning = secretaryPlanning(plainMember, NOW, repo);
+    const planning = await secretaryPlanning(plainMember, NOW, repo);
     expect(planning.meetings).toHaveLength(0);
     expect(planning.withheld).toEqual([...ENTITIES]);
     const projects = secretaryProjects(plainMember);
@@ -2024,23 +2052,25 @@ describe("required: a wrong-role request to the workspace is told nothing", () =
     expect(projects.withheld).toEqual([...ENTITIES]);
   });
 
-  it("tells a Secretary with no second factor nothing", () => {
-    expect(secretaryTasks(secretaryNoMfa, NOW, repo)).toHaveLength(0);
-    expect(secretaryCalendar(secretaryNoMfa, NOW, repo).items).toHaveLength(0);
-    expect(secretaryCalendar(secretaryNoMfa, NOW, repo).withheld).toEqual([...ENTITIES]);
-    expect(secretaryPlanning(secretaryNoMfa, NOW, repo).meetings).toHaveLength(0);
+  it("tells a Secretary with no second factor nothing", async () => {
+    expect(await secretaryTasks(secretaryNoMfa, NOW, repo)).toHaveLength(0);
+    expect((await secretaryCalendar(secretaryNoMfa, NOW, repo)).items).toHaveLength(0);
+    expect((await secretaryCalendar(secretaryNoMfa, NOW, repo)).withheld).toEqual([
+      ...ENTITIES,
+    ]);
+    expect((await secretaryPlanning(secretaryNoMfa, NOW, repo)).meetings).toHaveLength(0);
   });
 
-  it("gives an aggregate-only role the calendar and the agenda, and not the book", () => {
-    const keys = secretaryTasks(treasurerJsoa, NOW, repo).map((k) => k.key);
+  it("gives an aggregate-only role the calendar and the agenda, and not the book", async () => {
+    const keys = (await secretaryTasks(treasurerJsoa, NOW, repo)).map((k) => k.key);
     expect(keys.some((k) => k.startsWith("finish-"))).toBe(false);
     expect(keys.some((k) => k.startsWith("review-drafts-"))).toBe(false);
 
-    const calendar = secretaryCalendar(treasurerJsoa, NOW, repo);
+    const calendar = await secretaryCalendar(treasurerJsoa, NOW, repo);
     expect(calendar.withheld).toEqual(["JSOF"]);
     for (const item of calendar.items) expect(item.entity).toBe("JSOA");
 
-    const planning = secretaryPlanning(treasurerJsoa, NOW, repo);
+    const planning = await secretaryPlanning(treasurerJsoa, NOW, repo);
     expect(planning.meetings.map((m) => m.meeting.entity)).toEqual(["JSOA"]);
     expect(planning.withheld).toEqual(["JSOF"]);
 
@@ -2050,12 +2080,13 @@ describe("required: a wrong-role request to the workspace is told nothing", () =
     }
   });
 
-  it("does not let one entity's workspace leak the other's", () => {
-    const calendar = secretaryCalendar(secretaryJsoaOnly, NOW, repo);
+  it("does not let one entity's workspace leak the other's", async () => {
+    const calendar = await secretaryCalendar(secretaryJsoaOnly, NOW, repo);
     expect(calendar.withheld).toEqual(["JSOF"]);
     expect(calendar.items.every((i) => i.entity === "JSOA")).toBe(true);
     expect(calendar.unresolved.every((u) => u.entity === "JSOA")).toBe(true);
-    expect(JSON.stringify(secretaryPlanning(secretaryJsoaOnly, NOW, repo).meetings)).not.toMatch(
+    const planning = await secretaryPlanning(secretaryJsoaOnly, NOW, repo);
+    expect(JSON.stringify(planning.meetings)).not.toMatch(
       /JSOF/,
     );
   });

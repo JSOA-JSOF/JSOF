@@ -39,13 +39,11 @@ export default async function ProductPage({
   const option = resolveDevViewer(typeof query.viewer === "string" ? query.viewer : "visitor");
   const cart = parseCartParam(typeof query.items === "string" ? query.items : null);
 
+  const products = await storeRepository().listProducts(STORE_ENTITY);
+
   let product;
   try {
-    product = findProductForViewer(
-      storeRepository().listProducts(STORE_ENTITY),
-      sku,
-      option.viewer,
-    );
+    product = findProductForViewer(products, sku, option.viewer);
   } catch (error) {
     if (error instanceof CatalogueError) notFound();
     throw error;

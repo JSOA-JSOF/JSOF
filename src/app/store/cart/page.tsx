@@ -45,7 +45,7 @@ export default async function CartPage({
   const county = typeof params.county === "string" ? params.county : "Cumberland";
   const shipTo = shipToFromParams(state, county);
 
-  const products = storeRepository().listProducts(STORE_ENTITY);
+  const products = await storeRepository().listProducts(STORE_ENTITY);
   const totals = totalCart(cart, products, option.viewer, shipTo);
   const jurisdiction = jurisdictionByCode(totals.taxJurisdictionCode);
 

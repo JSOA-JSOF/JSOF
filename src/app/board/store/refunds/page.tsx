@@ -42,7 +42,7 @@ export default async function RefundsPage({
 
   let refunds = null;
   try {
-    refunds = boardRefunds(subject);
+    refunds = await boardRefunds(subject);
   } catch {
     refunds = null;
   }

@@ -41,8 +41,8 @@ export default async function StoreOutside() {
   let surface: OutsideSurface | null = null;
   let summary: StoreOutsideSummary | null = null;
   try {
-    surface = storeOutsideSurface(subject);
-    summary = storeOutsideSummary(subject);
+    surface = await storeOutsideSurface(subject);
+    summary = await storeOutsideSummary(subject);
   } catch {
     surface = null;
   }

@@ -32,7 +32,7 @@ export async function GET(request: Request): Promise<Response> {
 
   let csv: string;
   try {
-    csv = boardReceiptsCsv(subject, period);
+    csv = await boardReceiptsCsv(subject, period);
   } catch (error) {
     if (error instanceof AuthzError) {
       return new Response(

@@ -59,7 +59,7 @@ export default async function SecretaryPlanningTab() {
   const persona = await getCurrentPersona();
   const subject = await getCurrentSubject();
   const visible = readableEntities(subject, ENTITIES);
-  const planning = secretaryPlanning(subject);
+  const planning = await secretaryPlanning(subject);
 
   if (visible.length === 0) {
     return (

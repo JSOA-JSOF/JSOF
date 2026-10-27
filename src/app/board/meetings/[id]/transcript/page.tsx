@@ -26,8 +26,8 @@ export default async function TranscriptPage({
   const { id } = await params;
   const persona = await getCurrentPersona();
   const subject = subjectFor(persona);
-  const repo = meetingsRepository();
-  const meeting = repo.getMeeting(id);
+  const repo = await meetingsRepository();
+  const meeting = await repo.getMeeting(id);
   if (!meeting) notFound();
 
   if (!canReadMinutes(subject, meeting.entity)) {
@@ -44,11 +44,11 @@ export default async function TranscriptPage({
     );
   }
 
-  const items = repo.listAgendaItems(id);
+  const items = await repo.listAgendaItems(id);
   const writable = canWriteMinutes(subject, meeting.entity);
-  const existingDrafts = repo
-    .listMinutes(id)
-    .filter((entry) => entry.source === "TRANSCRIPT_DRAFT");
+  const existingDrafts = (await repo.listMinutes(id)).filter(
+    (entry) => entry.source === "TRANSCRIPT_DRAFT",
+  );
 
   return (
     <Shell entity={meeting.entity} meetingId={id} active="transcript" persona={persona}>

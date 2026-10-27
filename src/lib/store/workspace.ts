@@ -90,8 +90,11 @@ function quarterEndDate(quarter: string): string {
  * whatever the data says, because a list that is always the same length is a
  * menu and people stop reading it.
  */
-export function storeTasks(subject: Subject, now: Date = new Date()): RoleTask[] {
-  const f = storeFacts(subject, now);
+export async function storeTasks(
+  subject: Subject,
+  now: Date = new Date(),
+): Promise<RoleTask[]> {
+  const f = await storeFacts(subject, now);
   const tasks: RoleTask[] = [];
 
   /* --- The compensating control, and the sharpest item on the tab. --- */
@@ -269,8 +272,11 @@ export function storeTasks(subject: Subject, now: Date = new Date()): RoleTask[]
  * the Association — which is why it is also a Planning item. An unverified
  * entry is counted as an obligation nowhere.
  */
-export function storeCalendar(subject: Subject, now: Date = new Date()): RoleCalendarItem[] {
-  const f = storeFacts(subject, now);
+export async function storeCalendar(
+  subject: Subject,
+  now: Date = new Date(),
+): Promise<RoleCalendarItem[]> {
+  const f = await storeFacts(subject, now);
   const items: RoleCalendarItem[] = [];
 
   const quarterEnd = quarterEndDate(f.quarter);
@@ -369,8 +375,11 @@ export function storeStockDrivingEvents(): { project: Project; dated: boolean }[
  * `acceptedForMeetingId` is null on all three. The Secretary's agenda builder
  * sets it; this module does not, and there is no local store of agendas.
  */
-export function storePlanningItems(subject: Subject, now: Date = new Date()): PlanningItem[] {
-  const f = storeFacts(subject, now);
+export async function storePlanningItems(
+  subject: Subject,
+  now: Date = new Date(),
+): Promise<PlanningItem[]> {
+  const f = await storeFacts(subject, now);
   const stocked = f.stockedRows.length;
   const pod = f.podRows.length;
 
@@ -494,10 +503,11 @@ export function storeProjects(): StoreProjects {
  * record, and asking for a financial grant to read it would be the widening
  * the brief forbids.
  */
-export function storeOutsideSurface(subject: Subject): OutsideSurface {
+export async function storeOutsideSurface(subject: Subject): Promise<OutsideSurface> {
   authorize({ subject, dataClass: "PUBLIC_CONTENT", entity: ENTITY, required: "READ" });
 
-  const products = storeRepository().listProducts(ENTITY).filter((p) => p.active);
+  const all = await storeRepository().listProducts(ENTITY);
+  const products = all.filter((p) => p.active);
   const publicLines = products.filter((p) => !isMemberRestricted(p));
   const memberOnlyLines = products.filter((p) => isMemberRestricted(p));
   const collections = Array.from(
@@ -609,10 +619,11 @@ export type StoreOutsideSummary = {
   collections: string[];
 };
 
-export function storeOutsideSummary(subject: Subject): StoreOutsideSummary {
+export async function storeOutsideSummary(subject: Subject): Promise<StoreOutsideSummary> {
   authorize({ subject, dataClass: "PUBLIC_CONTENT", entity: ENTITY, required: "READ" });
 
-  const products = storeRepository().listProducts(ENTITY).filter((p) => p.active);
+  const all = await storeRepository().listProducts(ENTITY);
+  const products = all.filter((p) => p.active);
   const publicLines = products.filter((p) => !isMemberRestricted(p));
   const memberOnlyLines = products.filter((p) => isMemberRestricted(p));
   return {

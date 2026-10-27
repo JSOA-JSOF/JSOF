@@ -35,7 +35,7 @@ export default async function PublicStorePage({
   const rawCart = typeof params.items === "string" ? params.items : null;
   const cart = parseCartParam(rawCart);
 
-  const catalogue = publicCatalogue(storeRepository().listProducts(STORE_ENTITY));
+  const catalogue = publicCatalogue(await storeRepository().listProducts(STORE_ENTITY));
 
   const cartHrefFor = (sku: string) =>
     `/store/cart?items=${encodeURIComponent(serialiseCartParam(addToCart(cart, sku)))}`;

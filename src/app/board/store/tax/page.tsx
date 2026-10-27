@@ -38,7 +38,7 @@ export default async function SalesTaxPage({
 
   let rows = null;
   try {
-    rows = boardTaxPeriods(subject);
+    rows = await boardTaxPeriods(subject);
   } catch {
     rows = null;
   }

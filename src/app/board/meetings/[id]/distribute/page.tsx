@@ -27,8 +27,8 @@ export default async function DistributePage({
   const { id } = await params;
   const persona = await getCurrentPersona();
   const subject = subjectFor(persona);
-  const repo = meetingsRepository();
-  const meeting = repo.getMeeting(id);
+  const repo = await meetingsRepository();
+  const meeting = await repo.getMeeting(id);
   if (!meeting) notFound();
 
   if (!canReadGovernance(subject, meeting.entity)) {

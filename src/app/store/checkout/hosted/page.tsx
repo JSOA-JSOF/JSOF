@@ -39,7 +39,7 @@ export default async function HostedPaymentStubPage({
   const params = await searchParams;
   const orderId = typeof params.order === "string" ? params.order : "";
   const viewerKey = typeof params.viewer === "string" ? params.viewer : "visitor";
-  const order = storeRepository().findOrder(orderId);
+  const order = await storeRepository().findOrder(orderId);
   if (!order) notFound();
 
   return (

@@ -53,8 +53,8 @@ export default async function ReceiptsReportPage({
   let report = null;
   let monthly: Period[] = [];
   try {
-    report = boardReceiptsReport(subject, preset.period());
-    monthly = boardPeriodsAvailable(subject);
+    report = await boardReceiptsReport(subject, preset.period());
+    monthly = await boardPeriodsAvailable(subject);
   } catch {
     report = null;
   }

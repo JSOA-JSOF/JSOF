@@ -2,8 +2,11 @@
  * The reads and writes the scholarships module needs, and an in-memory
  * implementation backed by seed data.
  *
- * Persistence is deliberately deferred: swapping to Prisma later should be one
- * new file implementing this interface, with no route or service change.
+ * Persistence landed as it was designed to: `repository.d1.ts` is one new file
+ * implementing this interface against Cloudflare D1, with no route or service
+ * change and no signature change, and `scholarshipRepository()` below chooses
+ * between the two. The in-memory implementation stays exactly as it was,
+ * because it is what the test suite runs against.
  *
  * Three shapes worth noting:
  *
@@ -21,6 +24,9 @@
  */
 
 import type { Entity } from "../authz/model";
+import { database } from "../db";
+
+import { D1ScholarshipRepository } from "./repository.d1";
 import {
   type Application,
   type Award,
@@ -437,21 +443,33 @@ export class InMemoryScholarshipRepository implements ScholarshipRepository {
 }
 
 /* ------------------------------------------------------------------ *
- * Process-wide instance for the demo.
+ * Choosing an implementation.
  *
- * Held on globalThis so a dev-server hot reload does not reset a cycle
- * mid-demo. A request-scoped Prisma client replaces this wholesale.
+ * D1 when the Worker has a binding, the in-memory one when it does not.
+ * A null binding is a normal state and not an error: `next dev` with no
+ * Worker behind it has none, and neither does a build, so the accessor
+ * re-reads it on every call rather than caching a decision made before
+ * there was a request to make it in.
+ *
+ * The in-memory fallback is still held on `globalThis`, so a dev-server
+ * hot reload does not reset a cycle mid-demo. The D1 implementation is
+ * stateless and is constructed per call.
  * ------------------------------------------------------------------ */
 
 const REPO_KEY = "__jsof_scholarships_repo__";
 type RepoGlobal = typeof globalThis & { [REPO_KEY]?: ScholarshipRepository };
 
 export function scholarshipRepository(): ScholarshipRepository {
+  if (database()) return new D1ScholarshipRepository();
   const store = globalThis as RepoGlobal;
   store[REPO_KEY] ??= new InMemoryScholarshipRepository();
   return store[REPO_KEY];
 }
 
+/**
+ * An in-memory repository, always. This is what the test suite runs
+ * against and it takes no binding into account.
+ */
 export function newScholarshipRepository(options?: { seed?: boolean }): ScholarshipRepository {
   return new InMemoryScholarshipRepository(options);
 }

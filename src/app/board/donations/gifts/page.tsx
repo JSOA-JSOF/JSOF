@@ -25,6 +25,21 @@ export const metadata = {
 };
 
 /**
+ * One card on this screen: the gift, and either the receipt it produces or the
+ * reason it produces none.
+ *
+ * Both halves are derived from the module's own actions rather than restated,
+ * so a change to either return shape surfaces here as a type error instead of
+ * as a blank column.
+ */
+type GiftCard = {
+  donation: Awaited<ReturnType<typeof readDonationRegister>>[number]["donation"];
+  preview: Awaited<ReturnType<typeof issueReceipt>> | null;
+  /** Set when no receipt can be issued, with the reason to show the reader. */
+  receiptProblem: string | null;
+};
+
+/**
  * The gift register for one entity, with the receipt each gift would produce.
  *
  * This used to be /board/donations itself. When that route became the
@@ -49,10 +64,34 @@ export default async function DonationsBoardPage({
   const hue = entity === "JSOA" ? "var(--jsoa)" : "var(--jsof)";
   const hueTint = entity === "JSOA" ? "var(--jsoa-tint)" : "var(--jsof-tint)";
 
-  let register: ReturnType<typeof readDonationRegister> | null = null;
+  let register: GiftCard[] | null = null;
   let denial: string | null = null;
   try {
-    register = readDonationRegister(subject, entity);
+    const rows = await readDonationRegister(subject, entity);
+    // The receipt previews are rendered here rather than inside the JSX,
+    // because rendering one is now an await and a React tree cannot hold a
+    // promise. Each one is still rendered at sequence 0, so opening this
+    // screen consumes no receipt number out of the entity's run.
+    register = await Promise.all(
+      rows.map(async ({ donation, receiptBlockedBecause }): Promise<GiftCard> => {
+        if (receiptBlockedBecause) {
+          return { donation, preview: null, receiptProblem: receiptBlockedBecause };
+        }
+        try {
+          const preview = await issueReceipt(subject, entity, donation.id, undefined, {
+            sequence: 0,
+          });
+          return { donation, preview, receiptProblem: null };
+        } catch (error) {
+          return {
+            donation,
+            preview: null,
+            receiptProblem:
+              error instanceof ReceiptError ? error.message : String(error),
+          };
+        }
+      }),
+    );
   } catch (error) {
     denial = error instanceof AuthzError ? error.message : String(error);
   }
@@ -109,20 +148,7 @@ export default async function DonationsBoardPage({
               entity&rsquo;s.
             </p>
 
-            {register.map(({ donation, receiptBlockedBecause }) => {
-              let preview: ReturnType<typeof issueReceipt> | null = null;
-              let receiptProblem: string | null = receiptBlockedBecause;
-              if (!receiptBlockedBecause) {
-                try {
-                  preview = issueReceipt(subject, entity, donation.id, undefined, {
-                    sequence: 0,
-                  });
-                } catch (error) {
-                  receiptProblem =
-                    error instanceof ReceiptError ? error.message : String(error);
-                }
-              }
-
+            {register.map(({ donation, preview, receiptProblem }) => {
               return (
                 <div className={styles.card} key={donation.id}>
                   <div className={styles.cardHead}>

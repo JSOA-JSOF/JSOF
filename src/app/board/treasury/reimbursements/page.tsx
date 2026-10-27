@@ -61,19 +61,21 @@ export default async function ReimbursementsPage({
   const query = await searchParams;
   const approveIdRaw = Array.isArray(query.approve) ? query.approve[0] : query.approve;
   const subject = treasurySubject(await getCurrentSubject());
-  const repo = treasuryRepository();
-  const queues = repo.reimbursementQueues(subject);
+  const repo = await treasuryRepository();
+  const asOf = await repo.asOfDate();
+  const period = await repo.period();
+  const queues = await repo.reimbursementQueues(subject);
 
   const allVisible = queues.flatMap((queue) => (queue.visible ? queue.claims : []));
   const target = approveIdRaw ? allVisible.find((c) => c.id === approveIdRaw) : undefined;
-  const outcome = target ? previewApproval(subject, target, repo.asOfDate()) : null;
+  const outcome = target ? previewApproval(subject, target, asOf) : null;
 
   return (
     <div>
       <TreasuryHeader
         current="/board/treasury/reimbursements"
         title="Reimbursements"
-        period={repo.period().label}
+        period={period.label}
         lede={
           "Claims from volunteers who paid out of pocket. One approval under " +
           `${formatCentsWithSymbol(100_000)}, two above it, and two above ` +
@@ -158,7 +160,7 @@ export default async function ReimbursementsPage({
                       key={claim.id}
                       claim={claim}
                       subjectPersonId={subject.personId}
-                      canAct={previewApproval(subject, claim, repo.asOfDate())}
+                      canAct={previewApproval(subject, claim, asOf)}
                     />
                   ))}
                 </div>

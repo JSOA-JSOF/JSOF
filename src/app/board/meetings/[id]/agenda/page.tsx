@@ -32,8 +32,8 @@ export default async function AgendaPage({
   const { id } = await params;
   const persona = await getCurrentPersona();
   const subject = subjectFor(persona);
-  const repo = meetingsRepository();
-  const meeting = repo.getMeeting(id);
+  const repo = await meetingsRepository();
+  const meeting = await repo.getMeeting(id);
   if (!meeting) notFound();
 
   if (!canReadGovernance(subject, meeting.entity)) {
@@ -51,7 +51,7 @@ export default async function AgendaPage({
     );
   }
 
-  const items = repo.listAgendaItems(id);
+  const items = await repo.listAgendaItems(id);
   const totals = agendaTotals(meeting, items);
   const schedule = agendaSchedule(meeting, items);
   const writable = canWriteMinutes(subject, meeting.entity);

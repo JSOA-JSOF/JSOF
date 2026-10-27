@@ -1,7 +1,14 @@
 /**
  * The reads and writes this module needs, plus an in-memory implementation
- * backed by seed data. No database: persistence lands in a later pass, and
- * swapping to Prisma should be one new file implementing this interface.
+ * backed by seed data. The D1 implementation of the same interface is in
+ * `repository.d1.ts`; `meetingsRepository()` at the bottom of this file picks
+ * between them on whether a binding exists.
+ *
+ * Every method returns a Promise, including the ones the in-memory
+ * implementation answers synchronously. That is not decoration: D1 is async,
+ * and an interface with eleven synchronous reads on it cannot be implemented
+ * against a database without changing every caller anyway. Paying it once here
+ * is cheaper than discovering it per method.
  *
  * The repository is where the entity rule is enforced rather than merely
  * documented. `saveMinute` refuses a minute that does not name its entity and
@@ -14,6 +21,7 @@
  */
 
 import type { Entity } from "../authz/model";
+import { database } from "../db";
 import {
   AgendaError,
   assertAgendaEditable,
@@ -48,28 +56,35 @@ import type {
 
 export interface MeetingsRepository {
   /* reads */
-  listMeetings(entity?: Entity): Meeting[];
+  listMeetings(entity?: Entity): Promise<Meeting[]>;
   /** Meetings sharing a calendar date, keyed by date, to show the separation. */
-  listSameDayPairs(): { date: string; meetings: Meeting[] }[];
-  getMeeting(id: string): Meeting | null;
-  listAgendaItems(meetingId: string): AgendaItem[];
-  listMinutes(meetingId: string): MinuteEntry[];
-  getMinuteByRef(ref: string): MinuteEntry | null;
-  listDecisions(entity?: Entity): DecisionRecord[];
-  listComplianceItems(entity?: Entity): ComplianceItem[];
+  listSameDayPairs(): Promise<{ date: string; meetings: Meeting[] }[]>;
+  getMeeting(id: string): Promise<Meeting | null>;
+  listAgendaItems(meetingId: string): Promise<AgendaItem[]>;
+  listMinutes(meetingId: string): Promise<MinuteEntry[]>;
+  getMinuteByRef(ref: string): Promise<MinuteEntry | null>;
+  listDecisions(entity?: Entity): Promise<DecisionRecord[]>;
+  listComplianceItems(entity?: Entity): Promise<ComplianceItem[]>;
 
   /* writes */
-  saveAgendaItem(input: AgendaItemInput): AgendaItem;
-  removeAgendaItem(meetingId: string, itemId: string): AgendaItem[];
-  reorderAgenda(meetingId: string, orderedItemIds: string[]): AgendaItem[];
-  adoptAgenda(meetingId: string, at: string): Meeting;
-  markNoticeSent(meetingId: string, at: string): Meeting;
-  setMeetingStatus(meetingId: string, status: MeetingStatus): Meeting;
-  setAttendance(meetingId: string, personId: string, present: boolean): Meeting;
-  saveMinute(input: MinuteEntryInput): MinuteEntry;
+  saveAgendaItem(input: AgendaItemInput): Promise<AgendaItem>;
+  removeAgendaItem(meetingId: string, itemId: string): Promise<AgendaItem[]>;
+  reorderAgenda(meetingId: string, orderedItemIds: string[]): Promise<AgendaItem[]>;
+  adoptAgenda(meetingId: string, at: string): Promise<Meeting>;
+  markNoticeSent(meetingId: string, at: string): Promise<Meeting>;
+  setMeetingStatus(meetingId: string, status: MeetingStatus): Promise<Meeting>;
+  setAttendance(
+    meetingId: string,
+    personId: string,
+    present: boolean,
+  ): Promise<Meeting>;
+  saveMinute(input: MinuteEntryInput): Promise<MinuteEntry>;
   /** Replaces every transcript-sourced draft for a meeting. Never touches a human minute. */
-  replaceTranscriptDrafts(meetingId: string, inputs: MinuteEntryInput[]): MinuteEntry[];
-  setComplianceStatus(itemId: string, status: FilingStatus): ComplianceItem;
+  replaceTranscriptDrafts(
+    meetingId: string,
+    inputs: MinuteEntryInput[],
+  ): Promise<MinuteEntry[]>;
+  setComplianceStatus(itemId: string, status: FilingStatus): Promise<ComplianceItem>;
 }
 
 export class RepositoryError extends Error {
@@ -125,7 +140,7 @@ export function createInMemoryMeetingsRepository(
     itemsOf(meetingId).reduce((max, item) => Math.max(max, item.itemNumber), 0) + 1;
 
   const api: MeetingsRepository = {
-    listMeetings(entity) {
+    async listMeetings(entity) {
       return Array.from(meetings.values())
         .filter((m) => (entity ? m.entity === entity : true))
         .sort((a, b) =>
@@ -138,7 +153,7 @@ export function createInMemoryMeetingsRepository(
         .map(clone);
     },
 
-    listSameDayPairs() {
+    async listSameDayPairs() {
       const byDate = new Map<string, Meeting[]>();
       for (const meeting of meetings.values()) {
         const date = meeting.scheduledStart.slice(0, 10);
@@ -152,16 +167,16 @@ export function createInMemoryMeetingsRepository(
         .sort((a, b) => (a.date < b.date ? 1 : -1));
     },
 
-    getMeeting(id) {
+    async getMeeting(id) {
       const meeting = meetings.get(id);
       return meeting ? clone(meeting) : null;
     },
 
-    listAgendaItems(meetingId) {
+    async listAgendaItems(meetingId) {
       return byPosition(itemsOf(meetingId)).map(clone);
     },
 
-    listMinutes(meetingId) {
+    async listMinutes(meetingId) {
       const order = new Map(itemsOf(meetingId).map((i) => [i.id, i.position]));
       return minutes
         .filter((entry) => entry.meetingId === meetingId)
@@ -172,12 +187,12 @@ export function createInMemoryMeetingsRepository(
         .map(clone);
     },
 
-    getMinuteByRef(ref) {
+    async getMinuteByRef(ref) {
       const found = minutes.find((entry) => entry.ref === ref);
       return found ? clone(found) : null;
     },
 
-    listDecisions(entity) {
+    async listDecisions(entity) {
       const records: DecisionRecord[] = [];
       for (const entry of minutes) {
         if (!entry.motion) continue;
@@ -210,13 +225,13 @@ export function createInMemoryMeetingsRepository(
       );
     },
 
-    listComplianceItems(entity) {
+    async listComplianceItems(entity) {
       return compliance
         .filter((item) => (entity ? item.entity === entity : true))
         .map(clone);
     },
 
-    saveAgendaItem(input) {
+    async saveAgendaItem(input) {
       const meeting = requireMeeting(input.meetingId);
       validateAgendaItemInput(input);
       const existing = input.id
@@ -256,7 +271,7 @@ export function createInMemoryMeetingsRepository(
       return clone(created);
     },
 
-    removeAgendaItem(meetingId, itemId) {
+    async removeAgendaItem(meetingId, itemId) {
       const meeting = requireMeeting(meetingId);
       assertAgendaEditable(meeting);
       const index = agendaItems.findIndex(
@@ -279,7 +294,7 @@ export function createInMemoryMeetingsRepository(
       return byPosition(itemsOf(meetingId)).map(clone);
     },
 
-    reorderAgenda(meetingId, orderedItemIds) {
+    async reorderAgenda(meetingId, orderedItemIds) {
       const meeting = requireMeeting(meetingId);
       assertAgendaEditable(meeting);
       const current = itemsOf(meetingId);
@@ -298,7 +313,7 @@ export function createInMemoryMeetingsRepository(
       return byPosition(itemsOf(meetingId)).map(clone);
     },
 
-    adoptAgenda(meetingId, at) {
+    async adoptAgenda(meetingId, at) {
       const meeting = requireMeeting(meetingId);
       // Freezing renumbers item numbers to match the final adopted order, once,
       // and then they never move again.
@@ -318,20 +333,20 @@ export function createInMemoryMeetingsRepository(
       return clone(meeting);
     },
 
-    markNoticeSent(meetingId, at) {
+    async markNoticeSent(meetingId, at) {
       const meeting = requireMeeting(meetingId);
       meeting.noticeSentAt = at;
       if (meeting.status === "DRAFT") meeting.status = "NOTICED";
       return clone(meeting);
     },
 
-    setMeetingStatus(meetingId, status) {
+    async setMeetingStatus(meetingId, status) {
       const meeting = requireMeeting(meetingId);
       meeting.status = status;
       return clone(meeting);
     },
 
-    setAttendance(meetingId, personId, present) {
+    async setAttendance(meetingId, personId, present) {
       const meeting = requireMeeting(meetingId);
       const attendee = meeting.attendees.find((a) => a.personId === personId);
       if (!attendee) {
@@ -344,7 +359,7 @@ export function createInMemoryMeetingsRepository(
       return clone(meeting);
     },
 
-    saveMinute(input) {
+    async saveMinute(input) {
       const meeting = requireMeeting(input.meetingId);
 
       // The refusal. A minute that does not name its entity is not saveable,
@@ -406,7 +421,7 @@ export function createInMemoryMeetingsRepository(
      * drafts deleted and half a new set written, which is a worse state than
      * either the before or the after.
      */
-    replaceTranscriptDrafts(meetingId, inputs) {
+    async replaceTranscriptDrafts(meetingId, inputs) {
       const meeting = requireMeeting(meetingId);
       const snapshot = minutes.map(clone);
 
@@ -428,7 +443,7 @@ export function createInMemoryMeetingsRepository(
           );
           if (humanExists) continue;
           written.push(
-            api.saveMinute({
+            await api.saveMinute({
               ...input,
               id: undefined,
               meetingId,
@@ -449,7 +464,7 @@ export function createInMemoryMeetingsRepository(
       }
     },
 
-    setComplianceStatus(itemId, status) {
+    async setComplianceStatus(itemId, status) {
       const item = compliance.find((c) => c.id === itemId);
       if (!item) throw new RepositoryError(`No compliance item ${itemId}`, "NOT_FOUND");
       if (!item.verified && status === "FILED") {
@@ -468,16 +483,34 @@ export function createInMemoryMeetingsRepository(
 }
 
 /**
- * One in-memory repository for the running process, so the demo keeps edits
- * between requests without a database. Replaced by a Prisma-backed
- * implementation in a later pass; nothing outside this file knows which one it
- * is holding.
+ * Which implementation this process is holding.
+ *
+ * D1 where there is a binding, the in-memory one where there is not. No
+ * binding is a normal state and not an error — `next dev` with no Worker
+ * behind it, a build, and the test runner are all cases of it — which is why
+ * `database()` returns null rather than throwing and why the in-memory
+ * implementation stays in the build.
+ *
+ * The D1 implementation loads with `import()` rather than at the top of this
+ * file. That keeps `repository.d1.ts` and everything it pulls in out of the
+ * module graph on the path that has no database, which is the path the test
+ * suite and a build both take. `database()` itself is a static import: it is
+ * the shared layer's job to answer this question and it already returns null
+ * rather than throwing when there is no context.
+ *
+ * The in-memory implementation is held on `globalThis` so the demo keeps edits
+ * between requests. The D1 one holds no state of its own, so it is built per
+ * call; nothing outside this file knows which one it has.
  */
 const globalForRepository = globalThis as unknown as {
   __jsoaMeetingsRepository?: MeetingsRepository;
 };
 
-export function meetingsRepository(): MeetingsRepository {
+export async function meetingsRepository(): Promise<MeetingsRepository> {
+  if (database()) {
+    const { createD1MeetingsRepository } = await import("./repository.d1");
+    return createD1MeetingsRepository();
+  }
   globalForRepository.__jsoaMeetingsRepository ??= createInMemoryMeetingsRepository();
   return globalForRepository.__jsoaMeetingsRepository;
 }

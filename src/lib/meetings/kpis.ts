@@ -201,12 +201,12 @@ function hoursBetween(fromIso: string, toIso: string): number {
   return Math.floor((Date.parse(toIso) - Date.parse(fromIso)) / HOUR_MS);
 }
 
-function snapshotFor(
+async function snapshotFor(
   repo: MeetingsRepository,
   subject: Subject,
   entity: Entity,
   now: Date,
-): BookSnapshot {
+): Promise<BookSnapshot> {
   const governance = canReadGovernance(subject, entity);
   const minutes = canReadMinutes(subject, entity);
   const snapshot = emptySnapshot(entity, governance, minutes);
@@ -214,8 +214,10 @@ function snapshotFor(
 
   // The guard, before the first read. Narrower reads get the narrower gate.
   authorizeGovernanceRead(subject, entity);
-  const meetings = repo.listMeetings(entity);
-  const filings = repo.listComplianceItems(entity);
+  const [meetings, filings] = await Promise.all([
+    repo.listMeetings(entity),
+    repo.listComplianceItems(entity),
+  ]);
 
   for (const meeting of meetings) {
     const required = noticeRequiredHours(meeting);
@@ -265,8 +267,10 @@ function snapshotFor(
   authorizeMinuteRead(subject, entity);
 
   for (const meeting of meetings) {
-    const items = repo.listAgendaItems(meeting.id);
-    const entries = repo.listMinutes(meeting.id);
+    const [items, entries] = await Promise.all([
+      repo.listAgendaItems(meeting.id),
+      repo.listMinutes(meeting.id),
+    ]);
     const byItem = new Map(entries.map((entry) => [entry.agendaItemId, entry]));
 
     for (const item of items) {
@@ -402,12 +406,19 @@ export function splitHeadlineKpis(kpis: Kpi[]): { headline: Kpi[]; more: Kpi[] }
  * The one authorized read.
  * ------------------------------------------------------------------ */
 
-export function secretaryDashboard(
+export async function secretaryDashboard(
   subject: Subject,
   now: Date = new Date(),
-  repo: MeetingsRepository = meetingsRepository(),
-): SecretaryDashboard {
-  const books = ENTITIES.map((entity) => snapshotFor(repo, subject, entity, now));
+  repo?: MeetingsRepository,
+): Promise<SecretaryDashboard> {
+  const reader = repo ?? (await meetingsRepository());
+  // Sequential rather than concurrent on purpose: each snapshot calls
+  // `authorize()` before its first read, and a refusal on the first entity
+  // should not have already issued the second entity's queries.
+  const books: BookSnapshot[] = [];
+  for (const entity of ENTITIES) {
+    books.push(await snapshotFor(reader, subject, entity, now));
+  }
   const governanceEntities = books.filter((b) => b.governance).map((b) => b.entity);
   const minuteEntities = books.filter((b) => b.minutes).map((b) => b.entity);
   const hasGovernance = governanceEntities.length > 0;
@@ -803,6 +814,9 @@ export function secretaryDashboard(
 }
 
 /** The dashboard's figures alone, for a caller that wants only the tiles. */
-export function secretaryKpis(subject: Subject, now: Date = new Date()): Kpi[] {
-  return secretaryDashboard(subject, now).kpis;
+export async function secretaryKpis(
+  subject: Subject,
+  now: Date = new Date(),
+): Promise<Kpi[]> {
+  return (await secretaryDashboard(subject, now)).kpis;
 }

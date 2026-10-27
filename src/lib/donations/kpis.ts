@@ -188,11 +188,11 @@ const NEEDS_PUBLIC_CONTENT = "read on published content for this entity";
  * and an explicit withholding for the rest, because a screen that refuses
  * wholesale teaches the Fundraising Chair that the module is not for them.
  */
-export function readDonationsDashboard(
+export async function readDonationsDashboard(
   subject: Subject,
   entity: Entity,
-  repo: Repo = donationsRepository,
-): DonationsDashboard {
+  repo: Repo = donationsRepository(),
+): Promise<DonationsDashboard> {
   const financialRow = can({
     subject,
     dataClass: "FINANCIAL",
@@ -240,7 +240,7 @@ export function readDonationsDashboard(
   let awaitingValuation: AwaitingValuationRow[] | null = null;
 
   if (financialRow) {
-    const register = readDonationRegister(subject, entity, repo);
+    const register = await readDonationRegister(subject, entity, repo);
     const blocked = register.filter(
       ({ donation }) =>
         donation.benefits.length > 0 && donation.benefitFairMarketValueCents === null,
@@ -315,7 +315,7 @@ export function readDonationsDashboard(
    * ---------------------------------------------------------------- */
 
   if (financialRow) {
-    const sponsorships = readSponsorRegister(subject, entity, repo);
+    const sponsorships = await readSponsorRegister(subject, entity, repo);
     const breaching = sponsorships.filter((row) => !row.assessment.withinSafeHarbour);
     const carvedOutCents = sumCents(breaching.map((row) => row.assessment.carvedOutCents));
     const excessOnlyCents = sumCents(
@@ -394,7 +394,7 @@ export function readDonationsDashboard(
   let flaggedWording: FlaggedWordingRow[] | null = null;
 
   if (publicContent) {
-    const wording = readSponsorAcknowledgments(subject, entity, repo);
+    const wording = await readSponsorAcknowledgments(subject, entity, repo);
     const placements = wording.flatMap((row) =>
       row.placements.map((view) => ({ sponsorName: row.sponsorName, view })),
     );
@@ -544,7 +544,7 @@ export function readDonationsDashboard(
   let restrictedWithMoney = 0;
 
   if (financialAggregate) {
-    const balances = readFundAggregates(subject, entity, repo);
+    const balances = await readFundAggregates(subject, entity, repo);
     const restricted = balances.filter((b) => b.restriction === "RESTRICTED");
     restrictedHeldCents = sumCents(restricted.map((b) => b.balanceCents));
     restrictedWithMoney = restricted.filter((b) => b.balanceCents > 0).length;
@@ -636,7 +636,7 @@ export function readDonationsDashboard(
     }
     anyEntityVisible = true;
     const total = sumCents(
-      readFundAggregates(subject, candidate, repo).map((b) => b.balanceCents),
+      (await readFundAggregates(subject, candidate, repo)).map((b) => b.balanceCents),
     );
     perEntity.push(`${ENTITY_LABEL[candidate]} ${formatCents(total)}`);
   }
@@ -680,13 +680,15 @@ export function readDonationsDashboard(
    * ---------------------------------------------------------------- */
 
   if (financialRow) {
-    const register = readDonationRegister(subject, entity, repo);
+    const register = await readDonationRegister(subject, entity, repo);
     const issuable = register.filter((row) => row.receiptBlockedBecause === null);
     let passing = 0;
     const failures: string[] = [];
     for (const { donation } of issuable) {
       try {
-        const { html } = issueReceipt(subject, entity, donation.id, repo, { sequence: 0 });
+        const { html } = await issueReceipt(subject, entity, donation.id, repo, {
+          sequence: 0,
+        });
         const check = checkDisclosureConspicuous(html);
         if (check.ok) passing += 1;
         else failures.push(`${donation.id}: ${check.problems.join(" ")}`);

@@ -43,11 +43,12 @@ export const metadata = {
  */
 export default async function TreasuryOverviewPage() {
   const subject = treasurySubject(await getCurrentSubject());
-  const repo = treasuryRepository();
+  const repo = await treasuryRepository();
+  const asOf = await repo.asOfDate();
 
   const scope = entitiesInScope(subject);
-  const tasks = treasurerTasks(subject, repo);
-  const calendar = treasurerCalendar(subject, repo);
+  const tasks = await treasurerTasks(subject, repo);
+  const calendar = await treasurerCalendar(subject, repo);
 
   const overdue = tasks.filter((task) => task.urgency === "overdue").length;
 
@@ -56,7 +57,7 @@ export default async function TreasuryOverviewPage() {
       <TreasuryHeader
         current="overview"
         title="What needs doing"
-        period={`As of ${repo.asOfDate()}`}
+        period={`As of ${asOf}`}
         lede={
           "Everything below is computed from the data rather than entered by hand, " +
           "so this list fills and empties itself as the work arrives and gets done. " +

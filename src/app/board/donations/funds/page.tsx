@@ -14,6 +14,17 @@ import { formatCents } from "@/lib/donations/money";
 import Denied from "../Denied";
 import styles from "../donations.module.css";
 
+/*
+ * The two reads this screen makes, as the screen sees them.
+ *
+ * `readFundRegister` and `readFundAggregates` are async now, so a bare
+ * `ReturnType` would be the promise rather than the rows. `Awaited` keeps the
+ * type tied to the action instead of restating its shape here, which is what
+ * stops this screen and that action drifting apart.
+ */
+type FundRegister = Awaited<ReturnType<typeof readFundRegister>>;
+type FundAggregates = Awaited<ReturnType<typeof readFundAggregates>>;
+
 export const metadata = {
   title: "Funds — board",
   robots: { index: false, follow: false },
@@ -43,18 +54,18 @@ export default async function FundsPage({
   const hue = entity === "JSOA" ? "var(--jsoa)" : "var(--jsof)";
   const hueTint = entity === "JSOA" ? "var(--jsoa-tint)" : "var(--jsof-tint)";
 
-  let register: ReturnType<typeof readFundRegister> | null = null;
-  let aggregates: ReturnType<typeof readFundAggregates> | null = null;
+  let register: FundRegister | null = null;
+  let aggregates: FundAggregates | null = null;
   let denial: string | null = null;
 
   try {
-    register = readFundRegister(subject, entity);
+    register = await readFundRegister(subject, entity);
   } catch {
     // Row-level read refused. Fall back to the aggregate view, which is a
     // different grant: AGGREGATE means counts and totals with no row identity,
     // and that is exactly what a fund balance is.
     try {
-      aggregates = readFundAggregates(subject, entity);
+      aggregates = await readFundAggregates(subject, entity);
     } catch (aggregateError) {
       denial =
         aggregateError instanceof AuthzError
@@ -161,7 +172,7 @@ function FundTable({
   total,
 }: {
   rows: Balance[];
-  register: ReturnType<typeof readFundRegister> | null;
+  register: FundRegister | null;
   total: number;
 }) {
   if (rows.length === 0) {

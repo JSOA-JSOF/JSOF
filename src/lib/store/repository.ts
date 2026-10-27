@@ -1,7 +1,12 @@
 /**
- * The reads and writes this module needs, and an in-memory implementation
- * backed by the seed. Persistence is deferred by design; swapping to Prisma
- * later should be one new file implementing this interface.
+ * The reads and writes this module needs, the in-memory implementation backed
+ * by the seed, and the choice between that and D1.
+ *
+ * Every method returns a Promise. That is not decoration: D1 is async, and the
+ * interface used to be synchronous, so the whole module above this file had to
+ * learn to wait. The in-memory implementation is still here and still backed by
+ * the seed, because it is what the test suite runs against and what keeps the
+ * suite fast; it is now async and otherwise unchanged.
  *
  * Nothing in here authorizes anything. Authorization is in `board.ts`, which
  * is the layer the routes call, so a repository method can never be the thing
@@ -10,7 +15,9 @@
 
 import type { Entity, Role } from "../authz/model";
 import type { RoleAssignment } from "../authz/policy";
+import { database } from "../db";
 
+import { D1StoreRepository } from "./repository.d1";
 import {
   SEED_BOARD_ASSIGNMENTS,
   SEED_COUNTS,
@@ -36,30 +43,30 @@ export type OrderFilter = {
 };
 
 export interface StoreRepository {
-  listProducts(entity: Entity): Product[];
-  findProduct(sku: string): Product | null;
+  listProducts(entity: Entity): Promise<Product[]>;
+  findProduct(sku: string): Promise<Product | null>;
 
-  listOrders(entity: Entity, filter?: OrderFilter): Order[];
-  findOrder(id: string): Order | null;
-  saveOrder(order: Order): Order;
+  listOrders(entity: Entity, filter?: OrderFilter): Promise<Order[]>;
+  findOrder(id: string): Promise<Order | null>;
+  saveOrder(order: Order): Promise<Order>;
 
-  listMovements(entity: Entity): StockMovement[];
-  saveMovement(movement: StockMovement): StockMovement;
+  listMovements(entity: Entity): Promise<StockMovement[]>;
+  saveMovement(movement: StockMovement): Promise<StockMovement>;
 
-  listCounts(entity: Entity): PhysicalCount[];
-  saveCount(count: PhysicalCount): PhysicalCount;
+  listCounts(entity: Entity): Promise<PhysicalCount[]>;
+  saveCount(count: PhysicalCount): Promise<PhysicalCount>;
 
-  listRefunds(entity: Entity): Refund[];
-  findRefund(id: string): Refund | null;
-  saveRefund(refund: Refund): Refund;
+  listRefunds(entity: Entity): Promise<Refund[]>;
+  findRefund(id: string): Promise<Refund | null>;
+  saveRefund(refund: Refund): Promise<Refund>;
 
   /**
    * Who is recorded as holding a role, for display. The separation-of-duties
    * check itself reads the signed-in subject's own assignments, not this.
    */
-  personsHolding(role: Role, entity: Entity): string[];
+  personsHolding(role: Role, entity: Entity): Promise<string[]>;
 
-  nextId(prefix: string): string;
+  nextId(prefix: string): Promise<string>;
 }
 
 export class InMemoryStoreRepository implements StoreRepository {
@@ -80,16 +87,16 @@ export class InMemoryStoreRepository implements StoreRepository {
     this.assignments = structuredClone(SEED_BOARD_ASSIGNMENTS);
   }
 
-  listProducts(entity: Entity): Product[] {
+  async listProducts(entity: Entity): Promise<Product[]> {
     return this.products.filter((p) => p.entity === entity).map((p) => ({ ...p }));
   }
 
-  findProduct(sku: string): Product | null {
+  async findProduct(sku: string): Promise<Product | null> {
     const found = this.products.find((p) => p.sku === sku);
     return found ? { ...found } : null;
   }
 
-  listOrders(entity: Entity, filter: OrderFilter = {}): Order[] {
+  async listOrders(entity: Entity, filter: OrderFilter = {}): Promise<Order[]> {
     return this.orders
       .filter((o) => o.entity === entity)
       .filter((o) =>
@@ -104,90 +111,105 @@ export class InMemoryStoreRepository implements StoreRepository {
       .sort((a, b) => b.placedAt.localeCompare(a.placedAt));
   }
 
-  findOrder(id: string): Order | null {
+  async findOrder(id: string): Promise<Order | null> {
     const found = this.orders.find((o) => o.id === id);
     return found ? { ...found, lines: found.lines.map((l) => ({ ...l })) } : null;
   }
 
-  saveOrder(order: Order): Order {
+  async saveOrder(order: Order): Promise<Order> {
     const index = this.orders.findIndex((o) => o.id === order.id);
     if (index >= 0) this.orders[index] = order;
     else this.orders.push(order);
     return order;
   }
 
-  listMovements(entity: Entity): StockMovement[] {
+  async listMovements(entity: Entity): Promise<StockMovement[]> {
     return this.movements.filter((m) => m.entity === entity).map((m) => ({ ...m }));
   }
 
-  saveMovement(movement: StockMovement): StockMovement {
+  async saveMovement(movement: StockMovement): Promise<StockMovement> {
     this.movements.push(movement);
     return movement;
   }
 
-  listCounts(entity: Entity): PhysicalCount[] {
+  async listCounts(entity: Entity): Promise<PhysicalCount[]> {
     return this.counts.filter((c) => c.entity === entity).map((c) => ({ ...c }));
   }
 
-  saveCount(count: PhysicalCount): PhysicalCount {
+  async saveCount(count: PhysicalCount): Promise<PhysicalCount> {
     this.counts.push(count);
     return count;
   }
 
-  listRefunds(entity: Entity): Refund[] {
+  async listRefunds(entity: Entity): Promise<Refund[]> {
     return this.refunds
       .filter((r) => r.entity === entity)
       .map((r) => ({ ...r }))
       .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
   }
 
-  findRefund(id: string): Refund | null {
+  async findRefund(id: string): Promise<Refund | null> {
     const found = this.refunds.find((r) => r.id === id);
     return found ? { ...found } : null;
   }
 
-  saveRefund(refund: Refund): Refund {
+  async saveRefund(refund: Refund): Promise<Refund> {
     const index = this.refunds.findIndex((r) => r.id === refund.id);
     if (index >= 0) this.refunds[index] = refund;
     else this.refunds.push(refund);
     return refund;
   }
 
-  personsHolding(role: Role, entity: Entity): string[] {
+  async personsHolding(role: Role, entity: Entity): Promise<string[]> {
     return Object.entries(this.assignments)
       .filter(([, list]) => list.some((a) => a.role === role && a.entity === entity))
       .map(([personId]) => personId);
   }
 
-  nextId(prefix: string): string {
+  async nextId(prefix: string): Promise<string> {
     this.sequence += 1;
     return `${prefix}-${String(this.sequence).padStart(4, "0")}`;
   }
 }
 
 /**
- * One instance for the demo. Writes made through the UI last until the dev
- * server restarts, which is the right amount of persistence for a walkthrough
- * and is honest about being a stub.
- */
-/**
  * Held on `globalThis` rather than in a module variable. A server action and
  * the page it redirects to are bundled separately, so a module-level singleton
  * gives each of them its own copy and an order written by the action is not
- * found by the page. Dev-mode hot reloads have the same effect. Once this is a
- * real database the problem disappears with the variable.
+ * found by the page. Dev-mode hot reloads have the same effect. With a real
+ * database behind the binding the problem disappears; without one, this is
+ * still what makes a walkthrough hang together.
  */
 const SINGLETON_KEY = "__jsoaStoreRepository";
 
 type WithRepo = typeof globalThis & { [SINGLETON_KEY]?: StoreRepository };
 
-export function storeRepository(): StoreRepository {
+function inMemorySingleton(): StoreRepository {
   const scope = globalThis as WithRepo;
   if (!scope[SINGLETON_KEY]) scope[SINGLETON_KEY] = new InMemoryStoreRepository();
   return scope[SINGLETON_KEY];
 }
 
-/** Tests want a clean one. */
+/* ------------------------------------------------------------------ *
+ * Choosing the implementation
+ * ------------------------------------------------------------------ *
+ *
+ * D1 when there is a binding, the seed when there is not. The decision
+ * is made per call rather than cached, because the binding belongs to
+ * the request and a decision cached across requests is a decision made
+ * for somebody else.
+ *
+ * `database()` returning null is a normal state, not an error: `next
+ * dev` with no Worker behind it has no binding, and the test runner has
+ * no Cloudflare context at all. Both land on the seed.
+ */
+export function storeRepository(): StoreRepository {
+  const db = database();
+  if (db) return new D1StoreRepository(db);
+  return inMemorySingleton();
+}
+
+/** Tests want a clean one. Always the seed, never the database. */
 export function freshStoreRepository(): StoreRepository {
   return new InMemoryStoreRepository();
 }

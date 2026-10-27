@@ -73,7 +73,7 @@ export default async function DonationsDashboardPage({
   let board: DonationsDashboard | null = null;
   let denial: string | null = null;
   try {
-    board = readDonationsDashboard(subject, entity);
+    board = await readDonationsDashboard(subject, entity);
   } catch (error) {
     denial = error instanceof AuthzError ? error.message : String(error);
   }

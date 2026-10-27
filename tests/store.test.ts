@@ -139,9 +139,9 @@ const NO_MFA = subject("p-ferris", [{ role: "TREASURER", entity: "JSOA" }], fals
 const NOW = new Date("2026-10-06T12:00:00.000Z");
 
 /** Active lines that hold stock. A print-on-demand line has no shelf to count. */
-function stockedSkus(): string[] {
-  return storeRepository()
-    .listProducts(STORE_ENTITY)
+async function stockedSkus(): Promise<string[]> {
+  const products = await storeRepository().listProducts(STORE_ENTITY);
+  return products
     .filter((p) => p.active && p.fulfilment === "stock")
     .map((p) => p.sku);
 }
@@ -152,9 +152,10 @@ function stockedSkus(): string[] {
  * path and the repository is a module singleton, so a fixed 7 here would be a
  * test that depended on its own position in the file.
  */
-function uncountedSkus(quarter: string): string[] {
-  const counts = storeRepository().listCounts(STORE_ENTITY);
-  return stockedSkus().filter(
+async function uncountedSkus(quarter: string): Promise<string[]> {
+  const counts = await storeRepository().listCounts(STORE_ENTITY);
+  const stocked = await stockedSkus();
+  return stocked.filter(
     (sku) => !counts.some((c) => c.sku === sku && c.quarter === quarter),
   );
 }
@@ -308,16 +309,16 @@ describe("the member or non-member snapshot on an order does not follow the memb
     expect(order.memberIdAtSale).toBe("JSOA-2019-0114");
   });
 
-  it("does not change when the buyer's membership lapses afterwards", () => {
+  it("does not change when the buyer's membership lapses afterwards", async () => {
     const repo = freshStoreRepository();
     const order = placeOrder({
       id: "SO-TEST-3",
       items: parseCartParam(`${PUBLIC_SKU}:2`),
-      products: repo.listProducts(STORE_ENTITY),
+      products: await repo.listProducts(STORE_ENTITY),
       viewer: GOOD_STANDING,
       placedAt: "2026-01-15T12:00:00.000Z",
     });
-    repo.saveOrder(order);
+    await repo.saveOrder(order);
 
     // The membership moves on. Revocation for cause, then a lapse: whichever
     // way it goes, this buyer no longer has member access.
@@ -326,7 +327,7 @@ describe("the member or non-member snapshot on an order does not follow the memb
     expect(state).toBe("REVOKED");
     expect(viewerHasMemberAccess({ ...GOOD_STANDING, membershipState: state })).toBe(false);
 
-    const reread = repo.findOrder("SO-TEST-3") as Order;
+    const reread = (await repo.findOrder("SO-TEST-3")) as Order;
     expect(reread.buyerTypeAtSale).toBe("MEMBER");
     expect(reread.membershipStateAtSale).toBe("GOOD_STANDING");
     expect(reread.memberIdAtSale).toBe("JSOA-2019-0114");
@@ -340,9 +341,9 @@ describe("the member or non-member snapshot on an order does not follow the memb
     expect(report.rows.find((r) => r.buyerType === "NON_MEMBER")?.orderCount).toBe(0);
   });
 
-  it("holds the seeded fixture order on the member side whatever happens later", () => {
+  it("holds the seeded fixture order on the member side whatever happens later", async () => {
     const repo = freshStoreRepository();
-    const before = repo.findOrder(SNAPSHOT_FIXTURE_ORDER_ID) as Order;
+    const before = (await repo.findOrder(SNAPSHOT_FIXTURE_ORDER_ID)) as Order;
     expect(before.buyerTypeAtSale).toBe("MEMBER");
 
     // Same buyer places a later order after lapsing. The new order is a
@@ -350,15 +351,17 @@ describe("the member or non-member snapshot on an order does not follow the memb
     const later = placeOrder({
       id: "SO-TEST-4",
       items: parseCartParam(`${PUBLIC_SKU}:1`),
-      products: repo.listProducts(STORE_ENTITY),
+      products: await repo.listProducts(STORE_ENTITY),
       viewer: { ...GOOD_STANDING, membershipState: "LAPSED" },
       placedAt: "2026-12-01T12:00:00.000Z",
     });
-    repo.saveOrder(later);
+    await repo.saveOrder(later);
 
     expect(later.buyerTypeAtSale).toBe("NON_MEMBER");
     expect(later.memberIdAtSale).toBeNull();
-    expect((repo.findOrder(SNAPSHOT_FIXTURE_ORDER_ID) as Order).buyerTypeAtSale).toBe("MEMBER");
+    expect(((await repo.findOrder(SNAPSHOT_FIXTURE_ORDER_ID)) as Order).buyerTypeAtSale).toBe(
+      "MEMBER",
+    );
   });
 
   it("treats a probationary buyer as a member and an unpaid applicant as not", () => {
@@ -502,10 +505,10 @@ describe("sales tax is computed and recorded on every order", () => {
     }
   });
 
-  it("reports tax collected per period without folding it into receipts", () => {
-    const rows = boardTaxPeriods(TREASURER);
+  it("reports tax collected per period without folding it into receipts", async () => {
+    const rows = await boardTaxPeriods(TREASURER);
     expect(rows.length).toBeGreaterThan(0);
-    const report = boardReceiptsReport(TREASURER, yearPeriod(2026));
+    const report = await boardReceiptsReport(TREASURER, yearPeriod(2026));
     const periodTax = rows.reduce((s, r) => s + r.salesTaxCollectedCents, 0);
     expect(periodTax).toBe(report.totalSalesTaxCollectedCents);
     // Gross receipts exclude the tax: it is the state's money, not a receipt.
@@ -610,11 +613,15 @@ describe("the receipts report splits by buyer type", () => {
     expect(csv).toMatch(/"Why this report exists/);
   });
 
-  it("is reachable by the Store Chair, who holds aggregate and not read", () => {
+  it("is reachable by the Store Chair, who holds aggregate and not read", async () => {
     // This is the point of putting the compliance artefact at AGGREGATE: the
     // person whose activity creates the exposure can see the figure.
-    expect(() => boardReceiptsReport(STORE_CHAIR_ONLY, period)).not.toThrow();
-    expect(() => boardReceiptsCsv(STORE_CHAIR_ONLY, period)).not.toThrow();
+    //
+    // These read as `resolves` rather than `not.toThrow` because the reads are
+    // now async: a refusal from `authorize()` arrives as a rejected promise,
+    // not as a synchronous throw. The assertion is the same one.
+    await expect(boardReceiptsReport(STORE_CHAIR_ONLY, period)).resolves.toBeDefined();
+    await expect(boardReceiptsCsv(STORE_CHAIR_ONLY, period)).resolves.toBeDefined();
   });
 });
 
@@ -625,40 +632,40 @@ describe("the receipts report splits by buyer type", () => {
 describe("wrong-role requests to the board store are refused", () => {
   const period = yearPeriod(2026);
 
-  it("refuses VP Membership, who holds nothing on financial records", () => {
-    expect(() => boardReceiptsReport(VP_MEMBERSHIP, period)).toThrow(AuthzError);
-    expect(() => boardOrderRows(VP_MEMBERSHIP)).toThrow(AuthzError);
-    expect(() => boardInventory(VP_MEMBERSHIP)).toThrow(AuthzError);
-    expect(() => boardRefunds(VP_MEMBERSHIP)).toThrow(AuthzError);
-    expect(() => boardTaxPeriods(VP_MEMBERSHIP)).toThrow(AuthzError);
+  it("refuses VP Membership, who holds nothing on financial records", async () => {
+    await expect(boardReceiptsReport(VP_MEMBERSHIP, period)).rejects.toThrow(AuthzError);
+    await expect(boardOrderRows(VP_MEMBERSHIP)).rejects.toThrow(AuthzError);
+    await expect(boardInventory(VP_MEMBERSHIP)).rejects.toThrow(AuthzError);
+    await expect(boardRefunds(VP_MEMBERSHIP)).rejects.toThrow(AuthzError);
+    await expect(boardTaxPeriods(VP_MEMBERSHIP)).rejects.toThrow(AuthzError);
   });
 
-  it("refuses the right role without MFA", () => {
-    expect(() => boardReceiptsReport(NO_MFA, period)).toThrow(AuthzError);
-    expect(() =>
+  it("refuses the right role without MFA", async () => {
+    await expect(boardReceiptsReport(NO_MFA, period)).rejects.toThrow(AuthzError);
+    await expect(
       boardRecordPhysicalCount(NO_MFA, { sku: PUBLIC_SKU, quarter: "2026-Q4", countedUnits: 10 }),
-    ).toThrow(AuthzError);
+    ).rejects.toThrow(AuthzError);
   });
 
-  it("refuses the Store Chair the row-level order list but not the totals", () => {
-    expect(() => boardOrderRows(STORE_CHAIR_ONLY)).toThrow(AuthzError);
-    expect(() => boardReceiptsReport(STORE_CHAIR_ONLY, period)).not.toThrow();
-    expect(() => boardInventory(STORE_CHAIR_ONLY)).not.toThrow();
+  it("refuses the Store Chair the row-level order list but not the totals", async () => {
+    await expect(boardOrderRows(STORE_CHAIR_ONLY)).rejects.toThrow(AuthzError);
+    await expect(boardReceiptsReport(STORE_CHAIR_ONLY, period)).resolves.toBeDefined();
+    await expect(boardInventory(STORE_CHAIR_ONLY)).resolves.toBeDefined();
   });
 
-  it("refuses the Finance Review Officer any write, mechanically", () => {
+  it("refuses the Finance Review Officer any write, mechanically", async () => {
     const fro = FINANCE_REVIEW;
-    expect(() =>
+    await expect(
       boardRecordPhysicalCount(fro, { sku: PUBLIC_SKU, quarter: "2026-Q4", countedUnits: 10 }),
-    ).toThrow(AuthzError);
+    ).rejects.toThrow(AuthzError);
     // Reading is fine. Independence is what the read is for.
-    expect(() => boardOrderRows(fro)).not.toThrow();
+    await expect(boardOrderRows(fro)).resolves.toBeDefined();
   });
 
-  it("withholds a member ID from a role with financial read but no member read", () => {
+  it("withholds a member ID from a role with financial read but no member read", async () => {
     // The Treasurer holds FINANCIAL WRITE and MEMBER_PII AGGREGATE, so the
     // order is visible and the member behind it is not.
-    const rows = boardOrderRows(TREASURER, { buyerType: "MEMBER" });
+    const rows = await boardOrderRows(TREASURER, { buyerType: "MEMBER" });
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
       expect(row.memberIdAtSale).toBeNull();
@@ -668,26 +675,26 @@ describe("wrong-role requests to the board store are refused", () => {
     }
   });
 
-  it("shows the member ID to the President, who holds member read", () => {
-    const rows = boardOrderRows(PRESIDENT, { buyerType: "MEMBER" });
+  it("shows the member ID to the President, who holds member read", async () => {
+    const rows = await boardOrderRows(PRESIDENT, { buyerType: "MEMBER" });
     expect(rows.some((r) => r.memberIdAtSale !== null)).toBe(true);
     expect(rows.every((r) => r.identityWithheld === false)).toBe(true);
   });
 
-  it("filters the order list by buyer type", () => {
-    const members = boardOrderRows(PRESIDENT, { buyerType: "MEMBER" });
-    const nonMembers = boardOrderRows(PRESIDENT, { buyerType: "NON_MEMBER" });
-    const all = boardOrderRows(PRESIDENT, { buyerType: "ALL" });
+  it("filters the order list by buyer type", async () => {
+    const members = await boardOrderRows(PRESIDENT, { buyerType: "MEMBER" });
+    const nonMembers = await boardOrderRows(PRESIDENT, { buyerType: "NON_MEMBER" });
+    const all = await boardOrderRows(PRESIDENT, { buyerType: "ALL" });
     expect(members.every((r) => r.buyerTypeAtSale === "MEMBER")).toBe(true);
     expect(nonMembers.every((r) => r.buyerTypeAtSale === "NON_MEMBER")).toBe(true);
     expect(members.length + nonMembers.length).toBe(all.length);
   });
 
-  it("denies a subject holding no board role at all", () => {
+  it("denies a subject holding no board role at all", async () => {
     const plainMember = subject("p-mem-1", [{ role: "MEMBER", entity: "JSOA" }]);
-    expect(() => boardReceiptsReport(plainMember, period)).toThrow(AuthzError);
-    expect(() => boardOrderRows(plainMember)).toThrow(AuthzError);
-    expect(() => boardInventory(plainMember)).toThrow(AuthzError);
+    await expect(boardReceiptsReport(plainMember, period)).rejects.toThrow(AuthzError);
+    await expect(boardOrderRows(plainMember)).rejects.toThrow(AuthzError);
+    await expect(boardInventory(plainMember)).rejects.toThrow(AuthzError);
   });
 });
 
@@ -754,18 +761,21 @@ describe("self-approval of a refund above the threshold is refused", () => {
     expect(small.status).toBe("APPROVED");
   });
 
-  it("refuses self-approval through the authorized board path as well", () => {
+  it("refuses self-approval through the authorized board path as well", async () => {
     // rf-0002 was raised by p-hollis and is above the threshold. p-hollis holds
     // TREASURER, so authorization passes and the self-approval check is what
     // stops it. That ordering matters: the refusal must not depend on the
     // person also lacking permission.
-    expect(() => boardApproveRefund(TREASURER_AND_STORE_CHAIR, "rf-0002")).toThrow(AuthzError);
+    await expect(boardApproveRefund(TREASURER_AND_STORE_CHAIR, "rf-0002")).rejects.toThrow(
+      AuthzError,
+    );
     try {
-      boardApproveRefund(TREASURER_AND_STORE_CHAIR, "rf-0002");
+      await boardApproveRefund(TREASURER_AND_STORE_CHAIR, "rf-0002");
     } catch (error) {
       expect((error as AuthzError).code).toBe("SELF_APPROVAL");
     }
-    expect(boardRefunds(TREASURER).find((r) => r.id === "rf-0002")?.status).toBe("REQUESTED");
+    const refunds = await boardRefunds(TREASURER);
+    expect(refunds.find((r) => r.id === "rf-0002")?.status).toBe("REQUESTED");
   });
 
   it("carries the tax portion of the refund, pro rata", () => {
@@ -821,23 +831,23 @@ describe("the quarterly count cannot be entered by the store chair", () => {
     expect(count.countedUnits).toBe(240);
   });
 
-  it("refuses through the authorized path too, where the chair has write access", () => {
+  it("refuses through the authorized path too, where the chair has write access", async () => {
     // The Treasurer who also chairs the store passes authorize() and is still
     // refused. If this ever passes, the compensating control is gone.
-    expect(() =>
+    await expect(
       boardRecordPhysicalCount(TREASURER_AND_STORE_CHAIR, {
         sku: PUBLIC_SKU,
         quarter: "2026-Q4",
         countedUnits: 240,
       }),
-    ).toThrow(AuthzError);
+    ).rejects.toThrow(AuthzError);
   });
 
-  it("surfaces the separation-of-duties finding for that person", () => {
+  it("surfaces the separation-of-duties finding for that person", async () => {
     // The finding comes from the shared policy, not from this module. The
     // inventory screen is reachable by that person, which is why the count
     // refusal has to be the thing that stops them.
-    const inventory = boardInventory(TREASURER_AND_STORE_CHAIR);
+    const inventory = await boardInventory(TREASURER_AND_STORE_CHAIR);
     expect(inventory.rows.length).toBeGreaterThan(0);
     const findings = separationOfDutiesFindings("p-hollis", [
       { role: "TREASURER", entity: "JSOA" },
@@ -846,7 +856,7 @@ describe("the quarterly count cannot be entered by the store chair", () => {
     expect(findings.some((f) => f.severity === "critical")).toBe(true);
   });
 
-  it("refuses whatever person ID the session hands us, not just the seeded one", () => {
+  it("refuses whatever person ID the session hands us, not just the seeded one", async () => {
     // The control has to survive the identity source changing. The shared dev
     // persona switcher yields person IDs like "dev:treasurer-store", which
     // match nothing in the seed, so a check against a recorded chair ID would
@@ -856,27 +866,29 @@ describe("the quarterly count cannot be entered by the store chair", () => {
       { role: "TREASURER", entity: "JSOA" },
       { role: "STORE_CHAIR", entity: "JSOA" },
     ]);
-    expect(storeChairPersonIdFor(sessionChair)).toBe("dev:treasurer-store");
-    expect(() =>
+    await expect(storeChairPersonIdFor(sessionChair)).resolves.toBe("dev:treasurer-store");
+    await expect(
       boardRecordPhysicalCount(sessionChair, {
         sku: PUBLIC_SKU,
         quarter: "2026-Q4",
         countedUnits: 240,
       }),
-    ).toThrow(AuthzError);
+    ).rejects.toThrow(AuthzError);
 
     // A treasurer who does not chair the store is not refused.
     const sessionTreasurer = subject("dev:treasurer-jsoa", [
       { role: "TREASURER", entity: "JSOA" },
     ]);
-    expect(storeChairPersonIdFor(sessionTreasurer)).not.toBe("dev:treasurer-jsoa");
-    expect(() =>
+    await expect(storeChairPersonIdFor(sessionTreasurer)).resolves.not.toBe(
+      "dev:treasurer-jsoa",
+    );
+    await expect(
       boardRecordPhysicalCount(sessionTreasurer, {
         sku: PUBLIC_SKU,
         quarter: "2026-Q4",
         countedUnits: 240,
       }),
-    ).not.toThrow();
+    ).resolves.toBeDefined();
   });
 
   it("refuses a count on a line that holds no stock", () => {
@@ -925,8 +937,8 @@ describe("a print-on-demand product does not break the inventory view", () => {
     expect(row?.unitsOut).toBe(1);
   });
 
-  it("does not ask for a quarterly count on a print-on-demand line", () => {
-    const inventory = boardInventory(TREASURER);
+  it("does not ask for a quarterly count on a print-on-demand line", async () => {
+    const inventory = await boardInventory(TREASURER);
     for (const sku of inventory.printOnDemandSkus) {
       expect(inventory.skusMissingThisQuarter).not.toContain(sku);
     }
@@ -964,8 +976,8 @@ describe("a print-on-demand product does not break the inventory view", () => {
     expect(row?.unitsOnHand).toBe(244);
   });
 
-  it("records a variance against the last count without correcting it", () => {
-    const inventory = boardInventory(TREASURER);
+  it("records a variance against the last count without correcting it", async () => {
+    const inventory = await boardInventory(TREASURER);
     const polo = inventory.rows.find((r) => r.sku === "JSOA-POLO-NAVY");
     expect(polo?.unitsOnHand).toBe(87);
     expect(polo?.lastCount?.countedUnits).toBe(86);
@@ -978,14 +990,14 @@ describe("a print-on-demand product does not break the inventory view", () => {
  * ================================================================== */
 
 describe("the Overview's tasks are derived from state, never entered", () => {
-  it("derives the quarterly count as the sharpest item, and says what it is a control for", () => {
-    const tasks = storeTasks(STORE_CHAIR_ONLY, NOW);
+  it("derives the quarterly count as the sharpest item, and says what it is a control for", async () => {
+    const tasks = await storeTasks(STORE_CHAIR_ONLY, NOW);
     const count = tasks.find((t) => t.key === "quarterly-count");
     expect(count).toBeDefined();
     // 2026-Q3 closed short of every stocked line, so the control has already
     // been missed once and this is overdue rather than merely due.
     expect(count?.urgency).toBe("overdue");
-    expect(count?.count).toBe(uncountedSkus("2026-Q4").length);
+    expect(count?.count).toBe((await uncountedSkus("2026-Q4")).length);
     expect(count?.because).toMatch(/2026-Q3 already closed at 1 of \d+ lines/);
     expect(count?.because).toMatch(/compensating control/);
     expect(count?.because).toMatch(/authorize, custody, record and reconcile/);
@@ -993,45 +1005,46 @@ describe("the Overview's tasks are derived from state, never entered", () => {
     expect(count?.dueOn).toBe("2026-12-31");
   });
 
-  it("gives every task a because, because a bare count tells a volunteer nothing", () => {
-    for (const task of storeTasks(STORE_CHAIR_ONLY, NOW)) {
+  it("gives every task a because, because a bare count tells a volunteer nothing", async () => {
+    for (const task of await storeTasks(STORE_CHAIR_ONLY, NOW)) {
       expect(task.because.length).toBeGreaterThan(40);
       expect(task.href.startsWith("/board/store")).toBe(true);
       expect(task.entity).toBe(STORE_ENTITY);
     }
   });
 
-  it("ties the member split task to the Pub. 3386 consequence, not to a timer", () => {
-    const task = storeTasks(STORE_CHAIR_ONLY, NOW).find(
-      (t) => t.key === "receipts-separate-records",
-    );
+  it("ties the member split task to the Pub. 3386 consequence, not to a timer", async () => {
+    const tasks = await storeTasks(STORE_CHAIR_ONLY, NOW);
+    const task = tasks.find((t) => t.key === "receipts-separate-records");
     expect(task).toBeDefined();
     expect(task?.because).toMatch(/unrelated business income/);
     // It fires because non-member orders exist in the period.
+    const seedOrders = await freshStoreRepository().listOrders(STORE_ENTITY);
     expect(task?.count).toBe(
-      receiptsReport(freshStoreRepository().listOrders(STORE_ENTITY), yearPeriod(2026)).rows.find(
+      receiptsReport(seedOrders, yearPeriod(2026)).rows.find(
         (r) => r.buyerType === "NON_MEMBER",
       )?.orderCount,
     );
   });
 
-  it("never counts a print-on-demand line as a stock shortage", () => {
-    const tasks = storeTasks(STORE_CHAIR_ONLY, NOW);
+  it("never counts a print-on-demand line as a stock shortage", async () => {
+    const tasks = await storeTasks(STORE_CHAIR_ONLY, NOW);
     const count = tasks.find((t) => t.key === "quarterly-count");
-    const stocked = stockedSkus().length;
-    const active = storeRepository().listProducts(STORE_ENTITY).filter((p) => p.active).length;
+    const stocked = (await stockedSkus()).length;
+    const products = await storeRepository().listProducts(STORE_ENTITY);
+    const active = products.filter((p) => p.active).length;
     expect(active).toBeGreaterThan(stocked);
     // The figure can never exceed the stocked lines, whatever has been counted:
     // a line with no shelf is not an uncounted line.
     expect(count?.count).toBeLessThanOrEqual(stocked);
-    expect(count?.count).toBe(uncountedSkus("2026-Q4").length);
+    expect(count?.count).toBe((await uncountedSkus("2026-Q4")).length);
     expect(count?.because).toContain(`of ${stocked} lines`);
     const cover = tasks.find((t) => t.key === "stock-cover");
     if (cover) expect(cover.count).toBeLessThanOrEqual(stocked);
   });
 
-  it("surfaces the separation-of-duties problem only to the person holding both seats", () => {
-    const both = storeTasks(TREASURER_AND_STORE_CHAIR, NOW);
+  it("surfaces the separation-of-duties problem only to the person holding both seats", async () => {
+    const both = await storeTasks(TREASURER_AND_STORE_CHAIR, NOW);
     const sod = both.find((t) => t.key === "sod-to-agenda");
     expect(sod?.urgency).toBe("overdue");
     expect(sod?.because).toMatch(/Treasurer and Store Chair/);
@@ -1039,34 +1052,32 @@ describe("the Overview's tasks are derived from state, never entered", () => {
     expect(both.find((t) => t.key === "quarterly-count")?.because).toMatch(
       /you cannot enter it yourself/,
     );
-    expect(storeTasks(STORE_CHAIR_ONLY, NOW).some((t) => t.key === "sod-to-agenda")).toBe(
-      false,
-    );
+    const chairOnly = await storeTasks(STORE_CHAIR_ONLY, NOW);
+    expect(chairOnly.some((t) => t.key === "sod-to-agenda")).toBe(false);
   });
 
-  it("withholds the row-level order task rather than widening the grant", () => {
+  it("withholds the row-level order task rather than widening the grant", async () => {
     // AWAITING_PAYMENT orders exist, so the only reason the Store Chair does
     // not get this task is the level: it needs READ and the chair holds
     // AGGREGATE. The Treasurer, who holds WRITE, does get it.
-    expect(
-      storeTasks(STORE_CHAIR_ONLY, NOW).some((t) => t.key === "orders-awaiting-payment"),
-    ).toBe(false);
-    expect(storeTasks(TREASURER, NOW).some((t) => t.key === "orders-awaiting-payment")).toBe(
-      true,
-    );
+    const chairTasks = await storeTasks(STORE_CHAIR_ONLY, NOW);
+    const treasurerTasks = await storeTasks(TREASURER, NOW);
+    expect(chairTasks.some((t) => t.key === "orders-awaiting-payment")).toBe(false);
+    expect(treasurerTasks.some((t) => t.key === "orders-awaiting-payment")).toBe(true);
   });
 
-  it("refuses a role with no reach into the store's financial records", () => {
-    expect(() => storeTasks(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
-    expect(() => storeCalendar(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
-    expect(() => storePlanningItems(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
-    expect(() => storeTasks(NO_MFA, NOW)).toThrow(AuthzError);
+  it("refuses a role with no reach into the store's financial records", async () => {
+    await expect(storeTasks(VP_MEMBERSHIP, NOW)).rejects.toThrow(AuthzError);
+    await expect(storeCalendar(VP_MEMBERSHIP, NOW)).rejects.toThrow(AuthzError);
+    await expect(storePlanningItems(VP_MEMBERSHIP, NOW)).rejects.toThrow(AuthzError);
+    await expect(storeTasks(NO_MFA, NOW)).rejects.toThrow(AuthzError);
   });
 });
 
 describe("the Overview's calendar does not invent an obligation", () => {
-  it("marks every sales-tax filing date unverified, because no registration is on record", () => {
-    const filings = storeCalendar(STORE_CHAIR_ONLY, NOW).filter((i) => i.kind === "FILING");
+  it("marks every sales-tax filing date unverified, because no registration is on record", async () => {
+    const calendar = await storeCalendar(STORE_CHAIR_ONLY, NOW);
+    const filings = calendar.filter((i) => i.kind === "FILING");
     expect(filings.length).toBeGreaterThan(0);
     for (const filing of filings) {
       expect(filing.unverified).toBe(true);
@@ -1074,29 +1085,31 @@ describe("the Overview's calendar does not invent an obligation", () => {
     }
   });
 
-  it("does not mark the quarterly count unverified, because the quarter is a real date", () => {
-    const cycle = storeCalendar(STORE_CHAIR_ONLY, NOW).find((i) => i.kind === "CYCLE");
+  it("does not mark the quarterly count unverified, because the quarter is a real date", async () => {
+    const calendar = await storeCalendar(STORE_CHAIR_ONLY, NOW);
+    const cycle = calendar.find((i) => i.kind === "CYCLE");
     expect(cycle?.on).toBe("2026-12-31");
     expect(cycle?.unverified).toBeUndefined();
   });
 
-  it("puts no event on the calendar while the register holds no date for one", () => {
+  it("puts no event on the calendar while the register holds no date for one", async () => {
     const events = storeStockDrivingEvents();
     expect(events.length).toBeGreaterThan(0);
     // Every stock-driving event in the register is undated, so none of them
     // may appear as a dated calendar item.
     for (const event of events) expect(event.dated).toBe(false);
-    expect(storeCalendar(STORE_CHAIR_ONLY, NOW).some((i) => i.kind === "EVENT")).toBe(false);
+    const calendar = await storeCalendar(STORE_CHAIR_ONLY, NOW);
+    expect(calendar.some((i) => i.kind === "EVENT")).toBe(false);
   });
 });
 
 describe("the Dashboard tab is three tiles and the split is one of them", () => {
-  it("shows three headline tiles, not seven", () => {
-    expect(storeKpis(STORE_CHAIR_ONLY, NOW)).toHaveLength(3);
+  it("shows three headline tiles, not seven", async () => {
+    expect(await storeKpis(STORE_CHAIR_ONLY, NOW)).toHaveLength(3);
   });
 
-  it("reports the member and non-member split as a single compliance tile", () => {
-    const kpis = storeKpis(STORE_CHAIR_ONLY, NOW);
+  it("reports the member and non-member split as a single compliance tile", async () => {
+    const kpis = await storeKpis(STORE_CHAIR_ONLY, NOW);
     const split = kpis.filter((k) => k.key === "receipts-member-split");
     expect(split).toHaveLength(1);
     // Not two tiles. The split is one record, not a segmentation.
@@ -1107,10 +1120,10 @@ describe("the Dashboard tab is three tiles and the split is one of them", () => 
     expect(split[0].from).toMatch(/recorded at the sale and never recomputed/);
   });
 
-  it("reports collected sales tax beside the split and never inside it", () => {
-    const kpis = storeKpis(STORE_CHAIR_ONLY, NOW);
+  it("reports collected sales tax beside the split and never inside it", async () => {
+    const kpis = await storeKpis(STORE_CHAIR_ONLY, NOW);
     const report = receiptsReport(
-      freshStoreRepository().listOrders(STORE_ENTITY),
+      await freshStoreRepository().listOrders(STORE_ENTITY),
       yearPeriod(2026),
     );
     const tax = kpis.find((k) => k.key === "sales-tax-held-in-trust");
@@ -1122,15 +1135,15 @@ describe("the Dashboard tab is three tiles and the split is one of them", () => 
     const wrong = formatCents(
       report.totalGrossReceiptsCents + report.totalSalesTaxCollectedCents,
     );
-    for (const kpi of [...kpis, ...storeMoreFigures(STORE_CHAIR_ONLY, NOW)]) {
+    for (const kpi of [...kpis, ...(await storeMoreFigures(STORE_CHAIR_ONLY, NOW))]) {
       expect(kpi.value ?? "").not.toContain(wrong);
     }
     expect(split?.value).not.toContain(formatCents(report.totalSalesTaxCollectedCents));
   });
 
-  it("keeps the rest of the figures, behind the disclosure rather than deleted", () => {
-    const headline = storeKpis(STORE_CHAIR_ONLY, NOW).map((k) => k.key);
-    const more = storeMoreFigures(STORE_CHAIR_ONLY, NOW).map((k) => k.key);
+  it("keeps the rest of the figures, behind the disclosure rather than deleted", async () => {
+    const headline = (await storeKpis(STORE_CHAIR_ONLY, NOW)).map((k) => k.key);
+    const more = (await storeMoreFigures(STORE_CHAIR_ONLY, NOW)).map((k) => k.key);
     expect(more).toContain("tax-record-gaps");
     expect(more).toContain("refunds-awaiting-second-approver");
     expect(more).toContain("stock-cover");
@@ -1138,15 +1151,15 @@ describe("the Dashboard tab is three tiles and the split is one of them", () => 
     for (const key of more) expect(headline).not.toContain(key);
   });
 
-  it("refuses the whole dashboard to a role that holds nothing here", () => {
-    expect(() => storeKpis(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
-    expect(() => storeMoreFigures(VP_MEMBERSHIP, NOW)).toThrow(AuthzError);
+  it("refuses the whole dashboard to a role that holds nothing here", async () => {
+    await expect(storeKpis(VP_MEMBERSHIP, NOW)).rejects.toThrow(AuthzError);
+    await expect(storeMoreFigures(VP_MEMBERSHIP, NOW)).rejects.toThrow(AuthzError);
   });
 });
 
 describe("Planning carries the three the board actually has to settle", () => {
-  it("raises fulfilment, the chair's seat and NCDOR registration, all as decisions", () => {
-    const items = storePlanningItems(STORE_CHAIR_ONLY, NOW);
+  it("raises fulfilment, the chair's seat and NCDOR registration, all as decisions", async () => {
+    const items = await storePlanningItems(STORE_CHAIR_ONLY, NOW);
     expect(items.map((i) => i.id)).toEqual([
       "store-plan-fulfilment",
       "store-plan-separation-of-duties",
@@ -1162,8 +1175,8 @@ describe("Planning carries the three the board actually has to settle", () => {
     }
   });
 
-  it("builds the fulfilment reason from the flag as it currently stands", () => {
-    const item = storePlanningItems(STORE_CHAIR_ONLY, NOW)[0];
+  it("builds the fulfilment reason from the flag as it currently stands", async () => {
+    const item = (await storePlanningItems(STORE_CHAIR_ONLY, NOW))[0];
     const stocked = SEED_PRODUCTS.filter((p) => p.active && p.fulfilment === "stock").length;
     const pod = SEED_PRODUCTS.filter(
       (p) => p.active && p.fulfilment === "print_on_demand",
@@ -1173,8 +1186,8 @@ describe("Planning carries the three the board actually has to settle", () => {
     expect(item.reason).toMatch(/because the board has not decided/);
   });
 
-  it("carries the live separation-of-duties finding for whoever is in the seats", () => {
-    const forBoth = storePlanningItems(TREASURER_AND_STORE_CHAIR, NOW)[1];
+  it("carries the live separation-of-duties finding for whoever is in the seats", async () => {
+    const forBoth = (await storePlanningItems(TREASURER_AND_STORE_CHAIR, NOW))[1];
     const finding = separationOfDutiesFindings(
       TREASURER_AND_STORE_CHAIR.personId,
       TREASURER_AND_STORE_CHAIR.assignments,
@@ -1183,9 +1196,8 @@ describe("Planning carries the three the board actually has to settle", () => {
     expect(forBoth.reason).toContain(finding!.finding);
 
     // And says so plainly when nobody holds both, rather than implying one.
-    expect(storePlanningItems(STORE_CHAIR_ONLY, NOW)[1].reason).toMatch(
-      /Nobody holds both seats/,
-    );
+    const forChairOnly = await storePlanningItems(STORE_CHAIR_ONLY, NOW);
+    expect(forChairOnly[1].reason).toMatch(/Nobody holds both seats/);
   });
 });
 
@@ -1213,8 +1225,8 @@ describe("Projects is a filter over the one register, not a copy", () => {
 describe("the Outside view keeps the two audiences apart", () => {
   const surface = () => storeOutsideSurface(STORE_CHAIR_ONLY);
 
-  it("has both columns and merges neither", () => {
-    const s = surface();
+  it("has both columns and merges neither", async () => {
+    const s = await surface();
     expect(s.noExternalSurface).toBe(false);
     expect(publicColumn(s).length).toBeGreaterThan(0);
     expect(memberColumn(s).length).toBeGreaterThan(0);
@@ -1222,8 +1234,8 @@ describe("the Outside view keeps the two audiences apart", () => {
     expect(publicColumn(s).length + memberColumn(s).length).toBe(s.items.length);
   });
 
-  it("names no member-restricted line anywhere in the public column", () => {
-    const text = publicColumn(surface())
+  it("names no member-restricted line anywhere in the public column", async () => {
+    const text = publicColumn(await surface())
       .map((item) => `${item.title} ${item.note ?? ""} ${item.href}`)
       .join(" ");
     const restricted = SEED_PRODUCTS.filter((p) => !p.publiclyPurchasable);
@@ -1235,22 +1247,23 @@ describe("the Outside view keeps the two audiences apart", () => {
     }
   });
 
-  it("carries no count of what is hidden on the public side", () => {
+  it("carries no count of what is hidden on the public side", async () => {
     // A count is the same disclosure as a locked row: it tells a visitor that
     // something exists. The number lives in the member column instead.
     const restricted = SEED_PRODUCTS.filter((p) => p.active && !p.publiclyPurchasable).length;
-    const publicText = publicColumn(surface())
+    const s = await surface();
+    const publicText = publicColumn(s)
       .map((item) => `${item.title} ${item.note ?? ""}`)
       .join(" ");
     expect(publicText).not.toMatch(new RegExp(`${restricted}\\s+(more|member|hidden|other)`));
-    const memberText = memberColumn(surface())
+    const memberText = memberColumn(s)
       .map((item) => `${item.title} ${item.note ?? ""}`)
       .join(" ");
     expect(memberText).toContain(String(restricted));
   });
 
-  it("flags the live site's store link to a construction page", () => {
-    const flagged = publicColumn(surface()).find(
+  it("flags the live site's store link to a construction page", async () => {
+    const flagged = publicColumn(await surface()).find(
       (item) => item.problem === "PLACEHOLDER_PUBLISHED",
     );
     expect(flagged).toBeDefined();
@@ -1258,25 +1271,25 @@ describe("the Outside view keeps the two audiences apart", () => {
     expect(flagged?.note).toMatch(/main navigation/);
   });
 
-  it("links an item page by a publicly purchasable SKU only", () => {
-    const item = publicColumn(surface()).find((i) => i.key === "public-item-pages");
+  it("links an item page by a publicly purchasable SKU only", async () => {
+    const item = publicColumn(await surface()).find((i) => i.key === "public-item-pages");
     const sku = item?.href.replace("/store/item/", "");
     const product = SEED_PRODUCTS.find((p) => p.sku === sku);
     expect(product?.publiclyPurchasable).toBe(true);
   });
 
-  it("reads public content, and refuses a role that holds none of it", () => {
+  it("reads public content, and refuses a role that holds none of it", async () => {
     // The Treasurer holds FINANCIAL WRITE and no PUBLIC_CONTENT at all, which
     // is the right refusal: what the site publishes is not a financial record.
-    expect(() => storeOutsideSurface(TREASURER)).toThrow(AuthzError);
-    expect(() => storeOutsideSummary(TREASURER)).toThrow(AuthzError);
-    expect(() => storeOutsideSurface(NO_MFA)).toThrow(AuthzError);
+    await expect(storeOutsideSurface(TREASURER)).rejects.toThrow(AuthzError);
+    await expect(storeOutsideSummary(TREASURER)).rejects.toThrow(AuthzError);
+    await expect(storeOutsideSurface(NO_MFA)).rejects.toThrow(AuthzError);
     // And the Store Chair, who holds PUBLIC_CONTENT WRITE, is not refused.
-    expect(() => storeOutsideSurface(STORE_CHAIR_ONLY)).not.toThrow();
+    await expect(storeOutsideSurface(STORE_CHAIR_ONLY)).resolves.toBeDefined();
   });
 
-  it("counts the member catalogue as every active line, stocked or printed", () => {
-    const summary = storeOutsideSummary(STORE_CHAIR_ONLY);
+  it("counts the member catalogue as every active line, stocked or printed", async () => {
+    const summary = await storeOutsideSummary(STORE_CHAIR_ONLY);
     expect(summary.activeLines).toBe(SEED_PRODUCTS.filter((p) => p.active).length);
     expect(summary.publicLines + summary.memberOnlyLines).toBe(summary.activeLines);
     // Print-on-demand lines are present in the catalogue counts and absent

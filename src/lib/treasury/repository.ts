@@ -8,10 +8,18 @@
  * money figure, which is the structural reason a blended total cannot be
  * requested: you ask per entity, or you ask for a list of columns.
  *
- * Swapping to Prisma later is one new file implementing `TreasuryRepository`.
+ * The D1 implementation of `TreasuryRepository` is in `repository.d1.ts`;
+ * `treasuryRepository()` at the bottom of this file picks between the two on
+ * whether a binding exists.
+ *
+ * Every method returns a Promise, including `period()` and `asOfDate()`, which
+ * the in-memory implementation answers from a constant. An interface with a
+ * mix of synchronous and asynchronous methods is one the caller has to
+ * remember things about, and the two cheap ones are not worth that.
  */
 
 import { ENTITIES, type Entity } from "../authz/model";
+import { database } from "../db";
 import {
   authorize,
   can,
@@ -150,28 +158,65 @@ export type ReimbursementQueue =
  * ------------------------------------------------------------------ */
 
 export interface TreasuryRepository {
-  period(): Period;
-  asOfDate(): string;
+  period(): Promise<Period>;
+  asOfDate(): Promise<string>;
 
   /** Two labelled columns, one per entity, each visible or withheld. */
-  positionStatement(subject: Subject): PositionStatement;
+  positionStatement(subject: Subject): Promise<PositionStatement>;
 
-  funds(subject: Subject, entity: Entity): Fund[];
-  ledger(subject: Subject, entity: Entity, filter?: LedgerFilter): LedgerView;
+  funds(subject: Subject, entity: Entity): Promise<Fund[]>;
+  ledger(
+    subject: Subject,
+    entity: Entity,
+    filter?: LedgerFilter,
+  ): Promise<LedgerView>;
 
-  subscriptionRegister(subject: Subject): SubscriptionRegister;
+  subscriptionRegister(subject: Subject): Promise<SubscriptionRegister>;
 
-  transfers(subject: Subject): Transfer[];
-  transfer(subject: Subject, id: string): Transfer | null;
+  transfers(subject: Subject): Promise<Transfer[]>;
+  transfer(subject: Subject, id: string): Promise<Transfer | null>;
 
-  separationOfDuties(subject: Subject): SodPanel;
+  separationOfDuties(subject: Subject): Promise<SodPanel>;
 
-  reimbursementQueues(subject: Subject): ReimbursementQueue[];
-  reimbursement(subject: Subject, id: string): Reimbursement | null;
+  reimbursementQueues(subject: Subject): Promise<ReimbursementQueue[]>;
+  reimbursement(subject: Subject, id: string): Promise<Reimbursement | null>;
 
-  /** Writes. Present on the interface; persistence lands in a later pass. */
-  saveTransfer(subject: Subject, transfer: Transfer): Transfer;
-  saveReimbursement(subject: Subject, reimbursement: Reimbursement): Reimbursement;
+  /**
+   * Writes. The in-memory implementation authorizes and hands the record
+   * straight back, which is what it did before this port: nothing outside a
+   * database can keep it. The D1 implementation writes it, with the transfer
+   * or claim and its approval rows in one transaction.
+   */
+  saveTransfer(subject: Subject, transfer: Transfer): Promise<Transfer>;
+  saveReimbursement(
+    subject: Subject,
+    reimbursement: Reimbursement,
+  ): Promise<Reimbursement>;
+}
+
+/* ------------------------------------------------------------------ *
+ * Two policy questions that were methods on the in-memory class
+ *
+ * Neither reads any treasury data: one asks what the subject's grants say and
+ * the other compares a transfer's two sides against the subject's TREASURER
+ * assignments. They were methods on `InMemoryTreasuryRepository` and not on
+ * the interface, which meant they existed on one implementation and not the
+ * other. Moved out here, where they are the same answer whatever is behind
+ * the repository.
+ * ------------------------------------------------------------------ */
+
+/** Whether any transfer is visible at all. Drives whether the tab renders. */
+export function canSeeTransfers(subject: Subject): boolean {
+  return ENTITIES.some((entity) =>
+    can({ subject, dataClass: "FINANCIAL", entity, required: "READ" }),
+  );
+}
+
+/** Which side, if any, this subject may approve. Drives the form. */
+export function approvableSides(subject: Subject, transfer: Transfer): Entity[] {
+  return [transfer.fromEntity, transfer.toEntity].filter((entity) =>
+    subject.assignments.some((a) => a.role === "TREASURER" && a.entity === entity),
+  );
 }
 
 /* ------------------------------------------------------------------ *
@@ -322,6 +367,63 @@ export function bySeverity<T extends { severity: SubscriptionFinding["severity"]
 }
 
 /* ------------------------------------------------------------------ *
+ * Separation of duties
+ *
+ * Shared by both implementations and holding no treasury data, which is why
+ * it sits here as a function rather than being written twice.
+ *
+ * It reads the board's role assignments and runs `separationOfDutiesFindings`
+ * over them. Those assignments are `PEOPLE` in this module's seed, and they
+ * stay the seed's even on the D1 path: the identity and role-grant tables are
+ * another module's (`0001_identity_and_audit.sql`) and this one does not reach
+ * across to them. Noted in the port report rather than solved quietly — when
+ * the panel should read real grants, it reads them through whatever authz
+ * exposes, not through a join from treasury.
+ * ------------------------------------------------------------------ */
+
+export function separationOfDutiesPanel(subject: Subject): SodPanel {
+  if (!isBoardMember(subject)) {
+    authorize({
+      subject,
+      dataClass: "AUDIT_LOG",
+      entity: ENTITIES[0],
+      required: "READ",
+    });
+  }
+
+  const all = PEOPLE.flatMap((person) =>
+    separationOfDutiesFindings(person.id, person.assignments),
+  );
+
+  // A person always sees a finding about themselves: the panel exists so the
+  // board can look at its own arrangement, and the Treasurer holds no audit
+  // scope. Findings about other people need audit read on that entity.
+  const maySee = (finding: SodFinding) =>
+    finding.personId === subject.personId ||
+    effectiveLevel(subject, "AUDIT_LOG", finding.entity) !== "NONE";
+
+  const current = all.filter(maySee);
+
+  const proposedFindings = separationOfDutiesFindings(
+    PROPOSED_CONSOLIDATION.personId,
+    PROPOSED_CONSOLIDATION.assignments,
+  ).filter(maySee);
+
+  return {
+    current: sortSod(current),
+    proposed: {
+      personId: PROPOSED_CONSOLIDATION.personId,
+      label: PROPOSED_CONSOLIDATION.label,
+      rationale: PROPOSED_CONSOLIDATION.rationale,
+      assignments: PROPOSED_CONSOLIDATION.assignments,
+      findings: sortSod(proposedFindings),
+    },
+    withheldCount: all.length - current.length,
+    people: PEOPLE,
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * In-memory implementation
  * ------------------------------------------------------------------ */
 
@@ -338,17 +440,17 @@ export class InMemoryTreasuryRepository implements TreasuryRepository {
     },
   ) {}
 
-  period(): Period {
+  async period(): Promise<Period> {
     return this.data.period;
   }
 
-  asOfDate(): string {
+  async asOfDate(): Promise<string> {
     return this.data.asOf;
   }
 
   /* --- Position statement ----------------------------------------- */
 
-  positionStatement(subject: Subject): PositionStatement {
+  async positionStatement(subject: Subject): Promise<PositionStatement> {
     const period = this.data.period;
 
     const columns: PositionColumn[] = ENTITIES.map((entity) => {
@@ -402,12 +504,16 @@ export class InMemoryTreasuryRepository implements TreasuryRepository {
 
   /* --- Ledger ------------------------------------------------------ */
 
-  funds(subject: Subject, entity: Entity): Fund[] {
+  async funds(subject: Subject, entity: Entity): Promise<Fund[]> {
     authorize({ subject, dataClass: "FINANCIAL", entity, required: "READ" });
     return this.data.funds.filter((f) => f.entity === entity);
   }
 
-  ledger(subject: Subject, entity: Entity, filter: LedgerFilter = {}): LedgerView {
+  async ledger(
+    subject: Subject,
+    entity: Entity,
+    filter: LedgerFilter = {},
+  ): Promise<LedgerView> {
     // Row-level financial detail, so READ, not AGGREGATE. A JSOA treasurer
     // asking for JSOF throws here rather than returning an empty list: an
     // empty list reads as "the Foundation had no activity".
@@ -449,7 +555,7 @@ export class InMemoryTreasuryRepository implements TreasuryRepository {
 
   /* --- Subscription register -------------------------------------- */
 
-  subscriptionRegister(subject: Subject): SubscriptionRegister {
+  async subscriptionRegister(subject: Subject): Promise<SubscriptionRegister> {
     const readable = ENTITIES.filter((entity) =>
       can({ subject, dataClass: "FINANCIAL", entity, required: "AGGREGATE" }),
     );
@@ -515,7 +621,7 @@ export class InMemoryTreasuryRepository implements TreasuryRepository {
    * position, so READ on either side is the right gate. A subject with scope
    * on neither entity sees nothing.
    */
-  transfers(subject: Subject): Transfer[] {
+  async transfers(subject: Subject): Promise<Transfer[]> {
     const readable = new Set(
       ENTITIES.filter((entity) =>
         can({ subject, dataClass: "FINANCIAL", entity, required: "READ" }),
@@ -533,24 +639,11 @@ export class InMemoryTreasuryRepository implements TreasuryRepository {
       .sort((a, b) => a.id.localeCompare(b.id));
   }
 
-  transfer(subject: Subject, id: string): Transfer | null {
-    return this.transfers(subject).find((t) => t.id === id) ?? null;
+  async transfer(subject: Subject, id: string): Promise<Transfer | null> {
+    return (await this.transfers(subject)).find((t) => t.id === id) ?? null;
   }
 
-  canSeeTransfers(subject: Subject): boolean {
-    return ENTITIES.some((entity) =>
-      can({ subject, dataClass: "FINANCIAL", entity, required: "READ" }),
-    );
-  }
-
-  /** Which side, if any, this subject may approve. Drives the form. */
-  approvableSides(subject: Subject, transfer: Transfer): Entity[] {
-    return [transfer.fromEntity, transfer.toEntity].filter((entity) =>
-      subject.assignments.some((a) => a.role === "TREASURER" && a.entity === entity),
-    );
-  }
-
-  saveTransfer(subject: Subject, transfer: Transfer): Transfer {
+  async saveTransfer(subject: Subject, transfer: Transfer): Promise<Transfer> {
     authorize({
       subject,
       dataClass: "FINANCIAL",
@@ -562,51 +655,13 @@ export class InMemoryTreasuryRepository implements TreasuryRepository {
 
   /* --- Separation of duties --------------------------------------- */
 
-  separationOfDuties(subject: Subject): SodPanel {
-    if (!isBoardMember(subject)) {
-      authorize({
-        subject,
-        dataClass: "AUDIT_LOG",
-        entity: ENTITIES[0],
-        required: "READ",
-      });
-    }
-
-    const all = PEOPLE.flatMap((person) =>
-      separationOfDutiesFindings(person.id, person.assignments),
-    );
-
-    // A person always sees a finding about themselves: the panel exists so the
-    // board can look at its own arrangement, and the Treasurer holds no audit
-    // scope. Findings about other people need audit read on that entity.
-    const maySee = (finding: SodFinding) =>
-      finding.personId === subject.personId ||
-      effectiveLevel(subject, "AUDIT_LOG", finding.entity) !== "NONE";
-
-    const current = all.filter(maySee);
-
-    const proposedFindings = separationOfDutiesFindings(
-      PROPOSED_CONSOLIDATION.personId,
-      PROPOSED_CONSOLIDATION.assignments,
-    ).filter(maySee);
-
-    return {
-      current: sortSod(current),
-      proposed: {
-        personId: PROPOSED_CONSOLIDATION.personId,
-        label: PROPOSED_CONSOLIDATION.label,
-        rationale: PROPOSED_CONSOLIDATION.rationale,
-        assignments: PROPOSED_CONSOLIDATION.assignments,
-        findings: sortSod(proposedFindings),
-      },
-      withheldCount: all.length - current.length,
-      people: PEOPLE,
-    };
+  async separationOfDuties(subject: Subject): Promise<SodPanel> {
+    return separationOfDutiesPanel(subject);
   }
 
   /* --- Reimbursements --------------------------------------------- */
 
-  reimbursementQueues(subject: Subject): ReimbursementQueue[] {
+  async reimbursementQueues(subject: Subject): Promise<ReimbursementQueue[]> {
     return ENTITIES.map((entity) => {
       if (!can({ subject, dataClass: "FINANCIAL", entity, required: "READ" })) {
         return {
@@ -627,7 +682,7 @@ export class InMemoryTreasuryRepository implements TreasuryRepository {
     });
   }
 
-  reimbursement(subject: Subject, id: string): Reimbursement | null {
+  async reimbursement(subject: Subject, id: string): Promise<Reimbursement | null> {
     const claim = this.data.reimbursements.find((r) => r.id === id);
     if (!claim) return null;
     authorize({
@@ -640,7 +695,10 @@ export class InMemoryTreasuryRepository implements TreasuryRepository {
     return claim;
   }
 
-  saveReimbursement(subject: Subject, reimbursement: Reimbursement): Reimbursement {
+  async saveReimbursement(
+    subject: Subject,
+    reimbursement: Reimbursement,
+  ): Promise<Reimbursement> {
     authorize({
       subject,
       dataClass: "FINANCIAL",
@@ -658,10 +716,27 @@ function sortSod(findings: SodFinding[]): SodFinding[] {
   );
 }
 
-/** One instance for the demo. A later pass swaps this for the Prisma-backed one. */
+/**
+ * Which implementation this process is holding.
+ *
+ * D1 where there is a binding, the in-memory one where there is not. No
+ * binding is a normal state: `next dev` with no Worker behind it, a build, and
+ * the test runner are all cases of it.
+ *
+ * The D1 implementation loads with `import()` rather than at the top of this
+ * file, which keeps it and everything it pulls in out of the module graph on
+ * the path with no database — the path a build and the test suite both take.
+ * `database()` is a static import: answering whether there is a binding is the
+ * shared layer's job, and it returns null rather than throwing when there is
+ * no request context.
+ */
 let instance: InMemoryTreasuryRepository | null = null;
 
-export function treasuryRepository(): InMemoryTreasuryRepository {
+export async function treasuryRepository(): Promise<TreasuryRepository> {
+  if (database()) {
+    const { createD1TreasuryRepository } = await import("./repository.d1");
+    return createD1TreasuryRepository();
+  }
   if (!instance) instance = new InMemoryTreasuryRepository();
   return instance;
 }

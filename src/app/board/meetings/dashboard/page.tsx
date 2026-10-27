@@ -33,7 +33,7 @@ export default async function SecretaryDashboardTab() {
 
   // One authorized read, guarded per entity inside the library before it
   // touches the repository.
-  const dashboard = secretaryDashboard(subject);
+  const dashboard = await secretaryDashboard(subject);
   const { headline, more } = splitHeadlineKpis(dashboard.kpis);
 
   if (visible.length === 0) {

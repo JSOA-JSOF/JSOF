@@ -48,7 +48,7 @@ export default async function FundraisingOutsidePage({
     params[DEV_SWITCHER_PARAM],
   );
 
-  const { surface, withheld, counts } = fundraisingOutside(subject);
+  const { surface, withheld, counts } = await fundraisingOutside(subject);
   const scope = entitiesInScope(subject);
 
   return (

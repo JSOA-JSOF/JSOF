@@ -41,12 +41,13 @@ export const metadata = {
  */
 export default async function SubscriptionsPage() {
   const subject = treasurySubject(await getCurrentSubject());
-  const repo = treasuryRepository();
+  const repo = await treasuryRepository();
+  const asOf = await repo.asOfDate();
 
   let register: SubscriptionRegister | null = null;
   let refusal: string | null = null;
   try {
-    register = repo.subscriptionRegister(subject);
+    register = await repo.subscriptionRegister(subject);
   } catch (error) {
     if (error instanceof AuthzError) {
       refusal =
@@ -63,7 +64,7 @@ export default async function SubscriptionsPage() {
       <TreasuryHeader
         current="/board/treasury/subscriptions"
         title="Subscriptions and budget"
-        period={`As of ${repo.asOfDate()}`}
+        period={`As of ${asOf}`}
         lede={
           "Every tool the two entities pay for, normalised to an annual figure so " +
           "the lines can be compared, and apportioned per entity on a stated basis. " +

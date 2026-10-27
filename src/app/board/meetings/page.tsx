@@ -46,14 +46,29 @@ export default async function SecretaryOverview() {
   const persona = await getCurrentPersona();
   const subject = await getCurrentSubject();
   const visible = readableEntities(subject, ENTITIES);
-  const repo = meetingsRepository();
+  const repo = await meetingsRepository();
 
   // Both reads are guarded per entity inside the library, before the first
   // repository call, and withhold rather than zero what this role cannot see.
-  const tasks = secretaryTasks(subject);
-  const calendar = secretaryCalendar(subject);
+  const tasks = await secretaryTasks(subject);
+  const calendar = await secretaryCalendar(subject);
 
-  const pairs = repo.listSameDayPairs();
+  const pairs = await repo.listSameDayPairs();
+
+  // The agenda for every meeting on the page, read before the render rather
+  // than inside it. A server component cannot await in the middle of its JSX,
+  // and reading per panel would be one query per meeting either way.
+  const agendas = new Map(
+    await Promise.all(
+      pairs
+        .flatMap((pair) => pair.meetings)
+        .filter((meeting) => visible.includes(meeting.entity))
+        .map(
+          async (meeting) =>
+            [meeting.id, await repo.listAgendaItems(meeting.id)] as const,
+        ),
+    ),
+  );
   const noticeTasks = tasks.filter((task) => task.key.startsWith("notice-"));
   const urgency = taskCountsByUrgency(tasks);
 
@@ -220,7 +235,7 @@ export default async function SecretaryOverview() {
                 </p>
                 <div className={styles.split}>
                   {shown.map((meeting) => {
-                    const items = repo.listAgendaItems(meeting.id);
+                    const items = agendas.get(meeting.id) ?? [];
                     const totals = agendaTotals(meeting, items);
                     const minutesReadable = canReadMinutes(subject, meeting.entity);
                     return (

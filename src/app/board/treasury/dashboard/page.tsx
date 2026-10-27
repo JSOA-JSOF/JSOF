@@ -50,10 +50,10 @@ export const metadata = {
  */
 export default async function TreasuryDashboardPage() {
   const subject = treasurySubject(await getCurrentSubject());
-  const repo = treasuryRepository();
-  const dashboard = treasuryDashboard(subject, repo);
+  const repo = await treasuryRepository();
+  const dashboard = await treasuryDashboard(subject, repo);
   const { headline, more } = splitKpis(dashboard.kpis);
-  const statement = repo.positionStatement(subject);
+  const statement = await repo.positionStatement(subject);
   const visibleCount = statement.columns.filter((c) => c.visible).length;
   const openTasks = dashboard.actions.length;
 

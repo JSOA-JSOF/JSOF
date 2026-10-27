@@ -36,16 +36,19 @@ export async function placeOrderAction(formData: FormData): Promise<void> {
 
   const repo = storeRepository();
   const order = placeOrder({
-    id: repo.nextId("SO-2026"),
+    id: await repo.nextId("SO-2026"),
     items,
-    products: repo.listProducts(STORE_ENTITY),
+    products: await repo.listProducts(STORE_ENTITY),
     viewer: resolveDevViewer(viewerKey).viewer,
     shipTo,
     placedAt: new Date().toISOString(),
   });
 
   const session = createHostedCheckoutSession(order);
-  repo.saveOrder({ ...order, checkoutSessionRef: session.sessionRef });
+  // Awaited, not fired and forgotten. The order has to exist, with its lines,
+  // before the buyer reaches a payment page: a redirect that outran the write
+  // would ask for money against an order nothing recorded.
+  await repo.saveOrder({ ...order, checkoutSessionRef: session.sessionRef });
 
   redirect(`${session.redirectUrl}&viewer=${encodeURIComponent(viewerKey)}`);
 }
@@ -59,9 +62,9 @@ export async function simulateProviderSuccessAction(formData: FormData): Promise
   const orderId = String(formData.get("order") ?? "");
   const viewerKey = String(formData.get("viewer") ?? "visitor");
   const repo = storeRepository();
-  const order = repo.findOrder(orderId);
+  const order = await repo.findOrder(orderId);
   if (!order) redirect("/store");
-  repo.saveOrder(markPaid(order, order.checkoutSessionRef ?? `stub_cs_${orderId}`));
+  await repo.saveOrder(markPaid(order, order.checkoutSessionRef ?? `stub_cs_${orderId}`));
   redirect(
     `/store/checkout/complete?order=${encodeURIComponent(orderId)}&viewer=${encodeURIComponent(viewerKey)}`,
   );

@@ -42,8 +42,8 @@ export default async function MinutesPage({
   const { id } = await params;
   const persona = await getCurrentPersona();
   const subject = subjectFor(persona);
-  const repo = meetingsRepository();
-  const meeting = repo.getMeeting(id);
+  const repo = await meetingsRepository();
+  const meeting = await repo.getMeeting(id);
   if (!meeting) notFound();
 
   if (!canReadMinutes(subject, meeting.entity)) {
@@ -63,8 +63,8 @@ export default async function MinutesPage({
     );
   }
 
-  const items = repo.listAgendaItems(id);
-  const entries = repo.listMinutes(id);
+  const items = await repo.listAgendaItems(id);
+  const entries = await repo.listMinutes(id);
   const byItem = new Map(entries.map((e) => [e.agendaItemId, e]));
   const writable = canWriteMinutes(subject, meeting.entity);
   const readiness = minuteBookReady(items, entries, meeting);

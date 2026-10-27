@@ -75,12 +75,14 @@ export default async function TransfersPage({
 }) {
   const query = await searchParams;
   const subject = treasurySubject(await getCurrentSubject());
-  const repo = treasuryRepository();
+  const repo = await treasuryRepository();
+  const asOf = await repo.asOfDate();
+  const period = await repo.period();
 
   let recorded: Transfer[] = [];
   let listRefusal: string | null = null;
   try {
-    recorded = repo.transfers(subject);
+    recorded = await repo.transfers(subject);
   } catch (error) {
     if (error instanceof TreasuryError) listRefusal = error.message;
     else throw error;
@@ -107,16 +109,16 @@ export default async function TransfersPage({
     approvals.push({
       approverId: TREASURER_BY_ENTITY[fromEntity],
       entity: fromEntity,
-      approvedOn: repo.asOfDate(),
+      approvedOn: asOf,
     });
   }
   if (presidentReceiving) {
-    approvals.push({ approverId: PRESIDENT_ID, entity: toEntity, approvedOn: repo.asOfDate() });
+    approvals.push({ approverId: PRESIDENT_ID, entity: toEntity, approvedOn: asOf });
   } else if (approveTo) {
     approvals.push({
       approverId: TREASURER_BY_ENTITY[toEntity],
       entity: toEntity,
-      approvedOn: repo.asOfDate(),
+      approvedOn: asOf,
     });
   }
 
@@ -147,7 +149,7 @@ export default async function TransfersPage({
       <TreasuryHeader
         current="/board/treasury/transfers"
         title="Inter-entity transfers"
-        period={repo.period().label}
+        period={period.label}
         lede={
           "Money crossing between a 501(c)(19) and a 501(c)(3) is its own " +
           "transaction type. It cannot be recorded without a treasurer's approval " +

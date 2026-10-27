@@ -43,7 +43,8 @@ export default async function CheckoutPage({
   const county = typeof params.county === "string" ? params.county : "Cumberland";
   const shipTo = shipToFromParams(state, county);
 
-  const totals = totalCart(items, storeRepository().listProducts(STORE_ENTITY), option.viewer, shipTo);
+  const products = await storeRepository().listProducts(STORE_ENTITY);
+  const totals = totalCart(items, products, option.viewer, shipTo);
   const jurisdiction = jurisdictionByCode(totals.taxJurisdictionCode);
   const buyerType = snapshotBuyerType(
     option.viewer.kind === "member" ? option.viewer.membershipState : null,

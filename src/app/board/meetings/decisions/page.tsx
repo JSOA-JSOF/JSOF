@@ -126,7 +126,7 @@ function EntityColumn({
 export default async function DecisionsPage() {
   const persona = await getCurrentPersona();
   const subject = subjectFor(persona);
-  const repo = meetingsRepository();
+  const repo = await meetingsRepository();
   const visible = ENTITIES.filter((entity) => canReadMinutes(subject, entity));
 
   if (visible.length === 0) {
@@ -145,7 +145,7 @@ export default async function DecisionsPage() {
     );
   }
 
-  const all = repo.listDecisions();
+  const all = await repo.listDecisions();
   const crossEntityRefs = all.filter((record) =>
     /transfer/i.test(`${record.itemTitle} ${record.motion.text}`),
   );

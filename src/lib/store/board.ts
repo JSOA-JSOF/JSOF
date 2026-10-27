@@ -101,10 +101,10 @@ export type BoardOrderRow = {
   fulfilments: string[];
 };
 
-export function boardOrderRows(
+export async function boardOrderRows(
   subject: Subject,
   filter: OrderFilter = {},
-): BoardOrderRow[] {
+): Promise<BoardOrderRow[]> {
   authorize({
     subject,
     dataClass: "FINANCIAL",
@@ -119,8 +119,8 @@ export function boardOrderRows(
     required: "READ",
   });
 
-  return repo()
-    .listOrders(ENTITY, filter)
+  const orders = await repo().listOrders(ENTITY, filter);
+  return orders
     .map((order) => ({
       id: order.id,
       placedAt: order.placedAt,
@@ -150,12 +150,12 @@ export type BoardOrderSummary = {
   awaitingPaymentCount: number;
 };
 
-export function boardOrderSummary(
+export async function boardOrderSummary(
   subject: Subject,
   filter: OrderFilter = {},
-): BoardOrderSummary {
+): Promise<BoardOrderSummary> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "AGGREGATE" });
-  const orders = repo().listOrders(ENTITY, filter);
+  const orders = await repo().listOrders(ENTITY, filter);
   const receipted = orders.filter(isReceipted);
   return {
     orderCount: orders.length,
@@ -175,25 +175,28 @@ export function mayReadOrderRows(subject: Subject): boolean {
  * The compliance report
  * ------------------------------------------------------------------ */
 
-export function boardReceiptsReport(subject: Subject, period: Period): ReceiptsReport {
+export async function boardReceiptsReport(
+  subject: Subject,
+  period: Period,
+): Promise<ReceiptsReport> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "AGGREGATE" });
-  return receiptsReport(repo().listOrders(ENTITY), period);
+  return receiptsReport(await repo().listOrders(ENTITY), period);
 }
 
-export function boardReceiptsCsv(subject: Subject, period: Period): string {
+export async function boardReceiptsCsv(subject: Subject, period: Period): Promise<string> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "AGGREGATE" });
-  return receiptsReportCsv(receiptsReport(repo().listOrders(ENTITY), period));
+  return receiptsReportCsv(receiptsReport(await repo().listOrders(ENTITY), period));
 }
 
-export function boardTaxPeriods(subject: Subject): TaxPeriodRow[] {
+export async function boardTaxPeriods(subject: Subject): Promise<TaxPeriodRow[]> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "AGGREGATE" });
-  const orders = repo().listOrders(ENTITY);
+  const orders = await repo().listOrders(ENTITY);
   return taxPeriodRows(orders, monthsCovered(orders));
 }
 
-export function boardPeriodsAvailable(subject: Subject): Period[] {
+export async function boardPeriodsAvailable(subject: Subject): Promise<Period[]> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "AGGREGATE" });
-  return monthsCovered(repo().listOrders(ENTITY));
+  return monthsCovered(await repo().listOrders(ENTITY));
 }
 
 /* ------------------------------------------------------------------ *
@@ -209,23 +212,30 @@ export type BoardInventory = {
   counts: PhysicalCount[];
 };
 
-export function boardInventory(subject: Subject): BoardInventory {
+export async function boardInventory(subject: Subject): Promise<BoardInventory> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "AGGREGATE" });
-  const products = repo().listProducts(ENTITY);
-  const rows = inventoryRows(products, repo().listMovements(ENTITY), repo().listCounts(ENTITY));
+  // One read of each, rather than the four the synchronous version made. The
+  // repository hands back a copy every time, so reading counts once and using
+  // it three times is the same answer and three fewer round trips.
+  const [products, movements, counts] = await Promise.all([
+    repo().listProducts(ENTITY),
+    repo().listMovements(ENTITY),
+    repo().listCounts(ENTITY),
+  ]);
+  const rows = inventoryRows(products, movements, counts);
   const quarter = currentQuarter();
   return {
     rows,
     quarter,
-    skusMissingThisQuarter: skusMissingCount(rows, repo().listCounts(ENTITY), quarter),
+    skusMissingThisQuarter: skusMissingCount(rows, counts, quarter),
     printOnDemandSkus: rows.filter((r) => r.fulfilment === "print_on_demand").map((r) => r.sku),
-    counts: repo().listCounts(ENTITY),
+    counts,
   };
 }
 
 /** Whoever is recorded as chairing the store, for display. */
-export function recordedStoreChairPersonId(): string {
-  const holders = repo().personsHolding("STORE_CHAIR", ENTITY);
+export async function recordedStoreChairPersonId(): Promise<string> {
+  const holders = await repo().personsHolding("STORE_CHAIR", ENTITY);
   return holders.length > 0 ? holders[0] : STORE_CHAIR_PERSON_ID;
 }
 
@@ -239,7 +249,7 @@ export function recordedStoreChairPersonId(): string {
  * source is: it does not depend on the seeded person IDs lining up with
  * whatever identity the session hands us.
  */
-export function storeChairPersonIdFor(subject: Subject): string {
+export async function storeChairPersonIdFor(subject: Subject): Promise<string> {
   const holdsChairHere = subject.assignments.some(
     (a) => a.entity === ENTITY && a.role === "STORE_CHAIR",
   );
@@ -252,18 +262,18 @@ export function storeChairPersonIdFor(subject: Subject): string {
  * `authorize`, the second is `assertNotSelfApproval` inside
  * `buildPhysicalCount`.
  */
-export function boardRecordPhysicalCount(
+export async function boardRecordPhysicalCount(
   subject: Subject,
   input: Omit<PhysicalCountInput, "id" | "countedByPersonId" | "countedAt"> & {
     countedAt?: string;
   },
-): PhysicalCount {
+): Promise<PhysicalCount> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "WRITE" });
-  const product = repo().findProduct(input.sku);
+  const product = await repo().findProduct(input.sku);
   if (!product) throw new Error(`No product ${input.sku}`);
   const count = buildPhysicalCount(
     {
-      id: repo().nextId("pc"),
+      id: await repo().nextId("pc"),
       sku: input.sku,
       quarter: input.quarter,
       countedUnits: input.countedUnits,
@@ -271,7 +281,7 @@ export function boardRecordPhysicalCount(
       countedAt: input.countedAt ?? new Date().toISOString(),
     },
     product,
-    storeChairPersonIdFor(subject),
+    await storeChairPersonIdFor(subject),
   );
   return repo().saveCount(count);
 }
@@ -280,22 +290,22 @@ export function boardRecordPhysicalCount(
  * Refunds
  * ------------------------------------------------------------------ */
 
-export function boardRefunds(subject: Subject): Refund[] {
+export async function boardRefunds(subject: Subject): Promise<Refund[]> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "AGGREGATE" });
   return repo().listRefunds(ENTITY);
 }
 
-export function boardRequestRefund(
+export async function boardRequestRefund(
   subject: Subject,
   input: Omit<RefundRequestInput, "id" | "order" | "requestedByPersonId" | "requestedAt"> & {
     orderId: string;
   },
-): Refund {
+): Promise<Refund> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "WRITE" });
-  const order = repo().findOrder(input.orderId);
+  const order = await repo().findOrder(input.orderId);
   if (!order) throw new Error(`No order ${input.orderId}`);
   const refund = buildRefundRequest({
-    id: repo().nextId("rf"),
+    id: await repo().nextId("rf"),
     order,
     amountCents: input.amountCents,
     reason: input.reason,
@@ -310,13 +320,20 @@ export function boardRequestRefund(
  * `approveRefundRecord` enforces through the shared `assertNotSelfApproval`.
  * The AuthzError propagates; this module has no override.
  */
-export function boardApproveRefund(subject: Subject, refundId: string): Refund {
+export async function boardApproveRefund(
+  subject: Subject,
+  refundId: string,
+): Promise<Refund> {
   authorize({ subject, dataClass: "FINANCIAL", entity: ENTITY, required: "WRITE" });
-  const refund = repo().findRefund(refundId);
+  const refund = await repo().findRefund(refundId);
   if (!refund) throw new Error(`No refund ${refundId}`);
   const approved = approveRefundRecord(refund, subject.personId, new Date().toISOString());
-  const order = repo().findOrder(refund.orderId);
-  if (order) repo().saveOrder(applyRefundToOrder(order, approved));
+  const order = await repo().findOrder(refund.orderId);
+  // The order is updated before the refund, and both are awaited rather than
+  // fired off together: if the order write fails, the refund stays REQUESTED
+  // and the queue still shows it. The other order would show an approved
+  // refund against an order that never recorded it.
+  if (order) await repo().saveOrder(applyRefundToOrder(order, approved));
   return repo().saveRefund(approved);
 }
 

@@ -32,7 +32,7 @@ export default async function OrderCompletePage({
 }) {
   const params = await searchParams;
   const orderId = typeof params.order === "string" ? params.order : "";
-  const order = storeRepository().findOrder(orderId);
+  const order = await storeRepository().findOrder(orderId);
   if (!order) notFound();
 
   const jurisdiction = jurisdictionByCode(order.taxJurisdictionCode);

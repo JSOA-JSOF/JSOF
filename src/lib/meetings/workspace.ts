@@ -95,25 +95,31 @@ function withheldEntities(subject: Subject): Entity[] {
  * first read. Ownership is by role, never by person: offices turn over and
  * duties do not.
  */
-function ownedFilings(
+async function ownedFilings(
   subject: Subject,
   repo: MeetingsRepository,
-): { entity: Entity; items: ComplianceItem[] }[] {
-  return governanceEntities(subject).map((entity) => {
+): Promise<{ entity: Entity; items: ComplianceItem[] }[]> {
+  const books: { entity: Entity; items: ComplianceItem[] }[] = [];
+  for (const entity of governanceEntities(subject)) {
+    // Still before the first read, and still per entity. The await moved; the
+    // order of the guard and the read did not.
     authorizeGovernanceRead(subject, entity);
-    return {
+    const items = await repo.listComplianceItems(entity);
+    books.push({
       entity,
-      items: repo
-        .listComplianceItems(entity)
-        .filter((item) => item.ownerRole === WORKSPACE_ROLE),
-    };
-  });
+      items: items.filter((item) => item.ownerRole === WORKSPACE_ROLE),
+    });
+  }
+  return books;
 }
 
 /** Meetings of one entity still ahead, soonest first. Guarded by the caller. */
-function upcomingMeetings(repo: MeetingsRepository, entity: Entity, now: Date): Meeting[] {
-  return repo
-    .listMeetings(entity)
+async function upcomingMeetings(
+  repo: MeetingsRepository,
+  entity: Entity,
+  now: Date,
+): Promise<Meeting[]> {
+  return (await repo.listMeetings(entity))
     .filter((meeting) => Date.parse(meeting.scheduledStart) >= now.getTime())
     .sort((a, b) => a.scheduledStart.localeCompare(b.scheduledStart));
 }
@@ -132,12 +138,13 @@ function upcomingMeetings(repo: MeetingsRepository, entity: Entity, now: Date): 
  * because a bare count ("2 waiting") tells a volunteer nothing about whether
  * to open it tonight.
  */
-export function secretaryTasks(
+export async function secretaryTasks(
   subject: Subject,
   now: Date = new Date(),
-  repo: MeetingsRepository = meetingsRepository(),
-): RoleTask[] {
-  const dashboard = secretaryDashboard(subject, now, repo);
+  repo?: MeetingsRepository,
+): Promise<RoleTask[]> {
+  const reader = repo ?? (await meetingsRepository());
+  const dashboard = await secretaryDashboard(subject, now, reader);
 
   const tasks: RoleTask[] = dashboard.actions.map((action) => ({
     key: action.key,
@@ -152,7 +159,7 @@ export function secretaryTasks(
     dueOn: action.dueOn,
   }));
 
-  for (const book of ownedFilings(subject, repo)) {
+  for (const book of await ownedFilings(subject, reader)) {
     for (const item of book.items) {
       // Rule 3. The quarantine happens before anything becomes a task: an
       // unverified duty and a duty blocked pending confirmation that it applies
@@ -241,16 +248,17 @@ const FILING_KIND: Record<ComplianceItem["kind"], RoleCalendarItem["kind"]> = {
  * different routes. They stay in `items` so they are visible, and they are
  * excluded from `obligations` so nothing can act on them.
  */
-export function secretaryCalendar(
+export async function secretaryCalendar(
   subject: Subject,
   now: Date = new Date(),
-  repo: MeetingsRepository = meetingsRepository(),
-): SecretaryCalendar {
+  repo?: MeetingsRepository,
+): Promise<SecretaryCalendar> {
+  const reader = repo ?? (await meetingsRepository());
   const items: RoleCalendarItem[] = [];
   const unresolved: UnresolvedEntry[] = [];
   const obligations: { entity: Entity; count: number }[] = [];
 
-  for (const book of ownedFilings(subject, repo)) {
+  for (const book of await ownedFilings(subject, reader)) {
     let count = 0;
     for (const item of book.items) {
       const quarantined = !item.verified || item.status === "BLOCKED";
@@ -280,7 +288,7 @@ export function secretaryCalendar(
     }
     obligations.push({ entity: book.entity, count });
 
-    for (const meeting of upcomingMeetings(repo, book.entity, now)) {
+    for (const meeting of await upcomingMeetings(reader, book.entity, now)) {
       items.push({
         key: meeting.id,
         title: meeting.title,
@@ -371,18 +379,19 @@ function asPlanningItem(item: AgendaItem, meeting: Meeting): PlanningItem {
  *
  * Governance-level read: an agenda names roles and titles, never a person.
  */
-export function secretaryPlanning(
+export async function secretaryPlanning(
   subject: Subject,
   now: Date = new Date(),
-  repo: MeetingsRepository = meetingsRepository(),
-): SecretaryPlanning {
+  repo?: MeetingsRepository,
+): Promise<SecretaryPlanning> {
+  const reader = repo ?? (await meetingsRepository());
   const meetings: PlanningForMeeting[] = [];
 
   for (const entity of governanceEntities(subject)) {
     authorizeGovernanceRead(subject, entity);
-    const next = upcomingMeetings(repo, entity, now)[0];
+    const next = (await upcomingMeetings(reader, entity, now))[0];
     if (!next) continue;
-    const items = repo.listAgendaItems(next.id);
+    const items = await reader.listAgendaItems(next.id);
     meetings.push({
       meeting: next,
       adopted: next.agendaAdoptedAt !== null,

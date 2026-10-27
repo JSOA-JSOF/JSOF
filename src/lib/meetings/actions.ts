@@ -31,7 +31,7 @@ import {
 } from "./form";
 import { draftFromTranscript, draftToMinuteInputs } from "./transcript";
 import { minuteRefForMeeting } from "./reference";
-import { meetingsRepository } from "./repository";
+import { meetingsRepository, type MeetingsRepository } from "./repository";
 import type { AgendaItemType, FilingStatus, MinuteEntryInput } from "./types";
 
 export type ActionResult =
@@ -39,11 +39,11 @@ export type ActionResult =
   | { ok: false; error: string };
 
 async function guardWrite(
-  entityOfMeeting: (repo: ReturnType<typeof meetingsRepository>) => Entity | null,
+  entityOfMeeting: (repo: MeetingsRepository) => Promise<Entity | null>,
   kind: "agenda" | "minutes",
 ): Promise<{ subject: Subject; entity: Entity }> {
-  const repo = meetingsRepository();
-  const entity = entityOfMeeting(repo);
+  const repo = await meetingsRepository();
+  const entity = await entityOfMeeting(repo);
   if (!entity) throw new Error("That meeting is not in the book.");
   const subject = await getCurrentSubject();
   if (kind === "agenda") authorizeAgendaWrite(subject, entity);
@@ -51,8 +51,10 @@ async function guardWrite(
   return { subject, entity };
 }
 
-function entityOf(meetingId: string): (repo: ReturnType<typeof meetingsRepository>) => Entity | null {
-  return (repo) => repo.getMeeting(meetingId)?.entity ?? null;
+function entityOf(
+  meetingId: string,
+): (repo: MeetingsRepository) => Promise<Entity | null> {
+  return async (repo) => (await repo.getMeeting(meetingId))?.entity ?? null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -66,8 +68,8 @@ export async function saveAgendaItemAction(
   const meetingId = String(formData.get("meetingId") ?? "");
   try {
     await guardWrite(entityOf(meetingId), "agenda");
-    const repo = meetingsRepository();
-    repo.saveAgendaItem({
+    const repo = await meetingsRepository();
+    await repo.saveAgendaItem({
       id: (formData.get("itemId") as string) || undefined,
       meetingId,
       title: String(formData.get("title") ?? ""),
@@ -95,7 +97,7 @@ export async function removeAgendaItemAction(
   const itemId = String(formData.get("itemId") ?? "");
   try {
     await guardWrite(entityOf(meetingId), "agenda");
-    meetingsRepository().removeAgendaItem(meetingId, itemId);
+    await (await meetingsRepository()).removeAgendaItem(meetingId, itemId);
     revalidatePath(`/board/meetings/${meetingId}/agenda`);
     return { ok: true, message: "The item is off the agenda." };
   } catch (error) {
@@ -112,15 +114,15 @@ export async function moveAgendaItemAction(
   const direction = String(formData.get("direction") ?? "up") === "up" ? -1 : 1;
   try {
     await guardWrite(entityOf(meetingId), "agenda");
-    const repo = meetingsRepository();
-    const ordered = repo.listAgendaItems(meetingId).map((i) => i.id);
+    const repo = await meetingsRepository();
+    const ordered = (await repo.listAgendaItems(meetingId)).map((i) => i.id);
     const index = ordered.indexOf(itemId);
     const target = index + direction;
     if (index === -1 || target < 0 || target >= ordered.length) {
       return { ok: false, error: "That item is already at the end of the agenda." };
     }
     [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
-    repo.reorderAgenda(meetingId, ordered);
+    await repo.reorderAgenda(meetingId, ordered);
     revalidatePath(`/board/meetings/${meetingId}/agenda`);
     return { ok: true, message: "The agenda order is changed." };
   } catch (error) {
@@ -139,7 +141,7 @@ export async function reorderAgendaAction(
     .filter(Boolean);
   try {
     await guardWrite(entityOf(meetingId), "agenda");
-    meetingsRepository().reorderAgenda(meetingId, order);
+    await (await meetingsRepository()).reorderAgenda(meetingId, order);
     revalidatePath(`/board/meetings/${meetingId}/agenda`);
     return { ok: true, message: "The agenda order is saved." };
   } catch (error) {
@@ -154,9 +156,9 @@ export async function adoptAgendaAction(
   const meetingId = String(formData.get("meetingId") ?? "");
   try {
     await guardWrite(entityOf(meetingId), "agenda");
-    const repo = meetingsRepository();
-    const meeting = repo.adoptAgenda(meetingId, new Date().toISOString());
-    const items = repo.listAgendaItems(meetingId);
+    const repo = await meetingsRepository();
+    const meeting = await repo.adoptAgenda(meetingId, new Date().toISOString());
+    const items = await repo.listAgendaItems(meetingId);
     const totals = agendaTotals(meeting, items);
     revalidatePath(`/board/meetings/${meetingId}/agenda`);
     return {
@@ -186,14 +188,14 @@ export async function buildAgendaNoticeAction(
   meetingId: string,
 ): Promise<DistributionResult> {
   try {
-    const repo = meetingsRepository();
-    const meeting = repo.getMeeting(meetingId);
+    const repo = await meetingsRepository();
+    const meeting = await repo.getMeeting(meetingId);
     if (!meeting) return { ok: false, error: "That meeting is not in the book." };
     const subject = await getCurrentSubject();
     authorizeGovernanceRead(subject, meeting.entity);
     const distribution = buildAgendaDistribution(
       meeting,
-      repo.listAgendaItems(meetingId),
+      await repo.listAgendaItems(meetingId),
     );
     return {
       ok: true,
@@ -221,7 +223,10 @@ export async function recordNoticeSentAction(
   const meetingId = String(formData.get("meetingId") ?? "");
   try {
     await guardWrite(entityOf(meetingId), "agenda");
-    meetingsRepository().markNoticeSent(meetingId, new Date().toISOString());
+    await (await meetingsRepository()).markNoticeSent(
+      meetingId,
+      new Date().toISOString(),
+    );
     revalidatePath(`/board/meetings/${meetingId}/distribute`);
     revalidatePath(`/board/meetings/${meetingId}/agenda`);
     return {
@@ -246,7 +251,7 @@ export async function saveMinuteAction(
   const meetingId = String(formData.get("meetingId") ?? "");
   try {
     const { entity } = await guardWrite(entityOf(meetingId), "minutes");
-    const repo = meetingsRepository();
+    const repo = await meetingsRepository();
 
     // The entity comes from the form so the refusal is reachable from the UI
     // rather than only from a test. A blank value is the case the brief
@@ -270,7 +275,7 @@ export async function saveMinuteAction(
       source: "SECRETARY",
       flags: [],
     };
-    const saved = repo.saveMinute(input);
+    const saved = await repo.saveMinute(input);
     revalidatePath(`/board/meetings/${meetingId}/minutes`);
     revalidatePath("/board/meetings/decisions");
     return { ok: true, message: `Minute ${saved.ref} is saved.` };
@@ -286,7 +291,7 @@ export async function setAttendanceAction(
   const meetingId = String(formData.get("meetingId") ?? "");
   try {
     await guardWrite(entityOf(meetingId), "minutes");
-    meetingsRepository().setAttendance(
+    await (await meetingsRepository()).setAttendance(
       meetingId,
       String(formData.get("personId") ?? ""),
       String(formData.get("present") ?? "") === "yes",
@@ -321,9 +326,9 @@ export async function ingestTranscriptAction(
   const transcript = String(formData.get("transcript") ?? "");
   try {
     await guardWrite(entityOf(meetingId), "minutes");
-    const repo = meetingsRepository();
-    const meeting = repo.getMeeting(meetingId)!;
-    const items = repo.listAgendaItems(meetingId);
+    const repo = await meetingsRepository();
+    const meeting = (await repo.getMeeting(meetingId))!;
+    const items = await repo.listAgendaItems(meetingId);
     if (items.length === 0) {
       return {
         ok: false,
@@ -341,7 +346,7 @@ export async function ingestTranscriptAction(
       transcript,
       refFor: (itemNumber) => minuteRefForMeeting(meeting, itemNumber),
     });
-    const written = repo.replaceTranscriptDrafts(
+    const written = await repo.replaceTranscriptDrafts(
       meetingId,
       draftToMinuteInputs(draft, meeting),
     );
@@ -374,12 +379,12 @@ export async function setFilingStatusAction(
   const itemId = String(formData.get("itemId") ?? "");
   const status = String(formData.get("status") ?? "OPEN") as FilingStatus;
   try {
-    const repo = meetingsRepository();
-    const item = repo.listComplianceItems().find((c) => c.id === itemId);
+    const repo = await meetingsRepository();
+    const item = (await repo.listComplianceItems()).find((c) => c.id === itemId);
     if (!item) return { ok: false, error: "That filing is not on the calendar." };
     const subject = await getCurrentSubject();
     authorizeAgendaWrite(subject, item.entity);
-    repo.setComplianceStatus(itemId, status);
+    await repo.setComplianceStatus(itemId, status);
     revalidatePath("/board/meetings/calendar");
     return { ok: true, message: `${item.title} is marked ${status.toLowerCase()}.` };
   } catch (error) {

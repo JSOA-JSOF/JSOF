@@ -51,9 +51,9 @@ export default async function StoreDashboard() {
   let more = null;
   let secondTier = null;
   try {
-    kpis = storeKpis(subject);
-    more = storeMoreFigures(subject);
-    secondTier = storeSecondTier(subject);
+    kpis = await storeKpis(subject);
+    more = await storeMoreFigures(subject);
+    secondTier = await storeSecondTier(subject);
   } catch {
     kpis = null;
   }

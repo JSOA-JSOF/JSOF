@@ -39,7 +39,7 @@ export default async function SecretaryOutsideTab() {
 
   // Guarded inside the library. Used only to point the notice row at the real
   // send screen rather than at a tab.
-  const nextMeeting = secretaryPlanning(subject).meetings[0]?.meeting;
+  const nextMeeting = (await secretaryPlanning(subject)).meetings[0]?.meeting;
   const publicRecord = secretaryPublicRecord(
     nextMeeting ? `/board/meetings/${nextMeeting.id}/distribute` : "/board/meetings",
   );

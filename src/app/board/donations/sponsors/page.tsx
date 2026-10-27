@@ -22,6 +22,13 @@ import {
 import Denied from "../Denied";
 import styles from "../donations.module.css";
 
+/*
+ * The two reads, as the screen sees them. `Awaited` keeps each tied to the
+ * action it comes from rather than restating the action's shape here.
+ */
+type SponsorRegister = Awaited<ReturnType<typeof readSponsorRegister>>;
+type SponsorWording = Awaited<ReturnType<typeof readSponsorAcknowledgments>>;
+
 export const metadata = {
   title: "Sponsors — board",
   robots: { index: false, follow: false },
@@ -54,15 +61,15 @@ export default async function SponsorsPage({
   const hue = entity === "JSOA" ? "var(--jsoa)" : "var(--jsof)";
   const hueTint = entity === "JSOA" ? "var(--jsoa-tint)" : "var(--jsof-tint)";
 
-  let register: ReturnType<typeof readSponsorRegister> | null = null;
-  let wordingOnly: ReturnType<typeof readSponsorAcknowledgments> | null = null;
+  let register: SponsorRegister | null = null;
+  let wordingOnly: SponsorWording | null = null;
   let denial: string | null = null;
 
   try {
-    register = readSponsorRegister(subject, entity);
+    register = await readSponsorRegister(subject, entity);
   } catch (financialError) {
     try {
-      wordingOnly = readSponsorAcknowledgments(subject, entity);
+      wordingOnly = await readSponsorAcknowledgments(subject, entity);
     } catch {
       denial =
         financialError instanceof AuthzError

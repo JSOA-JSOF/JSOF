@@ -63,7 +63,19 @@ import {
 } from "./types";
 
 type Repo = DonationsRepository;
-const defaultRepo = () => donationsRepository;
+
+/**
+ * The repository, resolved per call.
+ *
+ * `donationsRepository()` returns the D1 implementation when there is a
+ * binding and the seeded in-memory one when there is not, so this is a call
+ * rather than a captured instance. Every handler below takes it as a default
+ * argument, which is how the test suite injects its own.
+ *
+ * Every read and write through it is awaited: the interface is async because
+ * D1 is, and nothing in this file holds a promise it does not wait for.
+ */
+const defaultRepo = (): Repo => donationsRepository();
 
 /* ================================================================== *
  * Public: the donate flow. No data class is touched, so no authorize.
@@ -78,12 +90,12 @@ export type PublicFundOption = {
   purpose: string;
 };
 
-export function listPublicFundOptions(
+export async function listPublicFundOptions(
   entity: Entity,
   repo: Repo = defaultRepo(),
-): PublicFundOption[] {
-  return repo
-    .listFunds(entity)
+): Promise<PublicFundOption[]> {
+  const funds = await repo.listFunds(entity);
+  return funds
     .filter((fund) => fund.openToGifts)
     .map((fund) => ({
       id: fund.id,
@@ -113,10 +125,10 @@ export type PrepareIntentResult =
   | { ok: true; intent: DonationIntent }
   | { ok: false; code: string; message: string; field?: string };
 
-export function prepareDonationIntent(
+export async function prepareDonationIntent(
   input: PrepareIntentInput,
   repo: Repo = defaultRepo(),
-): PrepareIntentResult {
+): Promise<PrepareIntentResult> {
   if (input.entity !== "JSOA" && input.entity !== "JSOF") {
     return {
       ok: false,
@@ -144,7 +156,7 @@ export function prepareDonationIntent(
     entity: input.entity,
     totalCents: input.amountCents,
     allocations: input.allocations,
-    funds: repo.listFunds(input.entity),
+    funds: await repo.listFunds(input.entity),
   });
   if (!check.ok) {
     return { ok: false, code: check.code, field: "allocations", message: check.message };
@@ -184,17 +196,17 @@ export function startHostedCheckout(intent: DonationIntent): CheckoutHandoff {
 }
 
 /** Convenience for the UI: the allocation check on its own. */
-export function checkAllocations(
+export async function checkAllocations(
   entity: Entity,
   totalCents: number,
   allocations: Allocation[],
   repo: Repo = defaultRepo(),
-): AllocationResult {
+): Promise<AllocationResult> {
   return validateAllocations({
     entity,
     totalCents,
     allocations,
-    funds: repo.listFunds(entity),
+    funds: await repo.listFunds(entity),
   });
 }
 
@@ -207,12 +219,12 @@ export function checkAllocations(
  * payment cleared. Needs FINANCIAL WRITE: the Treasurer of that entity, or a
  * system actor holding the same grant. Stubbed in this build — see the report.
  */
-export function recordClearedDonation(
+export async function recordClearedDonation(
   subject: Subject,
   intent: DonationIntent,
   meta: { checkoutSessionRef: string; receivedAt: string },
   repo: Repo = defaultRepo(),
-): Donation {
+): Promise<Donation> {
   authorize({
     subject,
     dataClass: "FINANCIAL",
@@ -233,11 +245,11 @@ export type GiftRow = {
   receiptBlockedBecause: string | null;
 };
 
-export function readDonationRegister(
+export async function readDonationRegister(
   subject: Subject,
   entity: Entity,
   repo: Repo = defaultRepo(),
-): GiftRow[] {
+): Promise<GiftRow[]> {
   authorize({
     subject,
     dataClass: "FINANCIAL",
@@ -245,7 +257,8 @@ export function readDonationRegister(
     required: "READ",
     rowLevel: true,
   });
-  return repo.listDonations(entity).map((donation) => ({
+  const donations = await repo.listDonations(entity);
+  return donations.map((donation) => ({
     donation,
     receiptBlockedBecause: receiptBlockReason(donation),
   }));
@@ -265,11 +278,11 @@ function receiptBlockReason(donation: Donation): string | null {
 }
 
 /** Counts and totals only. AGGREGATE is enough, and several roles hold it. */
-export function readFundAggregates(
+export async function readFundAggregates(
   subject: Subject,
   entity: Entity,
   repo: Repo = defaultRepo(),
-): FundBalance[] {
+): Promise<FundBalance[]> {
   authorize({ subject, dataClass: "FINANCIAL", entity, required: "AGGREGATE" });
   return repo.fundBalances(entity);
 }
@@ -281,11 +294,11 @@ export type FundRegisterRow = {
 };
 
 /** Balances and the gifts behind them. Row-level, so READ. */
-export function readFundRegister(
+export async function readFundRegister(
   subject: Subject,
   entity: Entity,
   repo: Repo = defaultRepo(),
-): FundRegisterRow[] {
+): Promise<FundRegisterRow[]> {
   authorize({
     subject,
     dataClass: "FINANCIAL",
@@ -293,23 +306,29 @@ export function readFundRegister(
     required: "READ",
     rowLevel: true,
   });
-  return repo.fundBalances(entity).map((balance) => {
-    const fund = repo.getFund(balance.fundId);
-    return {
-      balance,
-      purpose: fund ? fund.purpose : "",
-      gifts: repo.giftsBehindFund(balance.fundId),
-    };
-  });
+  const balances = await repo.fundBalances(entity);
+  return Promise.all(
+    balances.map(async (balance) => {
+      const [fund, gifts] = await Promise.all([
+        repo.getFund(balance.fundId),
+        repo.giftsBehindFund(balance.fundId),
+      ]);
+      return {
+        balance,
+        purpose: fund ? fund.purpose : "",
+        gifts,
+      };
+    }),
+  );
 }
 
-export function recordBenefitFairMarketValue(
+export async function recordBenefitFairMarketValue(
   subject: Subject,
   entity: Entity,
   donationId: string,
   cents: number,
   repo: Repo = defaultRepo(),
-): Donation {
+): Promise<Donation> {
   authorize({
     subject,
     dataClass: "FINANCIAL",
@@ -330,7 +349,7 @@ export type IssuedReceipt = {
   text: string;
 };
 
-export function issueReceipt(
+export async function issueReceipt(
   subject: Subject,
   entity: Entity,
   donationId: string,
@@ -341,7 +360,7 @@ export function issueReceipt(
    * numbering that somebody has to explain later.
    */
   options: { sequence?: number } = {},
-): IssuedReceipt {
+): Promise<IssuedReceipt> {
   authorize({
     subject,
     dataClass: "FINANCIAL",
@@ -349,7 +368,7 @@ export function issueReceipt(
     required: "READ",
     rowLevel: true,
   });
-  const donation = repo.getDonation(donationId);
+  const donation = await repo.getDonation(donationId);
   if (!donation) {
     throw new ReceiptError(`No gift ${donationId}`, "NOT_PAID");
   }
@@ -361,10 +380,18 @@ export function issueReceipt(
       "ALLOCATIONS_DO_NOT_SUM",
     );
   }
+  // A preview passes its own sequence, and then no number is allocated at
+  // all: `nextReceiptSequence` is only awaited when there is no sequence to
+  // use, so refreshing a screen cannot burn a receipt number out of the
+  // entity's run.
+  const sequence =
+    options.sequence !== undefined
+      ? options.sequence
+      : await repo.nextReceiptSequence(entity);
   const receipt = buildReceipt({
     donation,
-    funds: repo.listFunds(entity),
-    sequence: options.sequence ?? repo.nextReceiptSequence(entity),
+    funds: await repo.listFunds(entity),
+    sequence,
   });
   return {
     receipt,
@@ -402,11 +429,11 @@ export type SponsorRegisterRow = {
  * The money view. FINANCIAL READ: payment amounts and benefit valuations row
  * by row. The Fundraising Chair does not hold this, by design.
  */
-export function readSponsorRegister(
+export async function readSponsorRegister(
   subject: Subject,
   entity: Entity,
   repo: Repo = defaultRepo(),
-): SponsorRegisterRow[] {
+): Promise<SponsorRegisterRow[]> {
   authorize({
     subject,
     dataClass: "FINANCIAL",
@@ -414,7 +441,8 @@ export function readSponsorRegister(
     required: "READ",
     rowLevel: true,
   });
-  return repo.listSponsorships(entity).map((sponsorship) => ({
+  const sponsorships = await repo.listSponsorships(entity);
+  return sponsorships.map((sponsorship) => ({
     sponsorshipId: sponsorship.id,
     sponsorName: sponsorship.sponsorName,
     eventName: sponsorship.eventName,
@@ -449,13 +477,14 @@ export type AcknowledgmentRow = {
  * The wording view. PUBLIC_CONTENT READ and no figures: this is what the
  * Fundraising Chair, Communications Chair and Webmaster work with.
  */
-export function readSponsorAcknowledgments(
+export async function readSponsorAcknowledgments(
   subject: Subject,
   entity: Entity,
   repo: Repo = defaultRepo(),
-): AcknowledgmentRow[] {
+): Promise<AcknowledgmentRow[]> {
   authorize({ subject, dataClass: "PUBLIC_CONTENT", entity, required: "READ" });
-  return repo.listSponsorships(entity).map((sponsorship) => ({
+  const sponsorships = await repo.listSponsorships(entity);
+  return sponsorships.map((sponsorship) => ({
     sponsorshipId: sponsorship.id,
     sponsorName: sponsorship.sponsorName,
     entity: sponsorship.entity,
@@ -474,15 +503,15 @@ export type SaveAcknowledgmentResult = {
  * rather than preventing the save: whether a phrase is an acknowledgment or an
  * advert is a judgment, and this is a warning to a human.
  */
-export function saveAcknowledgmentString(
+export async function saveAcknowledgmentString(
   subject: Subject,
   entity: Entity,
   sponsorshipId: string,
   draft: Omit<PlacementDraft, "authoredById">,
   repo: Repo = defaultRepo(),
-): SaveAcknowledgmentResult {
+): Promise<SaveAcknowledgmentResult> {
   authorize({ subject, dataClass: "PUBLIC_CONTENT", entity, required: "WRITE" });
-  const placement = repo.savePlacement(sponsorshipId, {
+  const placement = await repo.savePlacement(sponsorshipId, {
     ...draft,
     authoredById: subject.personId,
   });
@@ -493,14 +522,14 @@ export function saveAcknowledgmentString(
 }
 
 /** Changing a benefit valuation is a FINANCIAL write, not a content edit. */
-export function savePlacementValuation(
+export async function savePlacementValuation(
   subject: Subject,
   entity: Entity,
   sponsorshipId: string,
   placementId: string,
   benefitFairMarketValueCents: number,
   repo: Repo = defaultRepo(),
-): SponsorRegisterRow {
+): Promise<SponsorRegisterRow> {
   authorize({
     subject,
     dataClass: "FINANCIAL",
@@ -508,7 +537,7 @@ export function savePlacementValuation(
     required: "WRITE",
     rowLevel: true,
   });
-  const sponsorship = repo.getSponsorship(sponsorshipId);
+  const sponsorship = await repo.getSponsorship(sponsorshipId);
   if (!sponsorship) {
     throw new Error(`No sponsorship ${sponsorshipId}`);
   }
@@ -516,7 +545,7 @@ export function savePlacementValuation(
   if (!existing) {
     throw new Error(`No placement ${placementId}`);
   }
-  repo.savePlacement(sponsorshipId, {
+  await repo.savePlacement(sponsorshipId, {
     id: placementId,
     kind: existing.kind,
     approvedAcknowledgmentString: existing.approvedAcknowledgmentString,
@@ -525,7 +554,7 @@ export function savePlacementValuation(
     authoredById: existing.authoredById,
     notes: existing.notes,
   });
-  const rows = readSponsorRegister(subject, entity, repo);
+  const rows = await readSponsorRegister(subject, entity, repo);
   const row = rows.find((r) => r.sponsorshipId === sponsorshipId);
   if (!row) throw new Error(`No sponsorship ${sponsorshipId}`);
   return row;

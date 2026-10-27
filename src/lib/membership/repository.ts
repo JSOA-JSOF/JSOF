@@ -346,20 +346,118 @@ export class InMemoryMembershipRepository implements MembershipRepository {
 }
 
 /* ------------------------------------------------------------------ *
- * Process-wide instance for the demo.
+ * Choosing an implementation
  *
- * Held on globalThis so a dev-server hot reload does not silently reset the
- * roster mid-demo. A request-scoped Prisma client replaces this wholesale.
+ * D1 when there is a binding, in memory when there is not. The second case is
+ * normal rather than a failure: `next dev` with no Worker behind it has no
+ * binding, and the test suite has no Worker at all.
+ *
+ * Why this is resolved lazily, through a dynamic import, when a one-line
+ * `import { database } from "../db"` would read better.
+ *
+ * `src/lib/db` begins with `import "server-only"`, which does not resolve
+ * outside the Next build. This file is on the import graph of every module
+ * test, so a static import of the D1 repository takes the whole suite down at
+ * collection time with "Cannot find package 'server-only'" — before a single
+ * assertion runs. The import therefore happens inside the call, where a failure
+ * to resolve means "there is no server runtime here", which is exactly the case
+ * in which the in-memory roster is the right answer anyway.
+ *
+ * The consequence is that the accessor cannot know which implementation it has
+ * until the first method is called, so it returns a delegate: each method
+ * resolves and forwards. Every method on this interface already returns a
+ * Promise, which is what makes that possible without changing a signature.
  * ------------------------------------------------------------------ */
 
 const REPO_KEY = "__jsoa_membership_repo__";
 
 type RepoGlobal = typeof globalThis & { [REPO_KEY]?: MembershipRepository };
 
-export function membershipRepository(): MembershipRepository {
+/**
+ * The in-memory fallback, held on globalThis so a dev-server hot reload does
+ * not silently reset the roster mid-demo.
+ */
+function inMemoryRepository(): MembershipRepository {
   const store = globalThis as RepoGlobal;
   store[REPO_KEY] ??= new InMemoryMembershipRepository();
   return store[REPO_KEY];
+}
+
+/**
+ * The binding is checked on every call rather than cached.
+ *
+ * A render during `next build` runs outside a request context and so sees no
+ * binding. Caching that answer would pin the deployed Worker to seed data for
+ * the life of the isolate, and the symptom — a roster that is right in
+ * development and stale in production — is a long way from the cause.
+ *
+ * The module import itself is cached by the module system, so the cost after
+ * the first call is an already-resolved promise.
+ */
+async function resolveRepository(): Promise<MembershipRepository> {
+  try {
+    const { d1MembershipRepositoryIfBound } = await import("./repository.d1");
+    const d1 = d1MembershipRepositoryIfBound();
+    if (d1) return d1;
+  } catch {
+    // No server runtime: a test, or a context where `server-only` does not
+    // resolve. In-memory is the answer, not an error.
+  }
+  return inMemoryRepository();
+}
+
+/**
+ * One delegate, not one per call: the accessor used to return a stable object
+ * and some caller may yet rely on that. It holds no state of its own — every
+ * method resolves afresh — so sharing it is free.
+ */
+const DELEGATE: MembershipRepository = {
+  createDraft: async (fields) => (await resolveRepository()).createDraft(fields),
+  getApplication: async (id) => (await resolveRepository()).getApplication(id),
+  getApplicationByReference: async (reference) =>
+    (await resolveRepository()).getApplicationByReference(reference),
+  updateDraft: async (id, patch) => (await resolveRepository()).updateDraft(id, patch),
+  markSubmitted: async (id, input) => (await resolveRepository()).markSubmitted(id, input),
+  setApplicationState: async (id, state) =>
+    (await resolveRepository()).setApplicationState(id, state),
+  recordChairDecision: async (id, decision, state) =>
+    (await resolveRepository()).recordChairDecision(id, decision, state),
+  listApplications: async (states) => (await resolveRepository()).listApplications(states),
+  countApplicationsByEmail: async (email) =>
+    (await resolveRepository()).countApplicationsByEmail(email),
+
+  createVouchRequest: async (request) =>
+    (await resolveRepository()).createVouchRequest(request),
+  getVouchRequest: async (token) => (await resolveRepository()).getVouchRequest(token),
+  getVouchRequestForApplication: async (applicationId) =>
+    (await resolveRepository()).getVouchRequestForApplication(applicationId),
+  answerVouchRequest: async (token, outcome, at) =>
+    (await resolveRepository()).answerVouchRequest(token, outcome, at),
+  listLapsedVouchRequests: async (at) =>
+    (await resolveRepository()).listLapsedVouchRequests(at),
+
+  listMembers: async () => (await resolveRepository()).listMembers(),
+  getMember: async (id) => (await resolveRepository()).getMember(id),
+  getMemberByMemberId: async (memberId) =>
+    (await resolveRepository()).getMemberByMemberId(memberId),
+  createMember: async (member) => (await resolveRepository()).createMember(member),
+  setMemberState: async (id, state, auditedAt) =>
+    (await resolveRepository()).setMemberState(id, state, auditedAt),
+  nextMemberId: async (year) => (await resolveRepository()).nextMemberId(year),
+
+  createCheckoutHandoff: async (handoff) =>
+    (await resolveRepository()).createCheckoutHandoff(handoff),
+  getCheckoutHandoff: async (id) => (await resolveRepository()).getCheckoutHandoff(id),
+  getCheckoutHandoffForApplication: async (applicationId) =>
+    (await resolveRepository()).getCheckoutHandoffForApplication(applicationId),
+  markCheckoutCleared: async (id) => (await resolveRepository()).markCheckoutCleared(id),
+
+  appendAudit: async (entry) => (await resolveRepository()).appendAudit(entry),
+  listAudit: async (limit) => (await resolveRepository()).listAudit(limit),
+};
+
+export function membershipRepository(): MembershipRepository {
+  return DELEGATE;
 }
 
 export function newMembershipRepository(options?: { seed?: boolean }): MembershipRepository {

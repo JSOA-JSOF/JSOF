@@ -31,6 +31,7 @@ import {
 } from "../src/lib/donations/disclosure";
 import { formatCents, parseDollarsToCents } from "../src/lib/donations/money";
 import {
+  donationsRepository,
   InMemoryDonationsRepository,
   RepositoryError,
 } from "../src/lib/donations/repository";
@@ -137,6 +138,51 @@ function paidGift(overrides: Partial<Donation> = {}): Donation {
     ...overrides,
   };
 }
+
+/* ================================================================== *
+ * 0. The accessor
+ *
+ * Every method on `DonationsRepository` returns a Promise, because D1 is
+ * async and the interface follows the database rather than the in-memory
+ * arrays. That conversion is what the rest of this file exercises; what it
+ * cannot exercise is the D1 implementation itself, which needs a binding.
+ * What is testable here is the other branch: with no binding, the accessor
+ * has to give back the seeded in-memory repository rather than a D1 one
+ * pointed at nothing.
+ * ================================================================== */
+
+describe("the repository accessor", () => {
+  it("falls back to the in-memory repository when there is no D1 binding", () => {
+    // The suite runs outside a request context, so `database()` is null.
+    const store = donationsRepository();
+    expect(store).toBeInstanceOf(InMemoryDonationsRepository);
+  });
+
+  it("gives the same fallback instance every time, so a write is not lost", () => {
+    // A fresh repository per call would lose a gift the moment it was
+    // recorded, which is the whole failure mode of `next dev` with no Worker.
+    expect(donationsRepository()).toBe(donationsRepository());
+  });
+
+  it("returns a promise from every method, including the in-memory one", async () => {
+    const r = repo();
+    const reads = [
+      r.listFunds("JSOF"),
+      r.getFund("fund-jsof-general"),
+      r.fundBalances("JSOF"),
+      r.giftsBehindFund("fund-jsof-general"),
+      r.listDonations("JSOF"),
+      r.getDonation("d-jsof-001"),
+      r.nextReceiptSequence("JSOF"),
+      r.listSponsorships("JSOF"),
+      r.getSponsorship("s-jsof-001"),
+    ];
+    for (const read of reads) {
+      expect(read).toBeInstanceOf(Promise);
+    }
+    await Promise.all(reads);
+  });
+});
 
 /* ================================================================== *
  * 1. Allocations must sum exactly
@@ -262,8 +308,8 @@ describe("allocations must sum exactly to the total", () => {
     expect(result.code).toBe("NOT_INTEGER_CENTS");
   });
 
-  it("refuses the intent at the donate flow's own entry point", () => {
-    const result = prepareDonationIntent(
+  it("refuses the intent at the donate flow's own entry point", async () => {
+    const result = await prepareDonationIntent(
       {
         entity: "JSOF",
         donorDisplayName: "Test Donor",
@@ -279,9 +325,9 @@ describe("allocations must sum exactly to the total", () => {
     expect(result.message).toContain("$5,000.00");
   });
 
-  it("refuses a mismatched allocation at the repository boundary too", () => {
+  it("refuses a mismatched allocation at the repository boundary too", async () => {
     const r = repo();
-    expect(() =>
+    await expect(
       r.recordClearedDonation(
         {
           entity: "JSOF",
@@ -300,7 +346,7 @@ describe("allocations must sum exactly to the total", () => {
           receivedAt: "2026-05-01T12:00:00Z",
         },
       ),
-    ).toThrow(RepositoryError);
+    ).rejects.toThrow(RepositoryError);
   });
 });
 
@@ -309,8 +355,8 @@ describe("allocations must sum exactly to the total", () => {
  * ================================================================== */
 
 describe("the entity is always chosen, never inferred", () => {
-  it("refuses an intent with no entity", () => {
-    const result = prepareDonationIntent(
+  it("refuses an intent with no entity", async () => {
+    const result = await prepareDonationIntent(
       {
         // Simulates a form posted without the first step completed.
         entity: undefined as unknown as Entity,
@@ -326,9 +372,9 @@ describe("the entity is always chosen, never inferred", () => {
     expect(result.code).toBe("NO_ENTITY");
   });
 
-  it("offers each entity only its own funds", () => {
-    const jsof = listPublicFundOptions("JSOF", repo());
-    const jsoa = listPublicFundOptions("JSOA", repo());
+  it("offers each entity only its own funds", async () => {
+    const jsof = await listPublicFundOptions("JSOF", repo());
+    const jsoa = await listPublicFundOptions("JSOA", repo());
     expect(jsof.length).toBeGreaterThan(0);
     expect(jsoa.length).toBeGreaterThan(0);
     expect(jsof.every((f) => f.entity === "JSOF")).toBe(true);
@@ -337,13 +383,13 @@ describe("the entity is always chosen, never inferred", () => {
     expect(overlap).toHaveLength(0);
   });
 
-  it("does not offer a fund that is closed to gifts", () => {
-    const ids = listPublicFundOptions("JSOF", repo()).map((f) => f.id);
+  it("does not offer a fund that is closed to gifts", async () => {
+    const ids = (await listPublicFundOptions("JSOF", repo())).map((f) => f.id);
     expect(ids).not.toContain("fund-jsof-pavers-2019");
   });
 
-  it("shows no figure on the public fund list", () => {
-    for (const option of listPublicFundOptions("JSOF", repo())) {
+  it("shows no figure on the public fund list", async () => {
+    for (const option of await listPublicFundOptions("JSOF", repo())) {
       expect(Object.keys(option)).toEqual([
         "id",
         "entity",
@@ -464,14 +510,14 @@ describe("a gift with benefits and no fair market value cannot be receipted", ()
     expect(text.toLowerCase()).toContain("excess");
   });
 
-  it("refuses the seeded gift that was recorded without a valuation", () => {
-    expect(() =>
+  it("refuses the seeded gift that was recorded without a valuation", async () => {
+    await expect(
       issueReceipt(treasurerJsof, "JSOF", "d-jsof-004", repo(), { sequence: 1 }),
-    ).toThrow(ReceiptError);
+    ).rejects.toThrow(ReceiptError);
   });
 
-  it("refuses to file a new gift with benefits and no valuation at all", () => {
-    expect(() =>
+  it("refuses to file a new gift with benefits and no valuation at all", async () => {
+    await expect(
       recordClearedDonation(
         treasurerJsof,
         {
@@ -495,7 +541,7 @@ describe("a gift with benefits and no fair market value cannot be receipted", ()
         { checkoutSessionRef: "co_stub_test", receivedAt: "2026-05-01T12:00:00Z" },
         repo(),
       ),
-    ).toThrow(RepositoryError);
+    ).rejects.toThrow(RepositoryError);
   });
 
   it("refuses when the benefits are worth as much as the payment", () => {
@@ -670,13 +716,13 @@ describe("entity receipt templates never cross", () => {
     expect(ENTITY_IDENTITY.JSOF.templateId).not.toBe(ENTITY_IDENTITY.JSOA.templateId);
   });
 
-  it("numbers receipts in separate per-entity sequences", () => {
+  it("numbers receipts in separate per-entity sequences", async () => {
     expect(jsofReceipt.receiptNumber.startsWith("JSOF-R-")).toBe(true);
     expect(jsoaReceipt.receiptNumber.startsWith("JSOA-R-")).toBe(true);
     const r = repo();
-    expect(r.nextReceiptSequence("JSOF")).toBe(1);
-    expect(r.nextReceiptSequence("JSOF")).toBe(2);
-    expect(r.nextReceiptSequence("JSOA")).toBe(1);
+    expect(await r.nextReceiptSequence("JSOF")).toBe(1);
+    expect(await r.nextReceiptSequence("JSOF")).toBe(2);
+    expect(await r.nextReceiptSequence("JSOA")).toBe(1);
   });
 
   it("puts the IRS no-goods-or-services language only on the JSOF template", () => {
@@ -713,19 +759,19 @@ describe("entity receipt templates never cross", () => {
     expect(shared).toEqual([]);
   });
 
-  it("refuses to receipt one entity's gift under the other entity's heading", () => {
+  it("refuses to receipt one entity's gift under the other entity's heading", async () => {
     // A JSOF treasurer asking for a JSOF receipt against a JSOA gift.
     const r = repo();
-    expect(() =>
+    await expect(
       issueReceipt(treasurerJsof, "JSOF", "d-jsoa-001", r, { sequence: 1 }),
-    ).toThrow(ReceiptError);
+    ).rejects.toThrow(ReceiptError);
   });
 
-  it("gives each entity's own treasurer their own entity's template", () => {
-    const jsof = issueReceipt(treasurerJsof, "JSOF", "d-jsof-001", repo(), {
+  it("gives each entity's own treasurer their own entity's template", async () => {
+    const jsof = await issueReceipt(treasurerJsof, "JSOF", "d-jsof-001", repo(), {
       sequence: 1,
     });
-    const jsoa = issueReceipt(treasurerJsoa, "JSOA", "d-jsoa-001", repo(), {
+    const jsoa = await issueReceipt(treasurerJsoa, "JSOA", "d-jsoa-001", repo(), {
       sequence: 1,
     });
     expect(jsof.receipt.templateId).toBe("JSOF_CONTRIBUTION_V1");
@@ -788,8 +834,8 @@ describe("the 2% safe harbour is all or nothing", () => {
     expect(a.qualifiedSponsorshipPortionCents).toBe(PAYMENT);
   });
 
-  it("sums benefit value across every placement before applying the test", () => {
-    const rows = readSponsorRegister(treasurerJsof, "JSOF", repo());
+  it("sums benefit value across every placement before applying the test", async () => {
+    const rows = await readSponsorRegister(treasurerJsof, "JSOF", repo());
     const carraway = rows.find((r) => r.sponsorName === "Carraway Diesel & Fleet");
     expect(carraway).toBeDefined();
     if (!carraway) throw new Error("unreachable");
@@ -802,8 +848,8 @@ describe("the 2% safe harbour is all or nothing", () => {
     expect(carraway.assessment.qualifiedSponsorshipPortionCents).toBe(1_455_000);
   });
 
-  it("holds the seeded sponsorship that sits exactly on the ceiling", () => {
-    const rows = readSponsorRegister(treasurerJsoa, "JSOA", repo());
+  it("holds the seeded sponsorship that sits exactly on the ceiling", async () => {
+    const rows = await readSponsorRegister(treasurerJsoa, "JSOA", repo());
     const twoRivers = rows.find((r) => r.sponsorName === "Two Rivers Title Company");
     expect(twoRivers).toBeDefined();
     if (!twoRivers) throw new Error("unreachable");
@@ -818,8 +864,8 @@ describe("the 2% safe harbour is all or nothing", () => {
  * ================================================================== */
 
 describe("advertising placements are tagged separately", () => {
-  it("separates advertising value from acknowledgment value", () => {
-    const rows = readSponsorRegister(treasurerJsof, "JSOF", repo());
+  it("separates advertising value from acknowledgment value", async () => {
+    const rows = await readSponsorRegister(treasurerJsof, "JSOF", repo());
     const carraway = rows.find((r) => r.sponsorName === "Carraway Diesel & Fleet");
     if (!carraway) throw new Error("unreachable");
     expect(carraway.categories.advertisingCents).toBe(25_000);
@@ -827,8 +873,8 @@ describe("advertising placements are tagged separately", () => {
     expect(carraway.categories.advertisingPlacements).toContain("Programme advert");
   });
 
-  it("tags a tee sign as an acknowledgment and a programme page as advertising", () => {
-    const rows = readSponsorRegister(treasurerJsof, "JSOF", repo());
+  it("tags a tee sign as an acknowledgment and a programme page as advertising", async () => {
+    const rows = await readSponsorRegister(treasurerJsof, "JSOF", repo());
     const kinds = rows.flatMap((r) =>
       r.placements.map((p) => [p.placement.kind, p.category] as const),
     );
@@ -898,9 +944,9 @@ describe("the acknowledgment validator", () => {
     expect(review.findings.every((f) => f.severity === "warning")).toBe(true);
   });
 
-  it("saves flagged wording anyway, and hands back the warnings", () => {
+  it("saves flagged wording anyway, and hands back the warnings", async () => {
     const r = repo();
-    const result = saveAcknowledgmentString(
+    const result = await saveAcknowledgmentString(
       fundraisingChairJsof,
       "JSOF",
       "s-jsof-001",
@@ -916,8 +962,8 @@ describe("the acknowledgment validator", () => {
     expect(result.review.findings.length).toBeGreaterThan(0);
   });
 
-  it("flags the seeded sponsor-supplied copy that has not been cleaned up", () => {
-    const rows = readSponsorRegister(treasurerJsof, "JSOF", repo());
+  it("flags the seeded sponsor-supplied copy that has not been cleaned up", async () => {
+    const rows = await readSponsorRegister(treasurerJsof, "JSOF", repo());
     const halverson = rows.find((r) => r.sponsorName === "Halverson Optics");
     if (!halverson) throw new Error("unreachable");
     const footer = halverson.placements.find(
@@ -929,11 +975,11 @@ describe("the acknowledgment validator", () => {
     expect(footer.placement.publicationState).toBe("DRAFT");
   });
 
-  it("sends changed wording back through the release gate", () => {
+  it("sends changed wording back through the release gate", async () => {
     const r = repo();
-    const before = r.getSponsorship("s-jsof-001");
+    const before = await r.getSponsorship("s-jsof-001");
     expect(before?.placements[0].publicationState).toBe("APPROVED");
-    const result = saveAcknowledgmentString(
+    const result = await saveAcknowledgmentString(
       fundraisingChairJsof,
       "JSOF",
       "s-jsof-001",
@@ -955,16 +1001,16 @@ describe("the acknowledgment validator", () => {
  * ================================================================== */
 
 describe("a wrong-role request to the sponsor register fails", () => {
-  it("refuses the Fundraising Chair the money view", () => {
+  it("refuses the Fundraising Chair the money view", async () => {
     // AGGREGATE on FINANCIAL, not READ. The Chair does not see payments row
     // by row, which is the point of the two-view split.
-    expect(() => readSponsorRegister(fundraisingChairJsof, "JSOF", repo())).toThrow(
-      AuthzError,
-    );
+    await expect(
+      readSponsorRegister(fundraisingChairJsof, "JSOF", repo()),
+    ).rejects.toThrow(AuthzError);
   });
 
-  it("gives the Fundraising Chair the wording view", () => {
-    const rows = readSponsorAcknowledgments(fundraisingChairJsof, "JSOF", repo());
+  it("gives the Fundraising Chair the wording view", async () => {
+    const rows = await readSponsorAcknowledgments(fundraisingChairJsof, "JSOF", repo());
     expect(rows.length).toBeGreaterThan(0);
     const serialised = JSON.stringify(rows);
     // The wording view still carries the placement records, so assert what it
@@ -974,53 +1020,63 @@ describe("a wrong-role request to the sponsor register fails", () => {
     expect(serialised).not.toContain("assessment");
   });
 
-  it("refuses the Scholarships Chair the money view", () => {
+  it("refuses the Scholarships Chair the money view", async () => {
     // NONE on FINANCIAL, so no view of the payments. The Chair does hold WRITE
     // on PUBLIC_CONTENT, so the wording view opens; that is the intended shape.
-    expect(() => readSponsorRegister(scholarshipsChairJsof, "JSOF", repo())).toThrow(
-      AuthzError,
-    );
+    await expect(
+      readSponsorRegister(scholarshipsChairJsof, "JSOF", repo()),
+    ).rejects.toThrow(AuthzError);
     expect(
-      readSponsorAcknowledgments(scholarshipsChairJsof, "JSOF", repo()).length,
+      (await readSponsorAcknowledgments(scholarshipsChairJsof, "JSOF", repo())).length,
     ).toBeGreaterThan(0);
   });
 
-  it("refuses a Treasurer of the other entity", () => {
-    expect(() => readSponsorRegister(treasurerJsoa, "JSOF", repo())).toThrow(AuthzError);
-    expect(() => readSponsorRegister(treasurerJsof, "JSOA", repo())).toThrow(AuthzError);
+  it("refuses a Treasurer of the other entity", async () => {
+    await expect(readSponsorRegister(treasurerJsoa, "JSOF", repo())).rejects.toThrow(
+      AuthzError,
+    );
+    await expect(readSponsorRegister(treasurerJsof, "JSOA", repo())).rejects.toThrow(
+      AuthzError,
+    );
   });
 
-  it("refuses an unauthenticated subject", () => {
-    expect(() => readSponsorRegister(nobody, "JSOF", repo())).toThrow(AuthzError);
+  it("refuses an unauthenticated subject", async () => {
+    await expect(readSponsorRegister(nobody, "JSOF", repo())).rejects.toThrow(AuthzError);
   });
 
-  it("refuses a subject whose MFA has not been satisfied, whatever the role", () => {
+  it("refuses a subject whose MFA has not been satisfied, whatever the role", async () => {
     const unverified = subject(
       "p-treas-jsof",
       [{ role: "TREASURER", entity: "JSOF" }],
       false,
     );
-    expect(() => readSponsorRegister(unverified, "JSOF", repo())).toThrow(AuthzError);
+    await expect(readSponsorRegister(unverified, "JSOF", repo())).rejects.toThrow(
+      AuthzError,
+    );
   });
 
-  it("allows the Treasurer of the right entity", () => {
-    const rows = readSponsorRegister(treasurerJsof, "JSOF", repo());
+  it("allows the Treasurer of the right entity", async () => {
+    const rows = await readSponsorRegister(treasurerJsof, "JSOF", repo());
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.entity === "JSOF")).toBe(true);
   });
 });
 
 describe("wrong-role requests to the rest of the module", () => {
-  it("refuses the gift register to a role holding only aggregate", () => {
-    expect(() => readDonationRegister(fundraisingChairJsof, "JSOF", repo())).toThrow(
+  it("refuses the gift register to a role holding only aggregate", async () => {
+    await expect(
+      readDonationRegister(fundraisingChairJsof, "JSOF", repo()),
+    ).rejects.toThrow(AuthzError);
+    await expect(readDonationRegister(secretaryJsof, "JSOF", repo())).rejects.toThrow(
       AuthzError,
     );
-    expect(() => readDonationRegister(secretaryJsof, "JSOF", repo())).toThrow(AuthzError);
   });
 
-  it("refuses the fund register but allows fund totals to the Secretary", () => {
-    expect(() => readFundRegister(secretaryJsof, "JSOF", repo())).toThrow(AuthzError);
-    const totals = readFundAggregates(secretaryJsof, "JSOF", repo());
+  it("refuses the fund register but allows fund totals to the Secretary", async () => {
+    await expect(readFundRegister(secretaryJsof, "JSOF", repo())).rejects.toThrow(
+      AuthzError,
+    );
+    const totals = await readFundAggregates(secretaryJsof, "JSOF", repo());
     expect(totals.length).toBeGreaterThan(0);
     // Aggregate means counts and totals, and that is all that comes back.
     for (const row of totals) {
@@ -1030,9 +1086,9 @@ describe("wrong-role requests to the rest of the module", () => {
     }
   });
 
-  it("refuses a write to the ledger from a role that only reads it", () => {
+  it("refuses a write to the ledger from a role that only reads it", async () => {
     const president = subject("p-pres", [{ role: "PRESIDENT", entity: "JSOF" }]);
-    expect(() =>
+    await expect(
       recordClearedDonation(
         president,
         {
@@ -1049,17 +1105,17 @@ describe("wrong-role requests to the rest of the module", () => {
         { checkoutSessionRef: "co_stub_test", receivedAt: "2026-05-01T12:00:00Z" },
         repo(),
       ),
-    ).toThrow(AuthzError);
+    ).rejects.toThrow(AuthzError);
   });
 
-  it("refuses a receipt to a role with no financial read", () => {
-    expect(() =>
+  it("refuses a receipt to a role with no financial read", async () => {
+    await expect(
       issueReceipt(scholarshipsChairJsof, "JSOF", "d-jsof-001", repo(), { sequence: 1 }),
-    ).toThrow(AuthzError);
+    ).rejects.toThrow(AuthzError);
   });
 
-  it("refuses the acknowledgment write to a role with no public-content write", () => {
-    expect(() =>
+  it("refuses the acknowledgment write to a role with no public-content write", async () => {
+    await expect(
       saveAcknowledgmentString(
         treasurerJsof,
         "JSOF",
@@ -1071,7 +1127,7 @@ describe("wrong-role requests to the rest of the module", () => {
         },
         repo(),
       ),
-    ).toThrow(AuthzError);
+    ).rejects.toThrow(AuthzError);
   });
 });
 
@@ -1080,15 +1136,15 @@ describe("wrong-role requests to the rest of the module", () => {
  * ================================================================== */
 
 describe("fund register", () => {
-  it("keeps restricted and unrestricted apart and per entity", () => {
-    const rows = readFundRegister(treasurerJsof, "JSOF", repo());
+  it("keeps restricted and unrestricted apart and per entity", async () => {
+    const rows = await readFundRegister(treasurerJsof, "JSOF", repo());
     expect(rows.every((r) => r.balance.entity === "JSOF")).toBe(true);
     expect(rows.some((r) => r.balance.restriction === "RESTRICTED")).toBe(true);
     expect(rows.some((r) => r.balance.restriction === "UNRESTRICTED")).toBe(true);
   });
 
-  it("counts cleared gifts only, so an unpaid gift is not a balance", () => {
-    const rows = readFundRegister(treasurerJsof, "JSOF", repo());
+  it("counts cleared gifts only, so an unpaid gift is not a balance", async () => {
+    const rows = await readFundRegister(treasurerJsof, "JSOF", repo());
     const family = rows.find((r) => r.balance.name === "Family Support Fund");
     if (!family) throw new Error("unreachable");
     // d-jsof-005 is AWAITING_PAYMENT against this fund.
@@ -1096,8 +1152,8 @@ describe("fund register", () => {
     expect(family.gifts.some((g) => g.status === "AWAITING_PAYMENT")).toBe(true);
   });
 
-  it("shows the gifts behind a balance and they add up to it", () => {
-    const rows = readFundRegister(treasurerJsof, "JSOF", repo());
+  it("shows the gifts behind a balance and they add up to it", async () => {
+    const rows = await readFundRegister(treasurerJsof, "JSOF", repo());
     const golf = rows.find((r) => r.balance.name === "Golf Tournament Fund");
     if (!golf) throw new Error("unreachable");
     const paid = golf.gifts
@@ -1107,21 +1163,21 @@ describe("fund register", () => {
     expect(golf.balance.balanceCents).toBe(1_400_000);
   });
 
-  it("never sums the two entities into one figure", () => {
-    const jsof = readFundAggregates(treasurerJsof, "JSOF", repo());
-    const jsoa = readFundAggregates(treasurerJsoa, "JSOA", repo());
+  it("never sums the two entities into one figure", async () => {
+    const jsof = await readFundAggregates(treasurerJsof, "JSOF", repo());
+    const jsoa = await readFundAggregates(treasurerJsoa, "JSOA", repo());
     expect(jsof.every((r) => r.entity === "JSOF")).toBe(true);
     expect(jsoa.every((r) => r.entity === "JSOA")).toBe(true);
     expect(jsof.map((r) => r.fundId)).not.toContain("fund-jsoa-operating");
   });
 
-  it("records a cleared gift and moves the balance", () => {
+  it("records a cleared gift and moves the balance", async () => {
     const r = repo();
-    const before = readFundAggregates(treasurerJsof, "JSOF", r).find(
+    const before = (await readFundAggregates(treasurerJsof, "JSOF", r)).find(
       (b) => b.fundId === "fund-jsof-general",
     );
     if (!before) throw new Error("unreachable");
-    recordClearedDonation(
+    await recordClearedDonation(
       treasurerJsof,
       {
         entity: "JSOF",
@@ -1140,7 +1196,7 @@ describe("fund register", () => {
       { checkoutSessionRef: "co_stub_test", receivedAt: "2026-05-02T12:00:00Z" },
       r,
     );
-    const after = readFundAggregates(treasurerJsof, "JSOF", r).find(
+    const after = (await readFundAggregates(treasurerJsof, "JSOF", r)).find(
       (b) => b.fundId === "fund-jsof-general",
     );
     if (!after) throw new Error("unreachable");
@@ -1176,10 +1232,10 @@ describe("money is integer cents", () => {
     }
   });
 
-  it("holds no non-integer amount anywhere in the seed", () => {
+  it("holds no non-integer amount anywhere in the seed", async () => {
     const r = repo();
     for (const entity of ["JSOA", "JSOF"] as Entity[]) {
-      for (const d of r.listDonations(entity)) {
+      for (const d of await r.listDonations(entity)) {
         expect(Number.isSafeInteger(d.amountCents)).toBe(true);
         for (const a of d.allocations) {
           expect(Number.isSafeInteger(a.amountCents)).toBe(true);
@@ -1188,7 +1244,7 @@ describe("money is integer cents", () => {
           expect(Number.isSafeInteger(d.benefitFairMarketValueCents)).toBe(true);
         }
       }
-      for (const s of r.listSponsorships(entity)) {
+      for (const s of await r.listSponsorships(entity)) {
         expect(Number.isSafeInteger(s.paymentCents)).toBe(true);
         for (const p of s.placements) {
           expect(Number.isSafeInteger(p.benefitFairMarketValueCents)).toBe(true);
@@ -1197,11 +1253,11 @@ describe("money is integer cents", () => {
     }
   });
 
-  it("keeps every seeded gift's allocations summing exactly", () => {
+  it("keeps every seeded gift's allocations summing exactly", async () => {
     const r = repo();
     for (const entity of ["JSOA", "JSOF"] as Entity[]) {
-      for (const d of r.listDonations(entity)) {
-        const result = checkAllocations(entity, d.amountCents, d.allocations, r);
+      for (const d of await r.listDonations(entity)) {
+        const result = await checkAllocations(entity, d.amountCents, d.allocations, r);
         // The closed paver fund is not offered publicly, so only the open-fund
         // path is asserted here; the seed uses open funds throughout.
         expect(result.ok, `${d.id}: ${result.ok ? "" : result.message}`).toBe(true);
@@ -1215,28 +1271,30 @@ describe("money is integer cents", () => {
  * ================================================================== */
 
 describe("sponsorship record shape", () => {
-  it("never carries a fee contingent on attendance or impressions", () => {
+  it("never carries a fee contingent on attendance or impressions", async () => {
     const r = repo();
     for (const entity of ["JSOA", "JSOF"] as Entity[]) {
-      for (const s of r.listSponsorships(entity)) {
+      for (const s of await r.listSponsorships(entity)) {
         expect(s.contingentOnAttendanceOrImpressions).toBe(false);
       }
     }
   });
 
-  it("records exclusive sponsor and has no exclusive-provider value", () => {
+  it("records exclusive sponsor and has no exclusive-provider value", async () => {
     const r = repo();
-    const values = (["JSOA", "JSOF"] as Entity[]).flatMap((e) =>
-      r.listSponsorships(e).map((s) => s.exclusivity),
-    );
+    const values = (
+      await Promise.all(
+        (["JSOA", "JSOF"] as Entity[]).map((e) => r.listSponsorships(e)),
+      )
+    ).flatMap((sponsorships) => sponsorships.map((s) => s.exclusivity));
     expect(values).toContain("EXCLUSIVE_SPONSOR");
     expect(values.every((v) => v === "NONE" || v === "EXCLUSIVE_SPONSOR")).toBe(true);
   });
 
-  it("carries an approved wording and a valuation on every placement", () => {
+  it("carries an approved wording and a valuation on every placement", async () => {
     const r = repo();
     for (const entity of ["JSOA", "JSOF"] as Entity[]) {
-      for (const s of r.listSponsorships(entity)) {
+      for (const s of await r.listSponsorships(entity)) {
         for (const p of s.placements) {
           expect(p.approvedAcknowledgmentString.length).toBeGreaterThan(0);
           expect(typeof p.benefitFairMarketValueCents).toBe("number");
@@ -1256,22 +1314,22 @@ describe("sponsorship record shape", () => {
  * ================================================================== */
 
 describe("workspace: derived tasks", () => {
-  it("derives the task list from state, so an empty register yields no tasks", () => {
+  it("derives the task list from state, so an empty register yields no tasks", async () => {
     const empty = new InMemoryDonationsRepository(TEST_FUNDS, [], []);
-    const { tasks } = fundraisingTasks(treasurerJsof, empty);
+    const { tasks } = await fundraisingTasks(treasurerJsof, empty);
     expect(tasks).toEqual([]);
   });
 
-  it("fills itself from the seeded register without anything being entered", () => {
-    const { tasks } = fundraisingTasks(treasurerJsof, repo());
+  it("fills itself from the seeded register without anything being entered", async () => {
+    const { tasks } = await fundraisingTasks(treasurerJsof, repo());
     expect(tasks.length).toBeGreaterThan(0);
     // The gift carrying unvalued benefits is the one a donor is waiting on.
     expect(tasks.some((task) => task.key === "JSOF-value-benefits")).toBe(true);
     expect(tasks.some((task) => task.key === "JSOF-safe-harbour-review")).toBe(true);
   });
 
-  it("gives every task a reason that says what it blocks, and an urgency", () => {
-    const { tasks } = fundraisingTasks(treasurerJsof, repo());
+  it("gives every task a reason that says what it blocks, and an urgency", async () => {
+    const { tasks } = await fundraisingTasks(treasurerJsof, repo());
     for (const task of tasks) {
       expect(task.because.length).toBeGreaterThan(20);
       expect(["overdue", "soon", "open"]).toContain(task.urgency);
@@ -1280,8 +1338,8 @@ describe("workspace: derived tasks", () => {
     }
   });
 
-  it("withholds rather than denying for a role holding one scope and not the other", () => {
-    const { tasks, withheld } = fundraisingTasks(fundraisingChairJsof, repo());
+  it("withholds rather than denying for a role holding one scope and not the other", async () => {
+    const { tasks, withheld } = await fundraisingTasks(fundraisingChairJsof, repo());
     // The Chair holds PUBLIC_CONTENT at WRITE, so the wording work is theirs.
     expect(tasks.some((task) => task.key === "JSOF-rewrite-wording")).toBe(true);
     // And holds FINANCIAL only at AGGREGATE, so the gift-by-gift work is not.
@@ -1289,25 +1347,25 @@ describe("workspace: derived tasks", () => {
     expect(withheld.join(" ")).toContain("Gifts that cannot be receipted");
   });
 
-  it("gives a role with no scope on either entity no tasks and no counts", () => {
+  it("gives a role with no scope on either entity no tasks and no counts", async () => {
     const vpMembership = subject("p-vpm", [{ role: "VP_MEMBERSHIP", entity: "JSOA" }]);
-    const { tasks, withheld } = fundraisingTasks(vpMembership, repo());
+    const { tasks, withheld } = await fundraisingTasks(vpMembership, repo());
     expect(tasks).toEqual([]);
     expect(withheld.length).toBeGreaterThan(0);
     // Nothing about the size of what is behind the wall.
     expect(withheld.join(" ")).not.toMatch(/\d/);
   });
 
-  it("gives an unassigned subject nothing at all", () => {
-    const { tasks, withheld } = fundraisingTasks(nobody, repo());
+  it("gives an unassigned subject nothing at all", async () => {
+    const { tasks, withheld } = await fundraisingTasks(nobody, repo());
     expect(tasks).toEqual([]);
     expect(withheld.join(" ")).toContain("no assignment on either entity");
   });
 });
 
 describe("workspace: three headline figures", () => {
-  it("promotes exactly three, and the same three for every reader", () => {
-    const board = readDonationsDashboard(treasurerJsof, "JSOF", repo());
+  it("promotes exactly three, and the same three for every reader", async () => {
+    const board = await readDonationsDashboard(treasurerJsof, "JSOF", repo());
     const { headline, more } = splitKpis(board.kpis);
     expect(headline.map((kpi) => kpi.key)).toEqual([...HEADLINE_KPI_KEYS]);
     expect(headline.length).toBe(3);
@@ -1317,8 +1375,8 @@ describe("workspace: three headline figures", () => {
     expect(more.some((kpi) => kpi.key === "giving-by-entity")).toBe(true);
   });
 
-  it("keeps a headline the reader may not see as a headline, withheld rather than swapped", () => {
-    const board = readDonationsDashboard(fundraisingChairJsof, "JSOF", repo());
+  it("keeps a headline the reader may not see as a headline, withheld rather than swapped", async () => {
+    const board = await readDonationsDashboard(fundraisingChairJsof, "JSOF", repo());
     const { headline } = splitKpis(board.kpis);
     expect(headline.map((kpi) => kpi.key)).toEqual([...HEADLINE_KPI_KEYS]);
     const unreceiptable = headline.find((kpi) => kpi.key === "gifts-unreceiptable")!;
@@ -1330,8 +1388,8 @@ describe("workspace: three headline figures", () => {
 });
 
 describe("workspace: calendar", () => {
-  it("derives pledge, renewal and event dates for a reader who holds the rows", () => {
-    const { items } = fundraisingCalendar(treasurerJsof, repo());
+  it("derives pledge, renewal and event dates for a reader who holds the rows", async () => {
+    const { items } = await fundraisingCalendar(treasurerJsof, repo());
     const kinds = items.map((item) => item.kind);
     expect(kinds).toContain("CYCLE");
     expect(kinds).toContain("RENEWAL");
@@ -1342,8 +1400,8 @@ describe("workspace: calendar", () => {
     }
   });
 
-  it("marks an inferred renewal and an unrecorded event date as unverified", () => {
-    const { items, gaps } = fundraisingCalendar(treasurerJsof, repo());
+  it("marks an inferred renewal and an unrecorded event date as unverified", async () => {
+    const { items, gaps } = await fundraisingCalendar(treasurerJsof, repo());
     for (const item of items.filter((i) => i.kind === "RENEWAL" || i.kind === "EVENT")) {
       expect(item.unverified).toBe(true);
     }
@@ -1354,21 +1412,23 @@ describe("workspace: calendar", () => {
     expect(gaps.join(" ")).toContain("no recorded date");
   });
 
-  it("withholds the whole calendar from a role holding financial only at aggregate", () => {
-    const { items, withheld } = fundraisingCalendar(fundraisingChairJsof, repo());
+  it("withholds the whole calendar from a role holding financial only at aggregate", async () => {
+    const { items, withheld } = await fundraisingCalendar(fundraisingChairJsof, repo());
     expect(items).toEqual([]);
     expect(withheld.join(" ")).toContain("aggregate");
   });
 
-  it("refuses the sponsorship dates read to a role without row-level financial", () => {
-    expect(() => readSponsorshipDates(fundraisingChairJsof, "JSOF", repo())).toThrow(
+  it("refuses the sponsorship dates read to a role without row-level financial", async () => {
+    await expect(
+      readSponsorshipDates(fundraisingChairJsof, "JSOF", repo()),
+    ).rejects.toThrow(AuthzError);
+    await expect(readSponsorshipDates(nobody, "JSOF", repo())).rejects.toThrow(
       AuthzError,
     );
-    expect(() => readSponsorshipDates(nobody, "JSOF", repo())).toThrow(AuthzError);
   });
 
-  it("never carries a date from one entity onto the other", () => {
-    const { items } = fundraisingCalendar(treasurerJsoa, repo());
+  it("never carries a date from one entity onto the other", async () => {
+    const { items } = await fundraisingCalendar(treasurerJsoa, repo());
     expect(items.length).toBeGreaterThan(0);
     expect(items.every((item) => item.entity === "JSOA")).toBe(true);
   });
@@ -1412,15 +1472,15 @@ describe("workspace: projects are a filter, not a copy", () => {
 });
 
 describe("workspace: outside view", () => {
-  it("keeps the two audiences separate and never merges them", () => {
-    const { surface } = fundraisingOutside(fundraisingChairJsof, repo());
+  it("keeps the two audiences separate and never merges them", async () => {
+    const { surface } = await fundraisingOutside(fundraisingChairJsof, repo());
     expect(surface.noExternalSurface).toBe(false);
     const audiences = new Set(surface.items.map((item) => item.audience));
     expect(audiences.has("PUBLIC")).toBe(true);
     expect(audiences.has("MEMBER_OR_DONOR")).toBe(true);
   });
 
-  it("sorts a flagged string that is also approved above a flagged draft", () => {
+  it("sorts a flagged string that is also approved above a flagged draft", async () => {
     /*
      * The seed has no flagged-and-approved placement: its one flagged string
      * is still a draft. That is the worse of the two states, so it is built
@@ -1466,7 +1526,7 @@ describe("workspace: outside view", () => {
       },
     ]);
 
-    const { surface, counts } = fundraisingOutside(fundraisingChairJsof, loud);
+    const { surface, counts } = await fundraisingOutside(fundraisingChairJsof, loud);
     expect(counts.flagged).toBe(2);
     expect(counts.flaggedApproved).toBe(1);
     const publicItems = surface.items.filter((item) => item.audience === "PUBLIC");
@@ -1477,23 +1537,23 @@ describe("workspace: outside view", () => {
     expect(publicItems[1].note).toContain("cannot publish yet");
   });
 
-  it("puts the flagged wording above the unproblematic pages either way", () => {
-    const { surface } = fundraisingOutside(fundraisingChairJsof, repo());
+  it("puts the flagged wording above the unproblematic pages either way", async () => {
+    const { surface } = await fundraisingOutside(fundraisingChairJsof, repo());
     const publicItems = surface.items.filter((item) => item.audience === "PUBLIC");
     expect(publicItems.findIndex((item) => item.key.startsWith("wording-"))).toBe(0);
     expect(publicItems[0].note).toContain("taxable advertising");
   });
 
-  it("flags that the Foundation has no public contact path", () => {
-    const { surface } = fundraisingOutside(fundraisingChairJsof, repo());
+  it("flags that the Foundation has no public contact path", async () => {
+    const { surface } = await fundraisingOutside(fundraisingChairJsof, repo());
     const contact = surface.items.find((item) => item.key === "foundation-contact")!;
     expect(contact.audience).toBe("PUBLIC");
     expect(contact.problem).toBe("MISSING_OWNER");
     expect(contact.note).toContain("no named");
   });
 
-  it("withholds the published wording from a role with no content read", () => {
-    const { surface, withheld, counts } = fundraisingOutside(treasurerJsof, repo());
+  it("withholds the published wording from a role with no content read", async () => {
+    const { surface, withheld, counts } = await fundraisingOutside(treasurerJsof, repo());
     expect(counts.flagged).toBe(0);
     expect(surface.items.some((item) => item.key.startsWith("wording-"))).toBe(false);
     expect(withheld.join(" ")).toContain("published content");
@@ -1501,8 +1561,8 @@ describe("workspace: outside view", () => {
     expect(surface.items.some((item) => item.key === "donor-no-receipt-JSOF")).toBe(true);
   });
 
-  it("withholds the count of donors waiting on a receipt from an aggregate-only role", () => {
-    const { surface, withheld } = fundraisingOutside(fundraisingChairJsof, repo());
+  it("withholds the count of donors waiting on a receipt from an aggregate-only role", async () => {
+    const { surface, withheld } = await fundraisingOutside(fundraisingChairJsof, repo());
     expect(surface.items.some((item) => item.key.startsWith("donor-no-receipt"))).toBe(
       false,
     );

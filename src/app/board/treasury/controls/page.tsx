@@ -33,12 +33,13 @@ export const metadata = {
  */
 export default async function ControlsPage() {
   const subject = treasurySubject(await getCurrentSubject());
-  const repo = treasuryRepository();
+  const repo = await treasuryRepository();
+  const asOf = await repo.asOfDate();
 
   let panel: SodPanel | null = null;
   let refusal: string | null = null;
   try {
-    panel = repo.separationOfDuties(subject);
+    panel = await repo.separationOfDuties(subject);
   } catch (error) {
     if (error instanceof AuthzError) {
       refusal =
@@ -57,7 +58,7 @@ export default async function ControlsPage() {
       <TreasuryHeader
         current="/board/treasury/controls"
         title="Separation of duties"
-        period={`As of ${repo.asOfDate()}`}
+        period={`As of ${asOf}`}
         lede={
           "What one pair of hands can do without a second pair of eyes. These are " +
           "findings, not blocks: the board may accept them knowingly, and on a " +

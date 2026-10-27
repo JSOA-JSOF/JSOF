@@ -83,7 +83,7 @@ export default async function CheckoutStubPage({
     );
   }
 
-  const check = checkAllocations(entity, totalCents, allocations);
+  const check = await checkAllocations(entity, totalCents, allocations);
 
   if (!check.ok) {
     return (

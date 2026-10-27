@@ -7,10 +7,21 @@
  * two apart means a reviewer can see, in one file, every place a permission
  * decision is made.
  *
- * Swapping to Prisma later is one new file implementing `DonationsRepository`.
+ * ## Every method returns a Promise, and that is not decoration
+ *
+ * This interface used to be twelve synchronous methods, because the only
+ * implementation held arrays. D1 is async, so the interface is async, and the
+ * `await` runs all the way out through actions.ts, kpis.ts, workspace.ts and
+ * every screen in `src/app/donate` and `src/app/board/donations`. The
+ * alternative — a synchronous facade over a database — is a cache with no
+ * invalidation rule, which is the wrong thing to discover in production.
+ *
+ * The in-memory implementation is kept, async and otherwise unchanged. It is
+ * what the test suite runs against and what keeps the suite fast.
  */
 
 import type { Entity } from "../authz/model";
+import { database } from "../db";
 import { validateAllocations } from "./allocation";
 import type {
   Donation,
@@ -22,6 +33,7 @@ import type {
   SponsorPlacement,
   Sponsorship,
 } from "./types";
+import { D1DonationsRepository } from "./repository.d1";
 import { SEED_DONATIONS, SEED_FUNDS, SEED_SPONSORSHIPS } from "./seed";
 
 export class RepositoryError extends Error {
@@ -59,28 +71,47 @@ export type PlacementDraft = {
 
 export interface DonationsRepository {
   /* Funds */
-  listFunds(entity: Entity): Fund[];
-  getFund(fundId: string): Fund | undefined;
-  fundBalances(entity: Entity): FundBalance[];
-  giftsBehindFund(fundId: string): GiftBehindFund[];
+  listFunds(entity: Entity): Promise<Fund[]>;
+  getFund(fundId: string): Promise<Fund | undefined>;
+  fundBalances(entity: Entity): Promise<FundBalance[]>;
+  giftsBehindFund(fundId: string): Promise<GiftBehindFund[]>;
 
   /* Gifts */
-  listDonations(entity: Entity): Donation[];
-  getDonation(donationId: string): Donation | undefined;
+  listDonations(entity: Entity): Promise<Donation[]>;
+  getDonation(donationId: string): Promise<Donation | undefined>;
   /** Records a cleared payment. Refuses if the arithmetic does not hold. */
   recordClearedDonation(
     intent: DonationIntent,
     meta: { createdById: string; checkoutSessionRef: string; receivedAt: string },
-  ): Donation;
-  setDonationBenefitFairMarketValue(donationId: string, cents: number): Donation;
+  ): Promise<Donation>;
+  setDonationBenefitFairMarketValue(
+    donationId: string,
+    cents: number,
+  ): Promise<Donation>;
   /** Per-entity receipt numbering. Receipts are never numbered across entities. */
-  nextReceiptSequence(entity: Entity): number;
+  nextReceiptSequence(entity: Entity): Promise<number>;
 
   /* Sponsorship */
-  listSponsorships(entity: Entity): Sponsorship[];
-  getSponsorship(sponsorshipId: string): Sponsorship | undefined;
-  savePlacement(sponsorshipId: string, draft: PlacementDraft): SponsorPlacement;
+  listSponsorships(entity: Entity): Promise<Sponsorship[]>;
+  getSponsorship(sponsorshipId: string): Promise<Sponsorship | undefined>;
+  savePlacement(
+    sponsorshipId: string,
+    draft: PlacementDraft,
+  ): Promise<SponsorPlacement>;
 }
+
+/**
+ * The message a gift carrying benefits with no valuation is refused with.
+ *
+ * Shared by both implementations because it is the same refusal: a gift
+ * recorded this way can never produce a lawful receipt, so the write is
+ * refused at the boundary rather than discovered months later by whoever has
+ * to explain the missing receipt.
+ */
+export const BENEFITS_WITHOUT_FMV_MESSAGE =
+  "This gift carries benefits and no fair market value. Record the value of " +
+  "what the donor received before the gift is filed, because a receipt for " +
+  "it cannot be issued without one.";
 
 /* ------------------------------------------------------------------ */
 
@@ -106,16 +137,17 @@ export class InMemoryDonationsRepository implements DonationsRepository {
     this.sponsorships = clone(sponsorships);
   }
 
-  listFunds(entity: Entity): Fund[] {
+  async listFunds(entity: Entity): Promise<Fund[]> {
     return this.funds.filter((f) => f.entity === entity);
   }
 
-  getFund(fundId: string): Fund | undefined {
+  async getFund(fundId: string): Promise<Fund | undefined> {
     return this.funds.find((f) => f.id === fundId);
   }
 
-  fundBalances(entity: Entity): FundBalance[] {
-    return this.listFunds(entity).map((fund) => {
+  async fundBalances(entity: Entity): Promise<FundBalance[]> {
+    const funds = await this.listFunds(entity);
+    return funds.map((fund) => {
       const paid = this.donations.filter(
         (d) => d.entity === entity && d.status === "PAID",
       );
@@ -140,8 +172,8 @@ export class InMemoryDonationsRepository implements DonationsRepository {
     });
   }
 
-  giftsBehindFund(fundId: string): GiftBehindFund[] {
-    const fund = this.getFund(fundId);
+  async giftsBehindFund(fundId: string): Promise<GiftBehindFund[]> {
+    const fund = await this.getFund(fundId);
     if (!fund) throw new RepositoryError(`No fund ${fundId}`, "NOT_FOUND");
     const rows: GiftBehindFund[] = [];
     for (const donation of this.donations) {
@@ -160,25 +192,25 @@ export class InMemoryDonationsRepository implements DonationsRepository {
     return rows.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
   }
 
-  listDonations(entity: Entity): Donation[] {
+  async listDonations(entity: Entity): Promise<Donation[]> {
     return this.donations
       .filter((d) => d.entity === entity)
       .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
   }
 
-  getDonation(donationId: string): Donation | undefined {
+  async getDonation(donationId: string): Promise<Donation | undefined> {
     return this.donations.find((d) => d.id === donationId);
   }
 
-  recordClearedDonation(
+  async recordClearedDonation(
     intent: DonationIntent,
     meta: { createdById: string; checkoutSessionRef: string; receivedAt: string },
-  ): Donation {
+  ): Promise<Donation> {
     const check = validateAllocations({
       entity: intent.entity,
       totalCents: intent.amountCents,
       allocations: intent.allocations,
-      funds: this.listFunds(intent.entity),
+      funds: await this.listFunds(intent.entity),
       allowClosedFunds: true,
     });
     if (!check.ok) {
@@ -188,9 +220,7 @@ export class InMemoryDonationsRepository implements DonationsRepository {
       // Recorded anyway would mean a gift that can never be receipted, so the
       // write is refused at the boundary rather than discovered months later.
       throw new RepositoryError(
-        "This gift carries benefits and no fair market value. Record the value of " +
-          "what the donor received before the gift is filed, because a receipt for " +
-          "it cannot be issued without one.",
+        BENEFITS_WITHOUT_FMV_MESSAGE,
         "BENEFITS_WITHOUT_FMV",
       );
     }
@@ -208,27 +238,33 @@ export class InMemoryDonationsRepository implements DonationsRepository {
     return clone(donation);
   }
 
-  setDonationBenefitFairMarketValue(donationId: string, cents: number): Donation {
+  async setDonationBenefitFairMarketValue(
+    donationId: string,
+    cents: number,
+  ): Promise<Donation> {
     const donation = this.donations.find((d) => d.id === donationId);
     if (!donation) throw new RepositoryError(`No gift ${donationId}`, "NOT_FOUND");
     donation.benefitFairMarketValueCents = cents;
     return clone(donation);
   }
 
-  nextReceiptSequence(entity: Entity): number {
+  async nextReceiptSequence(entity: Entity): Promise<number> {
     this.receiptCounters[entity] += 1;
     return this.receiptCounters[entity];
   }
 
-  listSponsorships(entity: Entity): Sponsorship[] {
+  async listSponsorships(entity: Entity): Promise<Sponsorship[]> {
     return this.sponsorships.filter((s) => s.entity === entity);
   }
 
-  getSponsorship(sponsorshipId: string): Sponsorship | undefined {
+  async getSponsorship(sponsorshipId: string): Promise<Sponsorship | undefined> {
     return this.sponsorships.find((s) => s.id === sponsorshipId);
   }
 
-  savePlacement(sponsorshipId: string, draft: PlacementDraft): SponsorPlacement {
+  async savePlacement(
+    sponsorshipId: string,
+    draft: PlacementDraft,
+  ): Promise<SponsorPlacement> {
     const sponsorship = this.sponsorships.find((s) => s.id === sponsorshipId);
     if (!sponsorship) {
       throw new RepositoryError(`No sponsorship ${sponsorshipId}`, "NOT_FOUND");
@@ -274,9 +310,34 @@ export class InMemoryDonationsRepository implements DonationsRepository {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * The accessor
+ * ------------------------------------------------------------------ */
+
 /**
- * The instance the route handlers use. A module-level singleton is fine while
- * persistence is deferred; it disappears with the Prisma implementation.
+ * The in-memory fallback, kept for the life of the process.
+ *
+ * It holds writes, so it has to be one instance rather than one per call:
+ * `next dev` with no Worker behind it is the case this serves, and a fresh
+ * repository per request would lose a gift the moment it was recorded.
  */
-export const donationsRepository: DonationsRepository =
-  new InMemoryDonationsRepository();
+let fallback: InMemoryDonationsRepository | null = null;
+
+/**
+ * The repository the handlers and screens use.
+ *
+ * D1 when there is a binding, the seeded in-memory one when there is not.
+ * `database()` returns null outside a request context and in `next dev`
+ * without a Worker, which is a normal state rather than an error — see
+ * `src/lib/db/index.ts`.
+ *
+ * Resolved per call rather than once at module load, because the binding
+ * comes from the request context: a module-level singleton would capture
+ * whichever answer the build happened to see first, which is null.
+ */
+export function donationsRepository(): DonationsRepository {
+  const db = database();
+  if (db) return new D1DonationsRepository(db);
+  if (!fallback) fallback = new InMemoryDonationsRepository();
+  return fallback;
+}

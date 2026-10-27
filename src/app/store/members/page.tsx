@@ -5,7 +5,7 @@ import { addToCart, parseCartParam, serialiseCartParam } from "@/lib/store/cart"
 import { memberCatalogue, viewerHasMemberAccess } from "@/lib/store/catalogue";
 import { resolveDevViewer } from "@/lib/store/dev";
 import { storeRepository } from "@/lib/store/repository";
-import { STORE_ENTITY } from "@/lib/store/types";
+import { STORE_ENTITY, type Product } from "@/lib/store/types";
 
 import { MemberCard, Shell, TAX_LINE_NOTE, ViewerStrip } from "../parts";
 import styles from "../store.module.css";
@@ -37,6 +37,19 @@ export default async function MemberStorePage({
   const cart = parseCartParam(rawCart);
 
   const hasAccess = viewerHasMemberAccess(option.viewer);
+
+  /**
+   * Read only behind the gate.
+   *
+   * The catalogue read moved up here when the repository became async, because
+   * the body component that used to do it is synchronous. It is conditional on
+   * `hasAccess` on purpose: a viewer without access causes no read of the
+   * member catalogue at all, so there is nothing fetched for a later change to
+   * accidentally render.
+   */
+  const products = hasAccess
+    ? await storeRepository().listProducts(STORE_ENTITY)
+    : [];
 
   const cartHrefFor = (sku: string) => {
     const items = serialiseCartParam(addToCart(cart, sku));
@@ -79,6 +92,7 @@ export default async function MemberStorePage({
           </>
         ) : (
           <MemberCatalogueBody
+            products={products}
             cartHrefFor={cartHrefFor}
             viewerKey={option.key}
             rawCart={rawCart}
@@ -90,15 +104,17 @@ export default async function MemberStorePage({
 }
 
 function MemberCatalogueBody({
+  products,
   cartHrefFor,
   viewerKey,
   rawCart,
 }: {
+  products: Product[];
   cartHrefFor: (sku: string) => string;
   viewerKey: string;
   rawCart: string | null;
 }) {
-  const catalogue = memberCatalogue(storeRepository().listProducts(STORE_ENTITY));
+  const catalogue = memberCatalogue(products);
   const cartQuery = rawCart
     ? `?viewer=${viewerKey}&items=${encodeURIComponent(rawCart)}`
     : `?viewer=${viewerKey}`;

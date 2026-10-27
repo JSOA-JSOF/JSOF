@@ -42,15 +42,16 @@ const TYPE_LABELS: Record<PlanningItemType, string> = {
  */
 export default async function TreasuryPlanningPage() {
   const subject = treasurySubject(await getCurrentSubject());
-  const repo = treasuryRepository();
-  const planning = treasurerPlanning(subject, repo);
+  const repo = await treasuryRepository();
+  const asOf = await repo.asOfDate();
+  const planning = await treasurerPlanning(subject, repo);
 
   return (
     <div>
       <TreasuryHeader
         current="planning"
         title="My items for the next meeting"
-        period={`As of ${repo.asOfDate()}`}
+        period={`As of ${asOf}`}
         lede={
           "What the Treasurer needs the board to decide, with the type, an estimate " +
           "and the reason it needs the board rather than the office. Derived from " +

@@ -37,12 +37,12 @@ export default async function BoardStoreOrders({
   let rows = null;
   let summary = null;
   try {
-    rows = boardOrderRows(subject, { buyerType: filter.value });
+    rows = await boardOrderRows(subject, { buyerType: filter.value });
   } catch {
     rows = null;
   }
   try {
-    summary = boardOrderSummary(subject, { buyerType: filter.value });
+    summary = await boardOrderSummary(subject, { buyerType: filter.value });
   } catch {
     summary = null;
   }

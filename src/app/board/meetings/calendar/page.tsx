@@ -131,7 +131,7 @@ function EntityColumn({
 export default async function CalendarPage() {
   const persona = await getCurrentPersona();
   const subject = subjectFor(persona);
-  const repo = meetingsRepository();
+  const repo = await meetingsRepository();
   const visible = ENTITIES.filter((entity) => canReadGovernance(subject, entity));
   const today = new Date();
 
@@ -146,7 +146,7 @@ export default async function CalendarPage() {
     );
   }
 
-  const all = repo.listComplianceItems();
+  const all = await repo.listComplianceItems();
   const { unverified } = splitVerified(all);
   const visibleUnverified = unverified.filter((i) => visible.includes(i.entity));
 

@@ -44,12 +44,12 @@ export default async function InventoryPage({
 
   let inventory = null;
   try {
-    inventory = boardInventory(subject);
+    inventory = await boardInventory(subject);
   } catch {
     inventory = null;
   }
 
-  const chairId = recordedStoreChairPersonId();
+  const chairId = await recordedStoreChairPersonId();
   const banner = storeSodBanner(subject);
   const isStoreChair = banner.rolesHeld.includes("STORE_CHAIR");
   const mayWrite = held === "WRITE" && subject.mfaSatisfied;

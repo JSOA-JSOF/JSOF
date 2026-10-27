@@ -73,12 +73,12 @@ const DASHBOARDS: DashboardCase[] = [
   {
     name: "meetings",
     owner: "secretary",
-    read: (subject) => secretaryDashboard(subject).kpis,
+    read: async (subject) => (await secretaryDashboard(subject)).kpis,
   },
   {
     name: "donations",
     owner: "treasurer-jsof",
-    read: (subject) => readDonationsDashboard(subject, "JSOF").kpis,
+    read: async (subject) => (await readDonationsDashboard(subject, "JSOF")).kpis,
   },
   {
     name: "store",

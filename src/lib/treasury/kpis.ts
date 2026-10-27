@@ -35,9 +35,9 @@ import { assertUnblended, formatCentsWithSymbol, sumCents, TreasuryError } from 
 import { statusFor } from "./reimbursements";
 import {
   treasuryRepository,
-  type InMemoryTreasuryRepository,
   type ReimbursementQueue,
   type SodPanel,
+  type TreasuryRepository,
 } from "./repository";
 import { unmetTransferRules } from "./transfers";
 import type {
@@ -213,9 +213,9 @@ function noEntityScope(entity: Entity, what: string): string {
  */
 type Refusable<T> = { ok: true; value: T } | { ok: false; refusalCode: string };
 
-function attempt<T>(read: () => T): Refusable<T> {
+async function attempt<T>(read: () => Promise<T>): Promise<Refusable<T>> {
   try {
-    return { ok: true, value: read() };
+    return { ok: true, value: await read() };
   } catch (error) {
     if (error instanceof AuthzError || error instanceof TreasuryError) {
       return { ok: false, refusalCode: error.code };
@@ -234,17 +234,20 @@ type Gathered = {
   queues: ReimbursementQueue[];
 };
 
-function gather(subject: Subject, repo: InMemoryTreasuryRepository): Gathered {
+async function gather(
+  subject: Subject,
+  repo: TreasuryRepository,
+): Promise<Gathered> {
   return {
-    period: repo.period(),
-    asOf: repo.asOfDate(),
+    period: await repo.period(),
+    asOf: await repo.asOfDate(),
     // Checks FINANCIAL AGGREGATE per entity and withholds the column otherwise.
-    position: repo.positionStatement(subject),
-    register: attempt(() => repo.subscriptionRegister(subject)),
-    transfers: attempt(() => repo.transfers(subject)),
-    sod: attempt(() => repo.separationOfDuties(subject)),
+    position: await repo.positionStatement(subject),
+    register: await attempt(() => repo.subscriptionRegister(subject)),
+    transfers: await attempt(() => repo.transfers(subject)),
+    sod: await attempt(() => repo.separationOfDuties(subject)),
     // Already withholds per entity rather than throwing.
-    queues: repo.reimbursementQueues(subject),
+    queues: await repo.reimbursementQueues(subject),
   };
 }
 
@@ -764,11 +767,11 @@ function buildActions(data: Gathered): TreasuryAction[] {
  * One authorized read. Every figure on the Treasurer's dashboard, the actions
  * that follow from them, and the renewal row that sits below.
  */
-export function treasuryDashboard(
+export async function treasuryDashboard(
   subject: Subject,
-  repo: InMemoryTreasuryRepository = treasuryRepository(),
-): TreasuryDashboard {
-  const data = gather(subject, repo);
+  repo?: TreasuryRepository,
+): Promise<TreasuryDashboard> {
+  const data = await gather(subject, repo ?? (await treasuryRepository()));
   const renewals = renewalsDue(data.register, data.asOf);
 
   const kpis: Kpi[] = [
@@ -845,9 +848,9 @@ export function splitKpis(kpis: Kpi[]): { headline: Kpi[]; more: Kpi[] } {
 }
 
 /** The figures alone, for a caller that wants the tiles and nothing else. */
-export function treasuryKpis(
+export async function treasuryKpis(
   subject: Subject,
-  repo: InMemoryTreasuryRepository = treasuryRepository(),
-): Kpi[] {
-  return treasuryDashboard(subject, repo).kpis;
+  repo?: TreasuryRepository,
+): Promise<Kpi[]> {
+  return (await treasuryDashboard(subject, repo)).kpis;
 }

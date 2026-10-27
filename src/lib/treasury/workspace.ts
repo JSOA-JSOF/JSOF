@@ -44,8 +44,8 @@ import { treasuryDashboard, type TreasuryAction } from "./kpis";
 import { formatCentsWithSymbol, TreasuryError } from "./money";
 import {
   treasuryRepository,
-  type InMemoryTreasuryRepository,
   type SodPanel,
+  type TreasuryRepository,
 } from "./repository";
 import { REVIEW_DECISION_LABELS, type SubscriptionRegister, type SubscriptionRow } from "./types";
 
@@ -126,9 +126,9 @@ export function entitiesInScope(subject: Subject): Entity[] {
 
 type Refusable<T> = { ok: true; value: T } | { ok: false; code: string };
 
-function attempt<T>(read: () => T): Refusable<T> {
+async function attempt<T>(read: () => Promise<T>): Promise<Refusable<T>> {
   try {
-    return { ok: true, value: read() };
+    return { ok: true, value: await read() };
   } catch (error) {
     if (error instanceof AuthzError || error instanceof TreasuryError) {
       return { ok: false, code: error.code };
@@ -218,11 +218,11 @@ export function toRoleTask(action: TreasuryAction): RoleTask {
   };
 }
 
-export function treasurerTasks(
+export async function treasurerTasks(
   subject: Subject,
-  repo: InMemoryTreasuryRepository = treasuryRepository(),
-): RoleTask[] {
-  return treasuryDashboard(subject, repo).actions.map(toRoleTask);
+  repo?: TreasuryRepository,
+): Promise<RoleTask[]> {
+  return (await treasuryDashboard(subject, repo)).actions.map(toRoleTask);
 }
 
 /* ------------------------------------------------------------------ *
@@ -243,11 +243,29 @@ export type TreasurerCalendar = {
   withheldEntities: Entity[];
 };
 
-/** Compliance duties owned by the Treasurer, from the shared calendar. */
-function treasurerFilings(scope: Entity[]): ComplianceItem[] {
+/**
+ * Compliance duties owned by the Treasurer, from the shared calendar.
+ *
+ * The one read into another module, and the module brief requires it: there is
+ * exactly one compliance calendar and six private copies is the drift the
+ * ownership rule exists to stop. Read-only, and nothing writes back through it.
+ *
+ * The degradation is the point and survived the async change unchanged. The
+ * `await` now sits INSIDE the try, which is the whole trick: an `await` left
+ * outside it turns a rejected promise into an unhandled rejection that takes
+ * the page out, which is exactly what this seam exists to prevent. Both
+ * failure modes are covered — the Secretary's accessor throwing on the way to
+ * a repository, and a query against it rejecting afterwards.
+ *
+ * It returns the empty list on failure rather than rethrowing, so the
+ * Treasurer's own dated items still render and the tab says what is missing.
+ * The alternative is a treasury screen that goes blank because another
+ * module's table is unavailable.
+ */
+async function treasurerFilings(scope: Entity[]): Promise<ComplianceItem[]> {
   let all: ComplianceItem[] = [];
   try {
-    all = meetingsRepository().listComplianceItems();
+    all = await (await meetingsRepository()).listComplianceItems();
   } catch {
     // The compliance calendar is another module's. If it cannot be read, the
     // Treasurer's own dated items still render; the tab says what is missing
@@ -259,11 +277,12 @@ function treasurerFilings(scope: Entity[]): ComplianceItem[] {
   );
 }
 
-export function treasurerCalendar(
+export async function treasurerCalendar(
   subject: Subject,
-  repo: InMemoryTreasuryRepository = treasuryRepository(),
-): TreasurerCalendar {
-  const asOf = repo.asOfDate();
+  repo?: TreasuryRepository,
+): Promise<TreasurerCalendar> {
+  const reader = repo ?? (await treasuryRepository());
+  const asOf = await reader.asOfDate();
   const horizonEndDate = addDays(asOf, CALENDAR_HORIZON_DAYS);
   const scope = entitiesInScope(subject);
   const withheldEntities = ENTITIES.filter((entity) => !scope.includes(entity));
@@ -272,7 +291,7 @@ export function treasurerCalendar(
 
   /* --- Filings that are the Treasurer's ---------------------------- */
 
-  for (const filing of treasurerFilings(scope)) {
+  for (const filing of await treasurerFilings(scope)) {
     items.push({
       key: `filing-${filing.id}`,
       title: filing.title,
@@ -290,12 +309,12 @@ export function treasurerCalendar(
   // Filings owned by the Treasurer on an entity out of scope are counted, not
   // listed. The duty exists; the reader is not the one who owes it.
   for (const entity of withheldEntities) {
-    withheldCount += treasurerFilings([entity]).length;
+    withheldCount += (await treasurerFilings([entity])).length;
   }
 
   /* --- Renewals, with the cash each entity commits ----------------- */
 
-  const register = attempt(() => repo.subscriptionRegister(subject));
+  const register = await attempt(() => reader.subscriptionRegister(subject));
   if (register.ok) {
     for (const row of register.value.rows) {
       const renewalDate = row.subscription.renewalDate;
@@ -412,10 +431,11 @@ function renewalWantsADecision(row: SubscriptionRow): string | null {
   return null;
 }
 
-export function treasurerPlanning(
+export async function treasurerPlanning(
   subject: Subject,
-  repo: InMemoryTreasuryRepository = treasuryRepository(),
-): TreasurerPlanning {
+  repo?: TreasuryRepository,
+): Promise<TreasurerPlanning> {
+  const reader = repo ?? (await treasuryRepository());
   const scope = entitiesInScope(subject);
   const items: PlanningItem[] = [];
   const silentRenewals: TreasurerPlanning["silentRenewals"] = [];
@@ -423,7 +443,9 @@ export function treasurerPlanning(
 
   /* --- The separation-of-duties finding ----------------------------- */
 
-  const sod: Refusable<SodPanel> = attempt(() => repo.separationOfDuties(subject));
+  const sod: Refusable<SodPanel> = await attempt(() =>
+    reader.separationOfDuties(subject),
+  );
 
   if (sod.ok) {
     withheldCount += sod.value.withheldCount;
@@ -461,15 +483,16 @@ export function treasurerPlanning(
       finding.mitigation.includes("Finance Review Officer"),
     );
     for (const finding of needsReviewer) {
-      const filled = repo
-        .separationOfDuties(subject)
-        .people.some((person) =>
-          person.assignments.some(
-            (assignment) =>
-              assignment.role === "FINANCE_REVIEW_OFFICER" &&
-              assignment.entity === finding.entity,
-          ),
-        );
+      // The panel already in hand, rather than a second read of it. It was
+      // read twice before and the second read could only ever agree with the
+      // first; now it would also be a second round trip.
+      const filled = sod.value.people.some((person) =>
+        person.assignments.some(
+          (assignment) =>
+            assignment.role === "FINANCE_REVIEW_OFFICER" &&
+            assignment.entity === finding.entity,
+        ),
+      );
       items.push({
         id: `plan-fro-${finding.entity}`,
         entity: finding.entity,
@@ -503,8 +526,8 @@ export function treasurerPlanning(
 
   /* --- Renewals that commit money and want a decision --------------- */
 
-  const register: Refusable<SubscriptionRegister> = attempt(() =>
-    repo.subscriptionRegister(subject),
+  const register: Refusable<SubscriptionRegister> = await attempt(() =>
+    reader.subscriptionRegister(subject),
   );
 
   if (register.ok) {

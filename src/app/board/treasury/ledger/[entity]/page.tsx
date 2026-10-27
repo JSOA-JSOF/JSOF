@@ -61,13 +61,13 @@ export default async function LedgerPage({
   const kind = kindParam === "revenue" || kindParam === "expense" ? kindParam : undefined;
 
   const subject = treasurySubject(await getCurrentSubject());
-  const repo = treasuryRepository();
+  const repo = await treasuryRepository();
   const labels = ENTITY_LABELS[entity];
 
   let view: LedgerView | null = null;
   let refusal: string | null = null;
   try {
-    view = repo.ledger(subject, entity, { fundId: fundParam, kind });
+    view = await repo.ledger(subject, entity, { fundId: fundParam, kind });
   } catch (error) {
     if (error instanceof AuthzError) {
       refusal =

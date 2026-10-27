@@ -14,7 +14,50 @@
  * Imports are relative: the test runner has no `@/` path alias configured.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+/**
+ * The one seam into another module, made to fail on purpose.
+ *
+ * The Overview calendar reads the Secretary's compliance calendar — the module
+ * brief requires that rather than a treasury copy — and requires the read to
+ * be wrapped so a failure there degrades this tab instead of taking the page
+ * out. That wrapping is a `try`/`catch` in `workspace.ts`, and a `try`/`catch`
+ * is exactly the kind of thing that reads as correct while being wrong: move
+ * the `await` outside it and the rejection becomes unhandled.
+ *
+ * So it is exercised rather than inspected. The flag is off for every other
+ * test in this file, which then runs against the real calendar.
+ */
+const compliance = vi.hoisted(() => ({
+  failure: null as null | "accessor" | "query",
+}));
+
+vi.mock("../src/lib/meetings/repository", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/lib/meetings/repository")>();
+  return {
+    ...actual,
+    meetingsRepository: async () => {
+      // Two distinct failures, because they fail in different places: the
+      // accessor itself throwing (no binding, a bad import) and the query
+      // against it rejecting (the table is not there, D1 is unreachable).
+      if (compliance.failure === "accessor") {
+        throw new Error("the Secretary's repository could not be reached");
+      }
+      const repo = await actual.meetingsRepository();
+      if (compliance.failure === "query") {
+        return {
+          ...repo,
+          listComplianceItems: async () => {
+            throw new Error("no such table: compliance_item");
+          },
+        };
+      }
+      return repo;
+    },
+  };
+});
 
 import { ENTITIES, type Entity } from "../src/lib/authz/model";
 import { AuthzError, type Subject } from "../src/lib/authz/policy";
@@ -114,12 +157,12 @@ function moneyFigures(value: unknown, path = "$"): { path: string; amountCents: 
  * ================================================================== */
 
 describe("a treasurer of one entity sees nothing of the other", () => {
-  it("refuses the JSOF ledger to the JSOA treasurer, and says so rather than returning nothing", () => {
-    expect(() => repo.ledger(treasurerJsoa, "JSOF")).toThrow(AuthzError);
+  it("refuses the JSOF ledger to the JSOA treasurer, and says so rather than returning nothing", async () => {
+    await expect(repo.ledger(treasurerJsoa, "JSOF")).rejects.toThrow(AuthzError);
     // The refusal is a denial, not an empty result. An empty ledger would read
     // as "the Foundation had no activity", which is a different claim.
     try {
-      repo.ledger(treasurerJsoa, "JSOF");
+      await repo.ledger(treasurerJsoa, "JSOF");
       throw new Error("expected a refusal");
     } catch (error) {
       expect(error).toBeInstanceOf(AuthzError);
@@ -128,33 +171,33 @@ describe("a treasurer of one entity sees nothing of the other", () => {
     }
   });
 
-  it("refuses the JSOA ledger to the JSOF treasurer, symmetrically", () => {
-    expect(() => repo.ledger(treasurerJsof, "JSOA")).toThrow(AuthzError);
-    expect(() => repo.ledger(treasurerJsof, "JSOF")).not.toThrow();
+  it("refuses the JSOA ledger to the JSOF treasurer, symmetrically", async () => {
+    await expect(repo.ledger(treasurerJsof, "JSOA")).rejects.toThrow(AuthzError);
+    await expect(repo.ledger(treasurerJsof, "JSOF")).resolves.toBeDefined();
   });
 
-  it("returns only its own entity's rows, under every fund filter", () => {
-    const view = repo.ledger(treasurerJsoa, "JSOA");
+  it("returns only its own entity's rows, under every fund filter", async () => {
+    const view = await repo.ledger(treasurerJsoa, "JSOA");
     expect(view.entries.length).toBeGreaterThan(0);
     expect(view.entries.every((e) => e.entity === "JSOA")).toBe(true);
 
     for (const fund of view.funds) {
-      const filtered = repo.ledger(treasurerJsoa, "JSOA", { fundId: fund.id });
+      const filtered = await repo.ledger(treasurerJsoa, "JSOA", { fundId: fund.id });
       expect(filtered.entries.every((e) => e.entity === "JSOA")).toBe(true);
       expect(filtered.entries.every((e) => e.fundId === fund.id)).toBe(true);
     }
   });
 
-  it("cannot be tricked into the other entity by passing a foreign fund id", () => {
+  it("cannot be tricked into the other entity by passing a foreign fund id", async () => {
     // jsof-scholarship is a JSOF fund. Asking for it on the JSOA ledger must
     // not reach across; the filter is ignored and the scope still holds.
-    const view = repo.ledger(treasurerJsoa, "JSOA", { fundId: "jsof-scholarship" });
+    const view = await repo.ledger(treasurerJsoa, "JSOA", { fundId: "jsof-scholarship" });
     expect(view.appliedFundId).toBeNull();
     expect(view.entries.every((e) => e.entity === "JSOA")).toBe(true);
   });
 
-  it("withholds the other entity's column on the position statement, without zeroing it", () => {
-    const statement = repo.positionStatement(treasurerJsoa);
+  it("withholds the other entity's column on the position statement, without zeroing it", async () => {
+    const statement = await repo.positionStatement(treasurerJsoa);
     const jsoa = statement.columns.find((c) => c.entity === "JSOA");
     const jsof = statement.columns.find((c) => c.entity === "JSOF");
 
@@ -168,8 +211,8 @@ describe("a treasurer of one entity sees nothing of the other", () => {
     }
   });
 
-  it("withholds the other entity's reimbursement queue", () => {
-    const queues = repo.reimbursementQueues(treasurerJsof);
+  it("withholds the other entity's reimbursement queue", async () => {
+    const queues = await repo.reimbursementQueues(treasurerJsof);
     const jsoa = queues.find((q) => q.entity === "JSOA");
     const jsof = queues.find((q) => q.entity === "JSOF");
     expect(jsoa?.visible).toBe(false);
@@ -187,66 +230,70 @@ describe("a treasurer of one entity sees nothing of the other", () => {
 describe("a wrong-role request to every treasury read is refused", () => {
   const nobody = member();
 
-  it("gives a member no position, no ledger, no register, no transfers", () => {
-    const statement = repo.positionStatement(nobody);
+  it("gives a member no position, no ledger, no register, no transfers", async () => {
+    const statement = await repo.positionStatement(nobody);
     expect(statement.columns.every((c) => !c.visible)).toBe(true);
     expect(moneyFigures(statement)).toHaveLength(0);
 
     for (const entity of ENTITIES) {
-      expect(() => repo.ledger(nobody, entity)).toThrow(AuthzError);
+      await expect(repo.ledger(nobody, entity)).rejects.toThrow(AuthzError);
     }
-    expect(() => repo.subscriptionRegister(nobody)).toThrow(AuthzError);
-    expect(() => repo.transfers(nobody)).toThrow(TreasuryError);
+    await expect(repo.subscriptionRegister(nobody)).rejects.toThrow(AuthzError);
+    await expect(repo.transfers(nobody)).rejects.toThrow(TreasuryError);
   });
 
-  it("refuses everything to a board member whose MFA is not satisfied", () => {
+  it("refuses everything to a board member whose MFA is not satisfied", async () => {
     const unverified = seedSubject("p-mercer", false);
-    expect(() => repo.ledger(unverified, "JSOA")).toThrow(AuthzError);
-    expect(repo.positionStatement(unverified).columns.every((c) => !c.visible)).toBe(true);
+    await expect(repo.ledger(unverified, "JSOA")).rejects.toThrow(AuthzError);
+    const statement = await repo.positionStatement(unverified);
+    expect(statement.columns.every((c) => !c.visible)).toBe(true);
   });
 
-  it("gives the Finance Review Officer read but never write", () => {
-    expect(() => repo.ledger(financeReviewer, "JSOA")).not.toThrow();
-    expect(() => repo.ledger(financeReviewer, "JSOF")).not.toThrow();
+  it("gives the Finance Review Officer read but never write", async () => {
+    await expect(repo.ledger(financeReviewer, "JSOA")).resolves.toBeDefined();
+    await expect(repo.ledger(financeReviewer, "JSOF")).resolves.toBeDefined();
     const claim = REIMBURSEMENTS[0];
-    expect(() => repo.saveReimbursement(financeReviewer, claim)).toThrow(AuthzError);
+    await expect(
+      repo.saveReimbursement(financeReviewer, claim),
+    ).rejects.toThrow(AuthzError);
     // Read-only means read-only: the reviewer cannot approve a payment either.
     expect(previewApproval(financeReviewer, claim, "2026-09-30").allowed).toBe(false);
   });
 
-  it("gives a webmaster no financial reach at all, despite being an administrator", () => {
+  it("gives a webmaster no financial reach at all, despite being an administrator", async () => {
     const pureWebmaster: Subject = {
       personId: "p-web-only",
       assignments: ENTITIES.map((entity) => ({ role: "WEBMASTER" as const, entity })),
       mfaSatisfied: true,
     };
     for (const entity of ENTITIES) {
-      expect(() => repo.ledger(pureWebmaster, entity)).toThrow(AuthzError);
+      await expect(repo.ledger(pureWebmaster, entity)).rejects.toThrow(AuthzError);
     }
-    expect(repo.positionStatement(pureWebmaster).columns.every((c) => !c.visible)).toBe(true);
-    expect(() => repo.subscriptionRegister(pureWebmaster)).toThrow(AuthzError);
+    const statement = await repo.positionStatement(pureWebmaster);
+    expect(statement.columns.every((c) => !c.visible)).toBe(true);
+    await expect(repo.subscriptionRegister(pureWebmaster)).rejects.toThrow(AuthzError);
   });
 
-  it("lets two roles combine into more financial reach than either one implies", () => {
+  it("lets two roles combine into more financial reach than either one implies", async () => {
     // p-ferro is Webmaster, which holds FINANCIAL NONE, and also Communications
     // Chair, which holds AGGREGATE. The combination gets the JSOA totals. That
     // is `effectiveLevel` taking the best grant across assignments and it is
     // correct, but it is the kind of thing a role table hides, so it is
     // asserted rather than assumed.
-    const statement = repo.positionStatement(webmaster);
+    const statement = await repo.positionStatement(webmaster);
     expect(statement.columns.find((c) => c.entity === "JSOA")?.visible).toBe(true);
     // Both seats are JSOA-only, so the Foundation stays withheld.
     expect(statement.columns.find((c) => c.entity === "JSOF")?.visible).toBe(false);
     // Aggregate is still not row level: no ledger, on either entity.
     for (const entity of ENTITIES) {
-      expect(() => repo.ledger(webmaster, entity)).toThrow(AuthzError);
+      await expect(repo.ledger(webmaster, entity)).rejects.toThrow(AuthzError);
     }
   });
 
-  it("gives the Secretary aggregate totals but not the ledger rows", () => {
-    const statement = repo.positionStatement(secretary);
+  it("gives the Secretary aggregate totals but not the ledger rows", async () => {
+    const statement = await repo.positionStatement(secretary);
     expect(statement.columns.every((c) => c.visible)).toBe(true);
-    expect(() => repo.ledger(secretary, "JSOA")).toThrow(AuthzError);
+    await expect(repo.ledger(secretary, "JSOA")).rejects.toThrow(AuthzError);
   });
 });
 
@@ -255,8 +302,8 @@ describe("a wrong-role request to every treasury read is refused", () => {
  * ================================================================== */
 
 describe("no view blends the two entities into one figure", () => {
-  it("presents the position statement as two columns with no combined figure", () => {
-    const statement = repo.positionStatement(president);
+  it("presents the position statement as two columns with no combined figure", async () => {
+    const statement = await repo.positionStatement(president);
     const [jsoa, jsof] = statement.columns;
     if (!jsoa.visible || !jsof.visible) throw new Error("expected both columns visible");
 
@@ -278,28 +325,28 @@ describe("no view blends the two entities into one figure", () => {
     }
   });
 
-  it("has exactly one column per entity, so there is no third place for a total", () => {
-    const statement = repo.positionStatement(president);
+  it("has exactly one column per entity, so there is no third place for a total", async () => {
+    const statement = await repo.positionStatement(president);
     expect(statement.columns).toHaveLength(ENTITIES.length);
     expect(statement.columns.map((c) => c.entity).sort()).toEqual([...ENTITIES].sort());
   });
 
-  it("attributes every figure in every view to exactly one entity", () => {
-    const statement = repo.positionStatement(president);
-    const register = repo.subscriptionRegister(president);
+  it("attributes every figure in every view to exactly one entity", async () => {
+    const statement = await repo.positionStatement(president);
+    const register = await repo.subscriptionRegister(president);
 
     // The guard the repository runs before handing a view back.
     expect(() => assertUnblended(statement.columns)).not.toThrow();
     expect(() => assertUnblended(register.annualOperatingCost)).not.toThrow();
 
     for (const entity of ENTITIES) {
-      const view = repo.ledger(president, entity);
+      const view = await repo.ledger(president, entity);
       expect(() => assertUnblended(view.entries)).not.toThrow();
       expect(view.entries.every((e) => e.entity === entity)).toBe(true);
     }
   });
 
-  it("refuses a view that carries a figure naming no entity", () => {
+  it("refuses a view that carries a figure naming no entity", async () => {
     // If someone adds a combined total later, this is what happens.
     expect(() =>
       assertUnblended([
@@ -319,8 +366,8 @@ describe("no view blends the two entities into one figure", () => {
     }
   });
 
-  it("reports the register's annual operating cost per entity and never combined", () => {
-    const register = repo.subscriptionRegister(president);
+  it("reports the register's annual operating cost per entity and never combined", async () => {
+    const register = await repo.subscriptionRegister(president);
     const perEntity = register.annualOperatingCost;
     expect(perEntity).toHaveLength(ENTITIES.length);
 
@@ -333,14 +380,14 @@ describe("no view blends the two entities into one figure", () => {
     expect(Object.keys(register)).not.toContain("totalAnnualCents");
   });
 
-  it("names no field anywhere that reads as a cross-entity total", () => {
+  it("names no field anywhere that reads as a cross-entity total", async () => {
     const views: unknown[] = [
-      repo.positionStatement(president),
-      repo.subscriptionRegister(president),
-      repo.ledger(president, "JSOA"),
-      repo.ledger(president, "JSOF"),
-      repo.reimbursementQueues(president),
-      repo.transfers(president),
+      await repo.positionStatement(president),
+      await repo.subscriptionRegister(president),
+      await repo.ledger(president, "JSOA"),
+      await repo.ledger(president, "JSOF"),
+      await repo.reimbursementQueues(president),
+      await repo.transfers(president),
     ];
     const banned = /^(combined|consolidated|blended|group|bothEntities|allEntities)/i;
     for (const view of views) {
@@ -351,8 +398,8 @@ describe("no view blends the two entities into one figure", () => {
     }
   });
 
-  it("keeps the per-entity operating cost consistent with the apportioned rows", () => {
-    const register = repo.subscriptionRegister(president);
+  it("keeps the per-entity operating cost consistent with the apportioned rows", async () => {
+    const register = await repo.subscriptionRegister(president);
     for (const entity of ENTITIES) {
       const figure = register.annualOperatingCost.find((f) => f.entity === entity);
       if (!figure?.visible) throw new Error("expected a visible figure");
@@ -373,13 +420,13 @@ describe("no view blends the two entities into one figure", () => {
 describe("inter-entity transfers", () => {
   const good = TRANSFERS.find((t) => t.id === "tr-2026-0001") as Transfer;
 
-  it("accepts the fully approved, minuted, restriction-stated transfer", () => {
+  it("accepts the fully approved, minuted, restriction-stated transfer", async () => {
     expect(unmetTransferRules(good)).toEqual([]);
     expect(canRecordTransfer(good)).toBe(true);
     expect(recordTransfer(good).status).toBe("APPROVED");
   });
 
-  it("refuses one signature, and names the missing side", () => {
+  it("refuses one signature, and names the missing side", async () => {
     const oneSignature: Transfer = {
       ...good,
       approvals: [good.approvals[0]],
@@ -396,7 +443,7 @@ describe("inter-entity transfers", () => {
     expect(message.toLowerCase()).not.toContain("invalid");
   });
 
-  it("refuses a missing minute reference on either side, and says which side", () => {
+  it("refuses a missing minute reference on either side, and says which side", async () => {
     for (const side of ["minuteRefFrom", "minuteRefTo"] as const) {
       const missing: Transfer = { ...good, [side]: null };
       expect(canRecordTransfer(missing)).toBe(false);
@@ -412,7 +459,7 @@ describe("inter-entity transfers", () => {
     }
   });
 
-  it("refuses a blank or token restriction statement", () => {
+  it("refuses a blank or token restriction statement", async () => {
     expect(canRecordTransfer({ ...good, restrictionStatement: "" })).toBe(false);
     expect(canRecordTransfer({ ...good, restrictionStatement: "n/a" })).toBe(false);
     expect(() => recordTransfer({ ...good, restrictionStatement: "" })).toThrow(
@@ -420,7 +467,7 @@ describe("inter-entity transfers", () => {
     );
   });
 
-  it("refuses an approval from the person who raised it", () => {
+  it("refuses an approval from the person who raised it", async () => {
     const selfApproved: Transfer = {
       ...good,
       createdById: "p-halloran",
@@ -429,7 +476,7 @@ describe("inter-entity transfers", () => {
     expect(() => recordTransfer(selfApproved)).toThrow(/Self-approval/);
   });
 
-  it("recuses the President on the receiving side, by name", () => {
+  it("recuses the President on the receiving side, by name", async () => {
     const presidentReceiving: Transfer = {
       ...good,
       approvals: [
@@ -449,13 +496,13 @@ describe("inter-entity transfers", () => {
     expect(canRecordTransfer(presidentReceiving)).toBe(false);
   });
 
-  it("refuses a transfer that does not cross entities", () => {
+  it("refuses a transfer that does not cross entities", async () => {
     const sameEntity: Transfer = { ...good, toEntity: good.fromEntity };
     expect(canRecordTransfer(sameEntity)).toBe(false);
     expect(() => recordTransfer(sameEntity)).toThrow(/cross entities/);
   });
 
-  it("lists every outstanding condition at once rather than the first one", () => {
+  it("lists every outstanding condition at once rather than the first one", async () => {
     const bare: Transfer = {
       ...good,
       approvals: [],
@@ -472,14 +519,14 @@ describe("inter-entity transfers", () => {
     expect(unmet.length).toBeGreaterThanOrEqual(5);
   });
 
-  it("every rule states its requirement and where it is enforced", () => {
+  it("every rule states its requirement and where it is enforced", async () => {
     for (const rule of transferRuleStatuses(good)) {
       expect(rule.requirement.length).toBeGreaterThan(10);
       expect(["policy.ts", "treasury"]).toContain(rule.source);
     }
   });
 
-  it("the seeded half-approved transfer is outstanding on the receiving side", () => {
+  it("the seeded half-approved transfer is outstanding on the receiving side", async () => {
     const pending = TRANSFERS.find((t) => t.id === "tr-2026-0002") as Transfer;
     const unmet = unmetTransferRules(pending).map((r) => r.id);
     expect(unmet).toEqual(["TREASURER_APPROVAL_RECEIVING", "MINUTE_REF_RECEIVING"]);
@@ -493,7 +540,7 @@ describe("inter-entity transfers", () => {
 describe("reimbursement approval", () => {
   const ownClaim = REIMBURSEMENTS.find((r) => r.id === "rb-2026-0007") as Reimbursement;
 
-  it("refuses a treasurer approving the claim they submitted", () => {
+  it("refuses a treasurer approving the claim they submitted", async () => {
     // rb-2026-0007 was raised by p-halloran, the Treasurer of JSOA, who is
     // otherwise exactly the right person to approve a JSOA reimbursement.
     expect(ownClaim.createdById).toBe(treasurerJsoa.personId);
@@ -511,7 +558,7 @@ describe("reimbursement approval", () => {
     }
   });
 
-  it("gives the screen a refusal message naming the claim, not 'invalid'", () => {
+  it("gives the screen a refusal message naming the claim, not 'invalid'", async () => {
     const outcome = previewApproval(treasurerJsoa, ownClaim, "2026-09-30");
     expect(outcome.allowed).toBe(false);
     if (outcome.allowed) throw new Error("expected a refusal");
@@ -520,20 +567,20 @@ describe("reimbursement approval", () => {
     expect(outcome.refusal.toLowerCase()).not.toContain("invalid");
   });
 
-  it("refuses the self-approval even when the claim is small enough for one approval", () => {
+  it("refuses the self-approval even when the claim is small enough for one approval", async () => {
     expect(approvalsRequired(ownClaim)).toBe(1);
     expect(() => approveReimbursement(treasurerJsoa, ownClaim, "2026-09-30")).toThrow(
       /Self-approval/,
     );
   });
 
-  it("lets a different spend approver approve it", () => {
+  it("lets a different spend approver approve it", async () => {
     const approved = approveReimbursement(president, ownClaim, "2026-09-30");
     expect(approved.status).toBe("APPROVED");
     expect(approved.approvals.map((a) => a.approverId)).toEqual([president.personId]);
   });
 
-  it("refuses an approver with no spend authority on that entity", () => {
+  it("refuses an approver with no spend authority on that entity", async () => {
     // The Secretary holds only AGGREGATE on FINANCIAL, so the scope check
     // refuses before the capability check is even reached. Aggregate totals do
     // not carry the right to authorise one of the payments inside them.
@@ -558,7 +605,7 @@ describe("reimbursement approval", () => {
     );
   });
 
-  it("requires a second, different approval above the routine threshold", () => {
+  it("requires a second, different approval above the routine threshold", async () => {
     const big = REIMBURSEMENTS.find((r) => r.id === "rb-2026-0008") as Reimbursement;
     expect(approvalsRequired(big)).toBe(2);
     expect(statusFor(big)).toBe("AWAITING_SECOND_APPROVAL");
@@ -573,7 +620,7 @@ describe("reimbursement approval", () => {
     expect(new Set(settled.approvals.map((a) => a.approverId)).size).toBe(2);
   });
 
-  it("uses the lower threshold for a related party", () => {
+  it("uses the lower threshold for a related party", async () => {
     const related = REIMBURSEMENTS.find((r) => r.id === "rb-2026-0009") as Reimbursement;
     expect(related.amountCents).toBeLessThan(100_000);
     expect(approvalsRequired(related)).toBe(2);
@@ -583,7 +630,7 @@ describe("reimbursement approval", () => {
     );
   });
 
-  it("refuses approval while no receipt is on file, and says what to attach", () => {
+  it("refuses approval while no receipt is on file, and says what to attach", async () => {
     const noReceipt = REIMBURSEMENTS.find((r) => r.id === "rb-2026-0010") as Reimbursement;
     const outcome = previewApproval(treasurerJsoa, noReceipt, "2026-09-30");
     expect(outcome.allowed).toBe(false);
@@ -598,7 +645,7 @@ describe("reimbursement approval", () => {
  * ================================================================== */
 
 describe("annual cost normalisation", () => {
-  it("multiplies a monthly cost by twelve", () => {
+  it("multiplies a monthly cost by twelve", async () => {
     expect(
       annualCostCents({ cadence: "monthly", costCents: 9_900, observedAnnualCents: null }),
     ).toBe(118_800);
@@ -611,13 +658,13 @@ describe("annual cost normalisation", () => {
     ).toBe(20_004);
   });
 
-  it("multiplies a quarterly cost by four", () => {
+  it("multiplies a quarterly cost by four", async () => {
     expect(
       annualCostCents({ cadence: "quarterly", costCents: 24_999, observedAnnualCents: null }),
     ).toBe(99_996);
   });
 
-  it("passes an annual cost through unchanged", () => {
+  it("passes an annual cost through unchanged", async () => {
     expect(
       annualCostCents({ cadence: "annual", costCents: 15_990, observedAnnualCents: null }),
     ).toBe(15_990);
@@ -626,7 +673,7 @@ describe("annual cost normalisation", () => {
     ).toBe(0);
   });
 
-  it("takes the observed trailing-twelve-month figure for a variable cost", () => {
+  it("takes the observed trailing-twelve-month figure for a variable cost", async () => {
     expect(
       annualCostCents({ cadence: "variable", costCents: null, observedAnnualCents: 421_112 }),
     ).toBe(421_112);
@@ -636,7 +683,7 @@ describe("annual cost normalisation", () => {
     ).toBe(45_600);
   });
 
-  it("refuses a variable cost with no observed figure rather than reporting zero", () => {
+  it("refuses a variable cost with no observed figure rather than reporting zero", async () => {
     expect(() =>
       annualCostCents({ cadence: "variable", costCents: 1_000, observedAnnualCents: null }),
     ).toThrow(TreasuryError);
@@ -645,13 +692,13 @@ describe("annual cost normalisation", () => {
     ).toThrow(/needs a cost per period/);
   });
 
-  it("refuses a fractional cent anywhere", () => {
+  it("refuses a fractional cent anywhere", async () => {
     expect(() =>
       annualCostCents({ cadence: "monthly", costCents: 9_900.5, observedAnnualCents: null }),
     ).toThrow(/integer/);
   });
 
-  it("normalises every seeded subscription without a float", () => {
+  it("normalises every seeded subscription without a float", async () => {
     for (const subscription of SUBSCRIPTIONS) {
       const annual = subscriptionAnnualCents(subscription);
       expect(Number.isInteger(annual)).toBe(true);
@@ -659,7 +706,7 @@ describe("annual cost normalisation", () => {
     }
   });
 
-  it("apportions a shared invoice so the parts add back exactly", () => {
+  it("apportions a shared invoice so the parts add back exactly", async () => {
     // 159.90 split evenly is 79.95 each, which is exact.
     expect(apportion(15_990, [5_000, 5_000])).toEqual([7_995, 7_995]);
     // An odd cent has to land somewhere, and it lands deterministically.
@@ -675,7 +722,7 @@ describe("annual cost normalisation", () => {
     }
   });
 
-  it("refuses a split that does not sum to the whole", () => {
+  it("refuses a split that does not sum to the whole", async () => {
     expect(() => apportion(100, [5_000, 4_000])).toThrow(/basis points/);
   });
 });
@@ -685,7 +732,7 @@ describe("annual cost normalisation", () => {
  * ================================================================== */
 
 describe("the subscription register", () => {
-  it("raises a critical finding for a blank second administrator", () => {
+  it("raises a critical finding for a blank second administrator", async () => {
     const blank = SUBSCRIPTIONS.filter((s) => s.secondAdministratorPersonId === null);
     expect(blank.length).toBeGreaterThan(0);
     for (const subscription of blank) {
@@ -697,7 +744,7 @@ describe("the subscription register", () => {
     }
   });
 
-  it("raises no handover finding where a second administrator is named", () => {
+  it("raises no handover finding where a second administrator is named", async () => {
     for (const subscription of SUBSCRIPTIONS.filter(
       (s) => s.secondAdministratorPersonId !== null,
     )) {
@@ -707,7 +754,7 @@ describe("the subscription register", () => {
     }
   });
 
-  it("raises a finding for a cross-entity split with no stated basis", () => {
+  it("raises a finding for a cross-entity split with no stated basis", async () => {
     const shared = SUBSCRIPTIONS.find((s) => s.split.length > 1) as Subscription;
     expect(shared.splitBasis).not.toBeNull();
     const withoutBasis: Subscription = { ...shared, splitBasis: null };
@@ -716,7 +763,7 @@ describe("the subscription register", () => {
     );
   });
 
-  it("raises a finding for a review older than a year, or none at all", () => {
+  it("raises a finding for a review older than a year, or none at all", async () => {
     const never = SUBSCRIPTIONS.find((s) => s.lastReviewedOn === null) as Subscription;
     expect(subscriptionFindings(never).map((f) => f.code)).toContain("STALE_REVIEW");
     const stale: Subscription = { ...never, lastReviewedOn: "2024-01-01" };
@@ -725,8 +772,8 @@ describe("the subscription register", () => {
     expect(subscriptionFindings(fresh).map((f) => f.code)).not.toContain("STALE_REVIEW");
   });
 
-  it("orders findings by severity so the critical one is not below a renewal date", () => {
-    const register = repo.subscriptionRegister(president);
+  it("orders findings by severity so the critical one is not below a renewal date", async () => {
+    const register = await repo.subscriptionRegister(president);
     const ranks = register.findings.map((f) =>
       f.severity === "critical" ? 0 : f.severity === "high" ? 1 : 2,
     );
@@ -734,15 +781,15 @@ describe("the subscription register", () => {
     expect(register.findings[0]?.severity).toBe("critical");
   });
 
-  it("sorts by severity without mutating the input", () => {
+  it("sorts by severity without mutating the input", async () => {
     const input = [{ severity: "moderate" as const }, { severity: "critical" as const }];
     const sorted = bySeverity(input);
     expect(sorted[0].severity).toBe("critical");
     expect(input[0].severity).toBe("moderate");
   });
 
-  it("withholds the other entity's rows from a single-entity treasurer", () => {
-    const register = repo.subscriptionRegister(treasurerJsof);
+  it("withholds the other entity's rows from a single-entity treasurer", async () => {
+    const register = await repo.subscriptionRegister(treasurerJsof);
     expect(register.withheldRowCount).toBeGreaterThan(0);
     expect(register.rows.every((r) => r.subscription.split.some((s) => s.entity === "JSOF"))).toBe(
       true,
@@ -757,8 +804,8 @@ describe("the subscription register", () => {
  * ================================================================== */
 
 describe("the separation-of-duties panel", () => {
-  it("surfaces the Treasurer-is-also-Store-Chair finding as critical", () => {
-    const panel = repo.separationOfDuties(president);
+  it("surfaces the Treasurer-is-also-Store-Chair finding as critical", async () => {
+    const panel = await repo.separationOfDuties(president);
     const critical = panel.current.filter((f) => f.severity === "critical");
     expect(critical.length).toBeGreaterThan(0);
     const storeChair = critical.find(
@@ -770,23 +817,23 @@ describe("the separation-of-duties panel", () => {
     expect(storeChair!.mitigation.length).toBeGreaterThan(20);
   });
 
-  it("shows a person their own finding even without audit scope", () => {
+  it("shows a person their own finding even without audit scope", async () => {
     // The Treasurer holds no AUDIT_LOG grant, and the panel is about them.
-    const panel = repo.separationOfDuties(treasurerJsoa);
+    const panel = await repo.separationOfDuties(treasurerJsoa);
     expect(panel.current.length).toBeGreaterThan(0);
     expect(panel.current.every((f) => f.personId === treasurerJsoa.personId)).toBe(true);
     expect(panel.withheldCount).toBeGreaterThan(0);
   });
 
-  it("flags the proposed single treasurer as sitting on both sides of every transfer", () => {
-    const panel = repo.separationOfDuties(president);
+  it("flags the proposed single treasurer as sitting on both sides of every transfer", async () => {
+    const panel = await repo.separationOfDuties(president);
     expect(
       panel.proposed.findings.some((f) => f.finding.includes("both sides of every transfer")),
     ).toBe(true);
   });
 
-  it("refuses the panel to someone with no board seat", () => {
-    expect(() => repo.separationOfDuties(member())).toThrow(AuthzError);
+  it("refuses the panel to someone with no board seat", async () => {
+    await expect(repo.separationOfDuties(member())).rejects.toThrow(AuthzError);
   });
 });
 
@@ -795,12 +842,14 @@ describe("the separation-of-duties panel", () => {
  * ================================================================== */
 
 describe("seed and subject integrity", () => {
-  it("holds every amount as an integer number of cents", () => {
+  it("holds every amount as an integer number of cents", async () => {
     const amounts = [
-      ...moneyFigures(repo.positionStatement(president)),
-      ...ENTITIES.flatMap((e) => moneyFigures(repo.ledger(president, e))),
-      ...moneyFigures(repo.subscriptionRegister(president)),
-      ...moneyFigures(repo.transfers(president)),
+      ...moneyFigures(await repo.positionStatement(president)),
+      ...(
+        await Promise.all(ENTITIES.map((e) => repo.ledger(president, e)))
+      ).flatMap((view) => moneyFigures(view)),
+      ...moneyFigures(await repo.subscriptionRegister(president)),
+      ...moneyFigures(await repo.transfers(president)),
     ];
     expect(amounts.length).toBeGreaterThan(0);
     for (const figure of amounts) {
@@ -810,8 +859,8 @@ describe("seed and subject integrity", () => {
     }
   });
 
-  it("ties each entity's fund openings to its opening net assets", () => {
-    const statement = repo.positionStatement(president);
+  it("ties each entity's fund openings to its opening net assets", async () => {
+    const statement = await repo.positionStatement(president);
     for (const column of statement.columns) {
       if (!column.visible) continue;
       expect(sumCents(column.fundBalances.map((b) => b.openingCents))).toBe(
@@ -824,16 +873,16 @@ describe("seed and subject integrity", () => {
     }
   });
 
-  it("keeps every seeded ledger entry inside the reported period", () => {
+  it("keeps every seeded ledger entry inside the reported period", async () => {
     for (const entity of ENTITIES) {
-      for (const entry of repo.ledger(president, entity).entries) {
+      for (const entry of (await repo.ledger(president, entity)).entries) {
         expect(entry.date >= PERIOD.fromDate).toBe(true);
         expect(entry.date <= PERIOD.toDate).toBe(true);
       }
     }
   });
 
-  it("maps a switcher persona onto a seeded person so identity checks mean something", () => {
+  it("maps a switcher persona onto a seeded person so identity checks mean something", async () => {
     const persona: Subject = {
       personId: "dev:treasurer-jsoa",
       assignments: [{ role: "TREASURER", entity: "JSOA" }],
@@ -849,7 +898,7 @@ describe("seed and subject integrity", () => {
     expect(previewApproval(bridged, claim, "2026-09-30").allowed).toBe(false);
   });
 
-  it("leaves an unmapped subject's identity alone", () => {
+  it("leaves an unmapped subject's identity alone", async () => {
     const unknown: Subject = {
       personId: "dev:scholarships",
       assignments: [{ role: "SCHOLARSHIPS_CHAIR", entity: "JSOF" }],
@@ -858,7 +907,7 @@ describe("seed and subject integrity", () => {
     expect(treasurySubject(unknown).personId).toBe("dev:scholarships");
   });
 
-  it("renders figures with two decimal places and grouped thousands", () => {
+  it("renders figures with two decimal places and grouped thousands", async () => {
     expect(formatCents(12_102_888)).toBe("121,028.88");
     expect(formatCents(0)).toBe("0.00");
     expect(formatCents(5)).toBe("0.05");
@@ -866,7 +915,7 @@ describe("seed and subject integrity", () => {
     expect(() => formatCents(1.5)).toThrow(/integer/);
   });
 
-  it("names a treasurer for each entity, per the two-treasurer structure", () => {
+  it("names a treasurer for each entity, per the two-treasurer structure", async () => {
     for (const entity of ENTITIES as readonly Entity[]) {
       const holders = [treasurerJsoa, treasurerJsof].filter((s) =>
         s.assignments.some((a) => a.role === "TREASURER" && a.entity === entity),
@@ -892,7 +941,7 @@ describe("seed and subject integrity", () => {
  * ================================================================== */
 
 describe("the workspace spine keeps the existing function routes", () => {
-  it("leaves every function tab at the route it already had", () => {
+  it("leaves every function tab at the route it already had", async () => {
     expect(TREASURY_FUNCTION_TABS.map((tab) => tab.href)).toEqual([
       "/board/treasury/ledger/JSOA",
       "/board/treasury/ledger/JSOF",
@@ -903,7 +952,7 @@ describe("the workspace spine keeps the existing function routes", () => {
     ]);
   });
 
-  it("keeps the ledger as two routes, because there is no 'both' to select", () => {
+  it("keeps the ledger as two routes, because there is no 'both' to select", async () => {
     const ledgers = TREASURY_FUNCTION_TABS.filter((tab) => tab.href.includes("/ledger/"));
     expect(ledgers).toHaveLength(2);
     for (const entity of ENTITIES) {
@@ -913,8 +962,8 @@ describe("the workspace spine keeps the existing function routes", () => {
 });
 
 describe("Overview tasks are derived from state, never entered", () => {
-  it("derives a task for every outstanding action, with what it blocks", () => {
-    const tasks = treasurerTasks(treasurerJsoa, repo);
+  it("derives a task for every outstanding action, with what it blocks", async () => {
+    const tasks = await treasurerTasks(treasurerJsoa, repo);
     expect(tasks.length).toBeGreaterThan(0);
     for (const task of tasks) {
       // `because` is the field that makes a count actionable. An empty one
@@ -926,8 +975,8 @@ describe("Overview tasks are derived from state, never entered", () => {
     expect(new Set(tasks.map((t) => t.key)).size).toBe(tasks.length);
   });
 
-  it("carries the age of the oldest reimbursement into the reason, not just a count", () => {
-    const tasks = treasurerTasks(treasurerJsoa, repo);
+  it("carries the age of the oldest reimbursement into the reason, not just a count", async () => {
+    const tasks = await treasurerTasks(treasurerJsoa, repo);
     const claims = tasks.find((task) => task.key === "reimbursements-JSOA");
     expect(claims).toBeDefined();
     // A volunteer out of pocket is a retention problem, and the age is the
@@ -937,15 +986,15 @@ describe("Overview tasks are derived from state, never entered", () => {
     expect(claims!.entity).toBe("JSOA");
   });
 
-  it("splits the reimbursement queues per entity rather than carrying one count", () => {
-    const tasks = treasurerTasks(president, repo);
+  it("splits the reimbursement queues per entity rather than carrying one count", async () => {
+    const tasks = await treasurerTasks(president, repo);
     const queues = tasks.filter((task) => task.key.startsWith("reimbursements-JSO"));
     expect(queues.map((task) => task.entity).sort()).toEqual(["JSOA", "JSOF"]);
     for (const queue of queues) expect(queue.entity).toBeDefined();
   });
 
-  it("reserves overdue for something that has actually run past its tolerance", () => {
-    const tasks = treasurerTasks(president, repo);
+  it("reserves overdue for something that has actually run past its tolerance", async () => {
+    const tasks = await treasurerTasks(president, repo);
     for (const task of tasks.filter((t) => t.urgency === "overdue")) {
       // Either a person has been waiting too long, or a control finding stands.
       expect(
@@ -955,8 +1004,8 @@ describe("Overview tasks are derived from state, never entered", () => {
     }
   });
 
-  it("gives a wrong-role reader no tasks at all rather than an unscoped list", () => {
-    expect(treasurerTasks(member(), repo)).toEqual([]);
+  it("gives a wrong-role reader no tasks at all rather than an unscoped list", async () => {
+    expect(await treasurerTasks(member(), repo)).toEqual([]);
 
     // A webmaster holding PUBLIC_CONTENT and nothing financial gets nothing
     // either, despite being an administrator. Break-glass is a logged request,
@@ -969,19 +1018,19 @@ describe("Overview tasks are derived from state, never entered", () => {
       ],
       mfaSatisfied: true,
     };
-    expect(treasurerTasks(plainWebmaster, repo).some((t) => t.href.includes("subscriptions")))
-      .toBe(false);
+    const tasks = await treasurerTasks(plainWebmaster, repo);
+    expect(tasks.some((t) => t.href.includes("subscriptions"))).toBe(false);
     expect(entitiesInScope(plainWebmaster)).toEqual([]);
   });
 
-  it("gives the seeded webmaster treasury tasks only because they also chair comms", () => {
+  it("gives the seeded webmaster treasury tasks only because they also chair comms", async () => {
     // `p-ferro` is Webmaster AND Communications Chair, and the chair's seat
     // carries FINANCIAL aggregate on the Association. Two roles that are each
     // legal add up to more reach than either implies, which is a fact about
     // the board's arrangement rather than a leak — but it must come from the
     // assignment and never from the Overview wanting rows.
     expect(entitiesInScope(webmaster)).toEqual(["JSOA"]);
-    const tasks = treasurerTasks(webmaster, repo);
+    const tasks = await treasurerTasks(webmaster, repo);
     expect(tasks.every((task) => task.entity !== "JSOF")).toBe(true);
     // No row-level work: aggregate scope approves nothing.
     expect(tasks.some((task) => task.href.includes("reimbursements"))).toBe(false);
@@ -989,8 +1038,8 @@ describe("Overview tasks are derived from state, never entered", () => {
 });
 
 describe("the Overview calendar is a filter over the shared compliance calendar", () => {
-  it("takes the Treasurer's own filings from the one board calendar", () => {
-    const calendar = treasurerCalendar(president, repo);
+  it("takes the Treasurer's own filings from the one board calendar", async () => {
+    const calendar = await treasurerCalendar(president, repo);
     const filings = calendar.items.filter((item) => item.kind === "FILING");
     expect(filings.length).toBeGreaterThan(0);
     for (const filing of filings) {
@@ -1005,16 +1054,16 @@ describe("the Overview calendar is a filter over the shared compliance calendar"
     }
   });
 
-  it("never claims a filing the shared calendar has not verified", () => {
-    const calendar = treasurerCalendar(president, repo);
+  it("never claims a filing the shared calendar has not verified", async () => {
+    const calendar = await treasurerCalendar(president, repo);
     for (const item of calendar.items.filter((i) => i.kind === "FILING")) {
       const source = SEED_COMPLIANCE.find((c) => `filing-${c.id}` === item.key)!;
       expect(Boolean(item.unverified)).toBe(!source.verified);
     }
   });
 
-  it("renews a shared invoice as two labelled figures and never as its total", () => {
-    const calendar = treasurerCalendar(president, repo);
+  it("renews a shared invoice as two labelled figures and never as its total", async () => {
+    const calendar = await treasurerCalendar(president, repo);
     // Resend is split 70/30 across the entities and renews inside the window.
     const rows = calendar.items.filter((item) => item.key.startsWith("renewal-sub-resend-"));
     expect(rows.map((row) => row.entity).sort()).toEqual(["JSOA", "JSOF"]);
@@ -1031,37 +1080,71 @@ describe("the Overview calendar is a filter over the shared compliance calendar"
     }
   });
 
-  it("withholds the other entity's dated items and counts them, rather than dropping them", () => {
-    const calendar = treasurerCalendar(treasurerJsoa, repo);
+  it("withholds the other entity's dated items and counts them, rather than dropping them", async () => {
+    const calendar = await treasurerCalendar(treasurerJsoa, repo);
     expect(calendar.withheldEntities).toEqual(["JSOF"]);
     expect(calendar.withheldCount).toBeGreaterThan(0);
     expect(calendar.items.every((item) => item.entity !== "JSOF")).toBe(true);
   });
 
-  it("gives a wrong-role reader nothing dated, and no zero either", () => {
-    const calendar = treasurerCalendar(member(), repo);
+  it("gives a wrong-role reader nothing dated, and no zero either", async () => {
+    const calendar = await treasurerCalendar(member(), repo);
     expect(calendar.items).toEqual([]);
     expect(calendar.withheldEntities).toEqual([...ENTITIES]);
     expect(calendar.withheldCount).toBeGreaterThan(0);
   });
 
-  it("derives the monthly close rather than storing a list of close dates", () => {
+  it("derives the monthly close rather than storing a list of close dates", async () => {
     expect(monthlyCloseDate("2026-09-30")).toBe("2026-10-15");
     expect(monthlyCloseDate("2026-10-01")).toBe("2026-10-15");
     expect(monthlyCloseDate("2026-10-15")).toBe("2026-10-15");
     expect(monthlyCloseDate("2026-12-20")).toBe("2027-01-15");
   });
 
-  it("puts one close on each entity's calendar, because the books never merge", () => {
-    const calendar = treasurerCalendar(president, repo);
+  it("puts one close on each entity's calendar, because the books never merge", async () => {
+    const calendar = await treasurerCalendar(president, repo);
     const closes = calendar.items.filter((item) => item.kind === "CYCLE");
     expect(closes.map((item) => item.entity).sort()).toEqual(["JSOA", "JSOF"]);
+  });
+
+  /* The required behaviour on the one cross-module read. Both cases assert the
+     same two things: the tab still renders, and the Treasurer's own dated
+     items are still on it. A blank screen because another module's table is
+     unavailable is the failure being prevented. */
+  for (const failure of ["accessor", "query"] as const) {
+    it(`degrades rather than failing when the compliance calendar's ${failure} fails`, async () => {
+      compliance.failure = failure;
+      try {
+        const calendar = await treasurerCalendar(president, repo);
+
+        // No filings, because the calendar they come from could not be read.
+        expect(calendar.items.filter((item) => item.kind === "FILING")).toEqual([]);
+
+        // Everything of this module's own is still there: the monthly close
+        // for each entity and the renewals from the subscription register.
+        expect(
+          calendar.items
+            .filter((item) => item.kind === "CYCLE")
+            .map((item) => item.entity)
+            .sort(),
+        ).toEqual(["JSOA", "JSOF"]);
+        expect(calendar.items.some((item) => item.kind === "RENEWAL")).toBe(true);
+        expect(calendar.horizonEndDate).toBeTruthy();
+      } finally {
+        compliance.failure = null;
+      }
+    });
+  }
+
+  it("reads the real calendar again once it is available", async () => {
+    const calendar = await treasurerCalendar(president, repo);
+    expect(calendar.items.some((item) => item.kind === "FILING")).toBe(true);
   });
 });
 
 describe("Planning items are derived, and are per entity", () => {
-  it("raises the critical separation-of-duties finding as a decision for its own board", () => {
-    const planning = treasurerPlanning(treasurerJsoa, repo);
+  it("raises the critical separation-of-duties finding as a decision for its own board", async () => {
+    const planning = await treasurerPlanning(treasurerJsoa, repo);
     const sod = planning.items.find((item) => item.id.startsWith("plan-sod-"));
     expect(sod).toBeDefined();
     expect(sod!.type).toBe("DECISION");
@@ -1075,8 +1158,8 @@ describe("Planning items are derived, and are per entity", () => {
     expect(sod!.acceptedForMeetingId).toBeNull();
   });
 
-  it("derives the Finance Review Officer item from the finding that names it", () => {
-    const planning = treasurerPlanning(treasurerJsoa, repo);
+  it("derives the Finance Review Officer item from the finding that names it", async () => {
+    const planning = await treasurerPlanning(treasurerJsoa, repo);
     const fro = planning.items.find((item) => item.id === "plan-fro-JSOA");
     expect(fro).toBeDefined();
     expect(fro!.type).toBe("DECISION");
@@ -1085,18 +1168,18 @@ describe("Planning items are derived, and are per entity", () => {
     expect(fro!.reason).toMatch(/refuses it write scope/);
   });
 
-  it("raises no reviewer item where no finding names one", () => {
+  it("raises no reviewer item where no finding names one", async () => {
     // p-okonkwo holds the Foundation treasury alone, so no finding stands
     // about them, and a planning item with nothing behind it would be a wish.
-    const planning = treasurerPlanning(treasurerJsof, repo);
+    const planning = await treasurerPlanning(treasurerJsof, repo);
     expect(planning.items.some((item) => item.id.startsWith("plan-sod-"))).toBe(false);
     expect(planning.items.some((item) => item.id.startsWith("plan-fro-"))).toBe(false);
     // But the findings exist and are simply not theirs to see.
     expect(planning.withheldCount).toBeGreaterThan(0);
   });
 
-  it("puts a shared invoice on both agendas with each board's own share", () => {
-    const planning = treasurerPlanning(president, repo);
+  it("puts a shared invoice on both agendas with each board's own share", async () => {
+    const planning = await treasurerPlanning(president, repo);
     const zoom = planning.items.filter((item) => item.id.startsWith("plan-renewal-sub-zoom-"));
     expect(zoom.map((item) => item.entity).sort()).toEqual(["JSOA", "JSOF"]);
 
@@ -1111,8 +1194,8 @@ describe("Planning items are derived, and are per entity", () => {
     }
   });
 
-  it("raises a renewal the board already decided to stop paying for", () => {
-    const planning = treasurerPlanning(treasurerJsoa, repo);
+  it("raises a renewal the board already decided to stop paying for", async () => {
+    const planning = await treasurerPlanning(treasurerJsoa, repo);
     const wix = planning.items.find((item) => item.id === "plan-renewal-sub-wix-JSOA");
     expect(wix).toBeDefined();
     // Minuted "cancel" in September, renewing in November. A decision nobody
@@ -1120,8 +1203,8 @@ describe("Planning items are derived, and are per entity", () => {
     expect(wix!.reason.length).toBeGreaterThan(80);
   });
 
-  it("says which renewals correctly do not need the board, rather than just omitting them", () => {
-    const planning = treasurerPlanning(president, repo);
+  it("says which renewals correctly do not need the board, rather than just omitting them", async () => {
+    const planning = await treasurerPlanning(president, repo);
     expect(planning.silentRenewals.length).toBeGreaterThan(0);
     for (const row of planning.silentRenewals) {
       expect(row.why).toMatch(/Reviewed/);
@@ -1138,8 +1221,8 @@ describe("Planning items are derived, and are per entity", () => {
     }
   });
 
-  it("estimates every item and sums the estimates for the agenda builder", () => {
-    const planning = treasurerPlanning(president, repo);
+  it("estimates every item and sums the estimates for the agenda builder", async () => {
+    const planning = await treasurerPlanning(president, repo);
     expect(planning.items.length).toBeGreaterThan(0);
     for (const item of planning.items) {
       expect(item.estimateMinutes).toBeGreaterThan(0);
@@ -1152,15 +1235,15 @@ describe("Planning items are derived, and are per entity", () => {
     expect(new Set(planning.items.map((i) => i.id)).size).toBe(planning.items.length);
   });
 
-  it("gives a wrong-role reader no agenda, and says the sources are withheld", () => {
-    const planning = treasurerPlanning(member(), repo);
+  it("gives a wrong-role reader no agenda, and says the sources are withheld", async () => {
+    const planning = await treasurerPlanning(member(), repo);
     expect(planning.items).toEqual([]);
     expect(planning.withheldCount).toBeGreaterThan(0);
   });
 });
 
 describe("Projects is a filter over the one register, never a copy", () => {
-  it("returns the register's own records rather than treasury copies of them", () => {
+  it("returns the register's own records rather than treasury copies of them", async () => {
     const { owned, contributing } = treasurerProjects();
     for (const project of [...owned, ...contributing]) {
       // Identity, not equality. A copy would pass a deep comparison and then
@@ -1169,7 +1252,7 @@ describe("Projects is a filter over the one register, never a copy", () => {
     }
   });
 
-  it("shows what the Treasurer owns and what the Treasurer holds a part of", () => {
+  it("shows what the Treasurer owns and what the Treasurer holds a part of", async () => {
     const { owned, contributing } = treasurerProjects();
     for (const project of owned) expect(project.ownerRole).toBe("TREASURER");
     for (const project of contributing) {
@@ -1183,7 +1266,7 @@ describe("Projects is a filter over the one register, never a copy", () => {
     expect(contributing.length).toBeGreaterThan(0);
   });
 
-  it("names who holds the other parts, which is where the handoffs are", () => {
+  it("names who holds the other parts, which is where the handoffs are", async () => {
     for (const project of treasurerProjects().contributing) {
       expect(project.ownerRole).toBeDefined();
       expect(project.outcome.length).toBeGreaterThan(20);
@@ -1192,13 +1275,13 @@ describe("Projects is a filter over the one register, never a copy", () => {
 });
 
 describe("the Outside view is honest about a small surface", () => {
-  it("says it has a surface rather than claiming none", () => {
+  it("says it has a surface rather than claiming none", async () => {
     const { surface } = treasurerOutside(president);
     expect(surface.noExternalSurface).toBe(false);
     expect(surface.items.length).toBeGreaterThan(0);
   });
 
-  it("keeps the two audiences separate and never merges them", () => {
+  it("keeps the two audiences separate and never merges them", async () => {
     const { surface } = treasurerOutside(president);
     const audiences = new Set(surface.items.map((item) => item.audience));
     expect(audiences.has("PUBLIC")).toBe(true);
@@ -1213,7 +1296,7 @@ describe("the Outside view is honest about a small surface", () => {
     }
   });
 
-  it("names its entity on every item, because the two returns are different documents", () => {
+  it("names its entity on every item, because the two returns are different documents", async () => {
     const { surface } = treasurerOutside(president);
     for (const item of surface.items) {
       const names = /Association|Foundation/.test(item.title);
@@ -1221,7 +1304,7 @@ describe("the Outside view is honest about a small surface", () => {
     }
   });
 
-  it("flags the unqualified tax-deductibility claim on the Association's pages", () => {
+  it("flags the unqualified tax-deductibility claim on the Association's pages", async () => {
     const { surface } = treasurerOutside(president);
     const flagged = surface.items.find((item) => item.key === "deductibility-claim-JSOA");
     expect(flagged).toBeDefined();
@@ -1235,7 +1318,7 @@ describe("the Outside view is honest about a small surface", () => {
     expect(DEDUCTIBILITY_FLAG.remedy).toMatch(/counsel/);
   });
 
-  it("reproduces the Chapter 131F disclosure with the statute's own spelling", () => {
+  it("reproduces the Chapter 131F disclosure with the statute's own spelling", async () => {
     // The statute writes "license". This platform writes "licence" in its own
     // prose, and a quotation is not the platform's prose.
     expect(NC_131F_STATUTORY_SPELLING).toBe("license");
@@ -1245,7 +1328,7 @@ describe("the Outside view is honest about a small surface", () => {
     expect(NC_131F_TYPE_SIZE_POINTS).toBe(9);
   });
 
-  it("carries the disclosure into the receipt item's own title", () => {
+  it("carries the disclosure into the receipt item's own title", async () => {
     const { surface } = treasurerOutside(president);
     for (const item of surface.items.filter((i) => i.key.startsWith("receipts-"))) {
       expect(item.title).toContain("131F");
@@ -1253,7 +1336,7 @@ describe("the Outside view is honest about a small surface", () => {
     }
   });
 
-  it("withholds the other entity's outward-facing items from a single-entity treasurer", () => {
+  it("withholds the other entity's outward-facing items from a single-entity treasurer", async () => {
     const outside = treasurerOutside(treasurerJsof);
     expect(outside.withheldEntities).toEqual(["JSOA"]);
     expect(outside.withheldCount).toBeGreaterThan(0);
@@ -1262,7 +1345,7 @@ describe("the Outside view is honest about a small surface", () => {
     expect(outside.surface.items.some((item) => item.key === "990-JSOA")).toBe(false);
   });
 
-  it("shows the published claim to every reader, because it is already public", () => {
+  it("shows the published claim to every reader, because it is already public", async () => {
     // Withholding a sentence a stranger can read would be theatre, and it
     // would mean the Foundation's Treasurer — whose entity gifts ARE
     // deductible to — never learns the Association's pages say otherwise.
@@ -1275,7 +1358,7 @@ describe("the Outside view is honest about a small surface", () => {
     }
   });
 
-  it("gives a wrong-role reader nothing of either entity's, and counts what is withheld", () => {
+  it("gives a wrong-role reader nothing of either entity's, and counts what is withheld", async () => {
     const outside = treasurerOutside(member());
     // Only the already-public flagged claim survives. No receipt, no return,
     // no cheque run.
@@ -1286,14 +1369,14 @@ describe("the Outside view is honest about a small surface", () => {
     expect(outside.withheldCount).toBeGreaterThan(0);
   });
 
-  it("says plainly that nothing of the Treasurer's goes through the release queue", () => {
+  it("says plainly that nothing of the Treasurer's goes through the release queue", async () => {
     expect(treasurerOutside(president).releaseQueueNote.length).toBeGreaterThan(80);
   });
 });
 
 describe("the Dashboard is cut to three ideas, and the pair is never collapsed", () => {
-  it("promotes exactly three ideas, with net assets as a per-entity pair", () => {
-    const { headline, more } = splitKpis(treasuryKpis(president, repo));
+  it("promotes exactly three ideas, with net assets as a per-entity pair", async () => {
+    const { headline, more } = splitKpis(await treasuryKpis(president, repo));
     // Three ideas: net assets (one idea, two entities), separation of duties,
     // and the longest reimbursement wait.
     expect(headline.map((kpi) => kpi.key)).toEqual([
@@ -1309,23 +1392,23 @@ describe("the Dashboard is cut to three ideas, and the pair is never collapsed",
     expect(more.length).toBeGreaterThan(0);
   });
 
-  it("keeps the pair adjacent so neither entity reads as the headline", () => {
-    const { headline } = splitKpis(treasuryKpis(president, repo));
+  it("keeps the pair adjacent so neither entity reads as the headline", async () => {
+    const { headline } = splitKpis(await treasuryKpis(president, repo));
     const a = headline.findIndex((kpi) => kpi.key === "net-assets-JSOA");
     const b = headline.findIndex((kpi) => kpi.key === "net-assets-JSOF");
     expect(Math.abs(a - b)).toBe(1);
   });
 
-  it("loses no tile: everything is either a headline or behind the disclosure", () => {
-    const kpis = treasuryKpis(president, repo);
+  it("loses no tile: everything is either a headline or behind the disclosure", async () => {
+    const kpis = await treasuryKpis(president, repo);
     const { headline, more } = splitKpis(kpis);
     expect([...headline, ...more].map((k) => k.key).sort()).toEqual(
       kpis.map((k) => k.key).sort(),
     );
   });
 
-  it("withholds a headline figure rather than showing it as zero", () => {
-    const { headline } = splitKpis(treasuryKpis(treasurerJsoa, repo));
+  it("withholds a headline figure rather than showing it as zero", async () => {
+    const { headline } = splitKpis(await treasuryKpis(treasurerJsoa, repo));
     const jsof = headline.find((kpi) => kpi.key === "net-assets-JSOF")!;
     expect(jsof.status).toBe("withheld");
     expect(jsof.value).toBeNull();
@@ -1334,28 +1417,24 @@ describe("the Dashboard is cut to three ideas, and the pair is never collapsed",
 });
 
 describe("no workspace view carries a money figure that names no entity", () => {
-  it("passes the no-blend guard on every shape the workspace returns", () => {
+  it("passes the no-blend guard on every shape the workspace returns", async () => {
     for (const subject of [president, treasurerJsoa, treasurerJsof, secretary]) {
       // The guard throws if a `*Cents` number sits outside an entity-scoped
       // object. A combined figure has nowhere to sit in any of these.
-      expect(() =>
-        assertUnblended(
-          {
-            tasks: treasurerTasks(subject, repo),
-            calendar: treasurerCalendar(subject, repo),
-            planning: treasurerPlanning(subject, repo),
-            outside: treasurerOutside(subject),
-          },
-          "treasuryWorkspace",
-        ),
-      ).not.toThrow();
+      const workspace = {
+        tasks: await treasurerTasks(subject, repo),
+        calendar: await treasurerCalendar(subject, repo),
+        planning: await treasurerPlanning(subject, repo),
+        outside: treasurerOutside(subject),
+      };
+      expect(() => assertUnblended(workspace, "treasuryWorkspace")).not.toThrow();
     }
   });
 
-  it("names no field anywhere in the workspace that reads as a cross-entity total", () => {
+  it("names no field anywhere in the workspace that reads as a cross-entity total", async () => {
     const shapes = {
-      calendar: treasurerCalendar(president, repo),
-      planning: treasurerPlanning(president, repo),
+      calendar: await treasurerCalendar(president, repo),
+      planning: await treasurerPlanning(president, repo),
     };
     const keys = new Set<string>();
     const walk = (node: unknown) => {

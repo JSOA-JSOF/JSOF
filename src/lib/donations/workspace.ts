@@ -144,7 +144,10 @@ export type WorkspaceTasks = {
  * what matters. A viewer who can see nothing on an entity gets a withholding
  * naming that entity, not an empty list implying there is nothing to do.
  */
-export function fundraisingTasks(subject: Subject, repo: Repo = donationsRepository): WorkspaceTasks {
+export async function fundraisingTasks(
+  subject: Subject,
+  repo: Repo = donationsRepository(),
+): Promise<WorkspaceTasks> {
   const tasks: RoleTask[] = [];
   const withheld: string[] = [];
   const entitiesRead: Entity[] = [];
@@ -152,7 +155,7 @@ export function fundraisingTasks(subject: Subject, repo: Repo = donationsReposit
   for (const entity of entitiesInScope(subject)) {
     let board;
     try {
-      board = readDonationsDashboard(subject, entity, repo);
+      board = await readDonationsDashboard(subject, entity, repo);
     } catch (error) {
       withheld.push(
         `${ENTITY_LABEL[entity]}: ${
@@ -240,13 +243,14 @@ export type SponsorshipDate = {
  * cannot be derived from the register's own return shape. Widening that shape
  * would mean editing `actions.ts`, which is not this pass's to change.
  */
-export function readSponsorshipDates(
+export async function readSponsorshipDates(
   subject: Subject,
   entity: Entity,
-  repo: Repo = donationsRepository,
-): SponsorshipDate[] {
+  repo: Repo = donationsRepository(),
+): Promise<SponsorshipDate[]> {
   authorize({ subject, dataClass: "FINANCIAL", entity, required: "READ", rowLevel: true });
-  return repo.listSponsorships(entity).map((sponsorship) => ({
+  const sponsorships = await repo.listSponsorships(entity);
+  return sponsorships.map((sponsorship) => ({
     sponsorshipId: sponsorship.id,
     sponsorName: sponsorship.sponsorName,
     tier: sponsorship.tier,
@@ -266,10 +270,10 @@ export function readSponsorshipDates(
  * gets this tab withheld rather than filled. That is the honest answer and it
  * is a finding, not a bug in this function: see the report.
  */
-export function fundraisingCalendar(
+export async function fundraisingCalendar(
   subject: Subject,
-  repo: Repo = donationsRepository,
-): WorkspaceCalendar {
+  repo: Repo = donationsRepository(),
+): Promise<WorkspaceCalendar> {
   const items: RoleCalendarItem[] = [];
   const withheld: string[] = [];
   const gaps: string[] = [];
@@ -286,7 +290,7 @@ export function fundraisingCalendar(
     }
 
     /* Pledge dates: a gift recorded and not yet cleared. */
-    for (const { donation } of readDonationRegister(subject, entity, repo)) {
+    for (const { donation } of await readDonationRegister(subject, entity, repo)) {
       if (donation.status !== "AWAITING_PAYMENT" && donation.status !== "INTENT") continue;
       items.push({
         key: `pledge-${donation.id}`,
@@ -304,7 +308,7 @@ export function fundraisingCalendar(
     }
 
     /* Renewals and the events that drive the deadlines. */
-    const sponsorships = readSponsorshipDates(subject, entity, repo);
+    const sponsorships = await readSponsorshipDates(subject, entity, repo);
     const eventYears = new Map<string, number | null>();
 
     for (const row of sponsorships) {
@@ -492,10 +496,10 @@ const FOUNDATION_CONTACT_HREF = "/jsof/contact";
  * those rows: doing so would hand the Chair the money through the content door
  * and quietly undo the split this module runs on.
  */
-export function fundraisingOutside(
+export async function fundraisingOutside(
   subject: Subject,
-  repo: Repo = donationsRepository,
-): WorkspaceOutside {
+  repo: Repo = donationsRepository(),
+): Promise<WorkspaceOutside> {
   const withheld: string[] = [];
   const scope = entitiesInScope(subject);
 
@@ -513,7 +517,7 @@ export function fundraisingOutside(
       continue;
     }
 
-    for (const row of readSponsorAcknowledgments(subject, entity, repo)) {
+    for (const row of await readSponsorAcknowledgments(subject, entity, repo)) {
       for (const view of row.placements) {
         const approved = view.placement.publicationState === "APPROVED";
         const state = view.placement.publicationState.toLowerCase().replace(/_/g, " ");
@@ -638,7 +642,7 @@ export function fundraisingOutside(
       );
       continue;
     }
-    const blocked = readDonationRegister(subject, entity, repo).filter(
+    const blocked = (await readDonationRegister(subject, entity, repo)).filter(
       ({ donation }) =>
         donation.benefits.length > 0 && donation.benefitFairMarketValueCents === null,
     );

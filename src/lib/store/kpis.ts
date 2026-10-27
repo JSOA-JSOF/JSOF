@@ -148,19 +148,29 @@ export type StoreFacts = {
   oldestPendingRaisedBy: string | null;
 };
 
-function collect(subject: Subject, now: Date): StoreFacts {
+async function collect(subject: Subject, now: Date): Promise<StoreFacts> {
   const repo = storeRepository();
   const period = yearPeriod(now.getUTCFullYear());
 
-  const orders = repo.listOrders(STORE_ENTITY);
+  // Six independent reads. They were six synchronous calls; they are now one
+  // round of concurrent ones, because none of them depends on another and the
+  // dashboard is a single screen that should not pay for six serial trips.
+  const [orders, products, movements, counts, refunds, chairPersonId, recordedChair] =
+    await Promise.all([
+      repo.listOrders(STORE_ENTITY),
+      repo.listProducts(STORE_ENTITY),
+      repo.listMovements(STORE_ENTITY),
+      repo.listCounts(STORE_ENTITY),
+      repo.listRefunds(STORE_ENTITY),
+      storeChairPersonIdFor(subject),
+      recordedStoreChairPersonId(),
+    ]);
+
   const receiptedInPeriod = orders.filter((o) => isReceipted(o) && inPeriod(o, period));
   const report = receiptsReport(orders, period);
   const member = report.rows.find((r) => r.buyerType === "MEMBER");
   const nonMember = report.rows.find((r) => r.buyerType === "NON_MEMBER");
 
-  const products = repo.listProducts(STORE_ENTITY);
-  const movements = repo.listMovements(STORE_ENTITY);
-  const counts = repo.listCounts(STORE_ENTITY);
   const rows = inventoryRows(products, movements, counts);
   const stockedRows = rows.filter((r) => r.fulfilment === "stock");
   const podRows = rows.filter((r) => r.fulfilment === "print_on_demand");
@@ -171,7 +181,6 @@ function collect(subject: Subject, now: Date): StoreFacts {
     (r) => !counts.some((c) => c.sku === r.sku && c.quarter === quarter),
   );
   const lastQuarterCounts = counts.filter((c) => c.quarter === lastClosedQuarter);
-  const chairPersonId = storeChairPersonIdFor(subject);
 
   const windowStart = new Date(now.getTime() - COVER_WINDOW_DAYS * 86_400_000).toISOString();
   const soldInWindow = (sku: string): number =>
@@ -179,8 +188,7 @@ function collect(subject: Subject, now: Date): StoreFacts {
       .filter((m) => m.sku === sku && m.kind === "SALE" && m.occurredAt >= windowStart)
       .reduce((sum, m) => sum + Math.abs(m.units), 0);
 
-  const pendingSecondApproval = repo
-    .listRefunds(STORE_ENTITY)
+  const pendingSecondApproval = refunds
     .filter((r) => r.status === "REQUESTED" && refundRequiresSecondApprover(r.amountCents))
     .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
   const oldest = pendingSecondApproval[0] ?? null;
@@ -225,7 +233,7 @@ function collect(subject: Subject, now: Date): StoreFacts {
     countsByStoreChair: counts.filter((c) => c.countedByPersonId === chairPersonId).length,
     totalCounts: counts.length,
     viewerHoldsBothRoles: storeSodBanner(subject).holdsBoth,
-    recordedChairName: personName(recordedStoreChairPersonId()),
+    recordedChairName: personName(recordedChair),
 
     unitsOnHand: stockedRows.reduce((sum, r) => sum + (r.unitsOnHand ?? 0), 0),
     unitsSoldInWindow: stockedRows.reduce((sum, r) => sum + soldInWindow(r.sku), 0),
@@ -258,7 +266,10 @@ function collect(subject: Subject, now: Date): StoreFacts {
  * time and drifting. The guard is here and not in `collect`, so there is no
  * unauthorized path to any of it.
  */
-export function storeFacts(subject: Subject, now: Date = new Date()): StoreFacts {
+export async function storeFacts(
+  subject: Subject,
+  now: Date = new Date(),
+): Promise<StoreFacts> {
   authorize({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "AGGREGATE" });
   return collect(subject, now);
 }
@@ -296,9 +307,9 @@ export function storeFacts(subject: Subject, now: Date = new Date()): StoreFacts
  * decision this quarter. Gross sales never had a tile and still does not: it
  * tells the chair nothing they can act on and it hides the split.
  */
-export function storeKpis(subject: Subject, now: Date = new Date()): Kpi[] {
+export async function storeKpis(subject: Subject, now: Date = new Date()): Promise<Kpi[]> {
   authorize({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "AGGREGATE" });
-  const f = collect(subject, now);
+  const f = await collect(subject, now);
 
   const uncounted = f.uncountedThisQuarter.length;
   const stocked = f.stockedRows.length;
@@ -367,9 +378,12 @@ export function storeKpis(subject: Subject, now: Date = new Date()): Kpi[] {
  * behind a disclosure on the Dashboard tab rather than being deleted, because
  * each one is the evidence behind a task on the Overview.
  */
-export function storeMoreFigures(subject: Subject, now: Date = new Date()): Kpi[] {
+export async function storeMoreFigures(
+  subject: Subject,
+  now: Date = new Date(),
+): Promise<Kpi[]> {
   authorize({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "AGGREGATE" });
-  const f = collect(subject, now);
+  const f = await collect(subject, now);
 
   const kpis: Kpi[] = [];
   const stocked = f.stockedRows.length;
@@ -461,9 +475,12 @@ export type StoreNote = {
  * event calendar, and inventing a date to divide by would be worse than saying
  * so.
  */
-export function storeSecondTier(subject: Subject, now: Date = new Date()): StoreNote[] {
+export async function storeSecondTier(
+  subject: Subject,
+  now: Date = new Date(),
+): Promise<StoreNote[]> {
   authorize({ subject, dataClass: "FINANCIAL", entity: STORE_ENTITY, required: "AGGREGATE" });
-  const f = collect(subject, now);
+  const f = await collect(subject, now);
 
   return [
     {

@@ -39,8 +39,8 @@ export default async function StoreOverview() {
   let tasks = null;
   let calendar = null;
   try {
-    tasks = storeTasks(subject);
-    calendar = storeCalendar(subject);
+    tasks = await storeTasks(subject);
+    calendar = await storeCalendar(subject);
   } catch {
     tasks = null;
   }

@@ -41,7 +41,7 @@ export default async function StorePlanning() {
 
   let items: PlanningItem[] | null = null;
   try {
-    items = storePlanningItems(subject);
+    items = await storePlanningItems(subject);
   } catch {
     items = null;
   }

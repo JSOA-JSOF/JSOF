@@ -52,8 +52,10 @@ export default async function FundraisingOverviewPage({
   );
 
   const scope = entitiesInScope(subject);
-  const { tasks, withheld: taskWithheld } = fundraisingTasks(subject);
-  const { items, withheld: calendarWithheld, gaps } = fundraisingCalendar(subject);
+  // Both are reads of the register behind the role's own authorized actions,
+  // so both are awaited before anything renders.
+  const [{ tasks, withheld: taskWithheld }, { items, withheld: calendarWithheld, gaps }] =
+    await Promise.all([fundraisingTasks(subject), fundraisingCalendar(subject)]);
 
   const overdue = tasks.filter((task) => task.urgency === "overdue").length;
 
