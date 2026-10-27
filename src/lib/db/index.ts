@@ -68,7 +68,14 @@ export function text(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
-/** Null-safe integer out of a row. */
+/**
+ * Null-safe integer out of a row.
+ *
+ * SQLite can hand back a BigInt for a value beyond 2^53. Nothing this
+ * schema stores goes near it: the largest numbers are amounts in
+ * cents, and a million dollars is 100,000,000. If that ever stops
+ * being true this is where the conversion belongs.
+ */
 export function int(value: unknown, fallback = 0): number {
   return typeof value === "number" ? value : fallback;
 }
@@ -112,6 +119,13 @@ export async function many<T>(statement: D1PreparedStatement): Promise<T[]> {
  * donation and its allocations. Writing the parent and then the
  * children as separate awaits leaves an order with no lines on the
  * floor when the second call fails, and nothing will ever tell you.
+ *
+ * Checked against the live database rather than taken from the docs:
+ * a two-statement request whose second statement violates a unique
+ * key leaves nothing behind, so the first is rolled back. That was
+ * through wrangler's execute path rather than through `batch()` in a
+ * Worker, which is a caveat worth keeping in mind, but both are
+ * documented as transactional and the observed behaviour agrees.
  */
 export async function atomic(
   statements: D1PreparedStatement[],
