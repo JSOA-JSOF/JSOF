@@ -33,7 +33,7 @@ export const metadata = {
  * and so cannot fix a word of it.
  */
 export default async function MembershipOutsidePage() {
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
 
   let outside: MembershipOutside | null = null;
   let refusal: string | null = null;
@@ -56,7 +56,7 @@ export default async function MembershipOutsidePage() {
       </p>
 
       {refusal || !outside ? (
-        <Refused persona={persona} what="this role's external surface" detail={refusal ?? undefined} />
+        <Refused viewerLabel={viewerLabel} what="this role's external surface" detail={refusal ?? undefined} />
       ) : (
         <>
           <OutsideColumns surface={outside.surface} />

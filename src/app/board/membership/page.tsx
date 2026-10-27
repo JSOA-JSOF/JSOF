@@ -34,7 +34,7 @@ export const metadata = {
  * tell them the work does not exist, which is the one answer that is false.
  */
 export default async function MembershipOverviewPage() {
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
 
   let overview: MembershipOverview | null = null;
   let refusal: string | null = null;
@@ -57,7 +57,7 @@ export default async function MembershipOverviewPage() {
       </p>
 
       {refusal || !overview ? (
-        <Refused persona={persona} what="the membership workspace" detail={refusal ?? undefined} />
+        <Refused viewerLabel={viewerLabel} what="the membership workspace" detail={refusal ?? undefined} />
       ) : (
         <>
           <h2 className={styles.sectionHead}>What needs doing</h2>

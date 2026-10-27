@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { CalendarStrip, TaskList } from "@/components/workspace-shell/RoleTabs";
 import { ENTITIES } from "@/lib/authz/model";
-import { getCurrentPersona, getCurrentSubject } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { canReadMinutes, readableEntities } from "@/lib/meetings/access";
 import { agendaTotals } from "@/lib/meetings/agenda";
 import {
@@ -43,8 +43,7 @@ const STATUS_LABEL: Record<string, string> = {
  * spreadsheet this platform replaces.
  */
 export default async function SecretaryOverview() {
-  const persona = await getCurrentPersona();
-  const subject = await getCurrentSubject();
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const visible = readableEntities(subject, ENTITIES);
   const repo = await meetingsRepository();
 
@@ -78,18 +77,18 @@ export default async function SecretaryOverview() {
   // this is told that instead of being shown a reassuring blank.
   if (visible.length === 0) {
     return (
-      <Shell entity={null} meetingId={null} active="overview" persona={persona}>
+      <Shell entity={null} meetingId={null} active="overview" viewerLabel={viewerLabel}>
         <p className={styles.eyebrow}>Secretary &middot; Overview</p>
         <h1 className={styles.title}>Two boards, two books</h1>
         <Refused
-          reason={`${persona.label} holds no board grant on member data for either entity, so neither meeting list nor either minute book is readable. This page is not showing an empty task list or an empty calendar: both are withheld, which is a different answer from nothing being due, and a reader acting on a false zero is the failure these screens exist to prevent.`}
+          reason={`${viewerLabel} holds no board grant on member data for either entity, so neither meeting list nor either minute book is readable. This page is not showing an empty task list or an empty calendar: both are withheld, which is a different answer from nothing being due, and a reader acting on a false zero is the failure these screens exist to prevent.`}
         />
       </Shell>
     );
   }
 
   return (
-    <Shell entity={null} meetingId={null} active="overview" persona={persona}>
+    <Shell entity={null} meetingId={null} active="overview" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Secretary &middot; Overview</p>
       <h1 className={styles.title}>Two boards, two books</h1>
       <p className={styles.lede}>

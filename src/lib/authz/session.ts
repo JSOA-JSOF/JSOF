@@ -151,10 +151,60 @@ export async function getCurrentSubject(): Promise<Subject> {
   return subjectFor(await getCurrentPersona());
 }
 
+/**
+ * How a board screen describes who is looking.
+ *
+ * Every board route needed two things from the dev persona switcher: a
+ * Subject to authorize with, and a string to print in the corner. The
+ * second is why `getCurrentPersona()` was still called in fourteen
+ * files long after the first had a real answer, and why the whole
+ * board layer threw in production: that function refuses to run there.
+ *
+ * So the label comes from the assignments rather than from the
+ * persona, which works for both. `personaId` is non-null only where
+ * the switcher is allowed to exist at all, and it is the only thing a
+ * screen should use to decide whether to render one.
+ */
+export type BoardViewer = {
+  subject: Subject;
+  label: string;
+  personaId: string | null;
+};
+
+export function labelForAssignments(subject: Subject): string {
+  if (subject.assignments.length === 0) return "No office";
+  const roles = [...new Set(subject.assignments.map((a) => a.role))]
+    .map((role) => role.replace(/_/g, " ").toLowerCase())
+    .map((role) => role.charAt(0).toUpperCase() + role.slice(1));
+  const entities = [...new Set(subject.assignments.map((a) => a.entity))];
+  return `${roles.join(", ")} · ${entities.join(" and ")}`;
+}
+
+export async function boardViewer(): Promise<BoardViewer> {
+  const live = await getLiveSession();
+  if (live) {
+    return {
+      subject: live.subject,
+      label: labelForAssignments(live.subject),
+      personaId: null,
+    };
+  }
+  if (process.env.NODE_ENV === "production") throw new NotSignedIn();
+  if (database()) throw new NotSignedIn();
+
+  const persona = await getCurrentPersona();
+  return { subject: subjectFor(persona), label: persona.label, personaId: persona.id };
+}
+
 /** As above, but sends somebody who is not signed in somewhere useful. */
 export async function requireSubject(): Promise<Subject> {
+  return (await requireBoardViewer()).subject;
+}
+
+/** The viewer, or a redirect to sign in. What a board screen calls. */
+export async function requireBoardViewer(): Promise<BoardViewer> {
   try {
-    return await getCurrentSubject();
+    return await boardViewer();
   } catch (problem) {
     if (problem instanceof NotSignedIn) {
       const { redirect } = await import("next/navigation");

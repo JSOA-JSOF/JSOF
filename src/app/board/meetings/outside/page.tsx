@@ -1,6 +1,6 @@
 import { OutsideColumns } from "@/components/workspace-shell/RoleTabs";
 import { ENTITIES } from "@/lib/authz/model";
-import { getCurrentPersona, getCurrentSubject } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { readableEntities } from "@/lib/meetings/access";
 import {
   PUBLIC_RECORD_NOTES,
@@ -33,8 +33,7 @@ export const metadata = { title: "Outside view — Secretary" };
  * "outside" is how the OPSEC problems start.
  */
 export default async function SecretaryOutsideTab() {
-  const persona = await getCurrentPersona();
-  const subject = await getCurrentSubject();
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const visible = readableEntities(subject, ENTITIES);
 
   // Guarded inside the library. Used only to point the notice row at the real
@@ -45,7 +44,7 @@ export default async function SecretaryOutsideTab() {
   );
 
   return (
-    <Shell entity={null} meetingId={null} active="outside" persona={persona}>
+    <Shell entity={null} meetingId={null} active="outside" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Secretary &middot; Outside view</p>
       <h1 className={styles.title}>What the world sees of the minute book</h1>
       <p className={styles.lede}>
@@ -57,7 +56,7 @@ export default async function SecretaryOutsideTab() {
 
       {visible.length === 0 ? (
         <div className={styles.quiet}>
-          {persona.label} holds no board grant on either entity, and almost
+          {viewerLabel} holds no board grant on either entity, and almost
           nothing on this tab is withheld as a result, because almost nothing on
           it is board-tier: that this office owns no public page is a statement
           about the design, and the documents named below are open to public

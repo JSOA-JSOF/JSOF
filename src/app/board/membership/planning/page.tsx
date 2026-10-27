@@ -34,7 +34,7 @@ const TYPE_LABELS: Record<PlanningItem["type"], string> = {
  * still sees the board matter the roster produced.
  */
 export default async function MembershipPlanningPage() {
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
 
   let planning: MembershipPlanning | null = null;
   let refusal: string | null = null;
@@ -58,7 +58,7 @@ export default async function MembershipPlanningPage() {
 
       {refusal || !planning ? (
         <Refused
-          persona={persona}
+          viewerLabel={viewerLabel}
           what="the membership planning items"
           detail={refusal ?? undefined}
         />

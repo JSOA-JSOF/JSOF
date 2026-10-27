@@ -29,7 +29,7 @@ export const metadata = {
  * workflow in the spec, and a field that exists is a field that leaks.
  */
 export default async function RosterPage() {
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
   const repo = membershipRepository();
 
   let roster: RosterView | null = null;
@@ -51,7 +51,7 @@ export default async function RosterPage() {
       </p>
 
       {refusal || !roster ? (
-        <Refused persona={persona} what="the roster" detail={refusal ?? undefined} />
+        <Refused viewerLabel={viewerLabel} what="the roster" detail={refusal ?? undefined} />
       ) : (
         <>
           <div className={styles.summary}>

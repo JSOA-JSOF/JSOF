@@ -3,7 +3,6 @@ import type { CSSProperties, ReactNode } from "react";
 
 import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import type { Entity } from "@/lib/authz/model";
-import type { Persona } from "@/lib/authz/session";
 import { ENTITY_LONG_NAME, ENTITY_SUBSECTION } from "@/lib/meetings/distribution";
 import { WORKSPACE_TABS, type WorkspaceTab } from "@/lib/workspace/types";
 import styles from "./meetings.module.css";
@@ -96,13 +95,15 @@ export function Shell({
   entity,
   meetingId,
   active,
-  persona,
+  viewerLabel,
   children,
 }: {
   entity: Entity | null;
   meetingId: string | null;
   active: NavKey;
-  persona: Persona;
+  /** Who the corner says is looking. A string, so it works for a
+   * real session and for the dev persona alike. */
+  viewerLabel: string;
   children: ReactNode;
 }) {
   return (
@@ -117,7 +118,7 @@ export function Shell({
             {entity ? ` · ${entity}` : ""}
           </span>
         </div>
-        <span className={styles.rowMeta}>Viewing as {persona.label}</span>
+        <span className={styles.rowMeta}>Viewing as {viewerLabel}</span>
       </header>
 
       <div className={styles.tabStrip}>

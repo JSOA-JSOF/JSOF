@@ -22,7 +22,7 @@ export const metadata = {
  * open this page and the roles that hold aggregate are refused.
  */
 export default async function ApplicationQueuePage() {
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
 
   let queue: ApplicationQueue | null = null;
   let refusal: string | null = null;
@@ -43,7 +43,7 @@ export default async function ApplicationQueuePage() {
       </p>
 
       {refusal || !queue ? (
-        <Refused persona={persona} what="the application queue" detail={refusal ?? undefined} />
+        <Refused viewerLabel={viewerLabel} what="the application queue" detail={refusal ?? undefined} />
       ) : (
         <>
           {queue.sweptToChair > 0 && (

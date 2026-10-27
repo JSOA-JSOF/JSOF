@@ -42,7 +42,7 @@ export const metadata = {
  * someone who may never open the roster.
  */
 export default async function MembershipDashboardPage() {
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
 
   let dashboard: MembershipDashboard | null = null;
   let refusal: string | null = null;
@@ -70,7 +70,7 @@ export default async function MembershipDashboardPage() {
       </p>
 
       {refusal || !dashboard ? (
-        <Refused persona={persona} what="membership figures" detail={refusal ?? undefined} />
+        <Refused viewerLabel={viewerLabel} what="membership figures" detail={refusal ?? undefined} />
       ) : (
         <>
           <KpiGrid kpis={dashboard.headline} />

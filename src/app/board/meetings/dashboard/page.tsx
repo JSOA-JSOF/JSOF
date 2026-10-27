@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { KpiGrid } from "@/components/dashboard/Kpi";
 import { ENTITIES } from "@/lib/authz/model";
-import { getCurrentPersona, getCurrentSubject } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { readableEntities } from "@/lib/meetings/access";
 import { NOTICE_BASIS_NOTE } from "@/lib/meetings/distribution";
 import { secretaryDashboard, splitHeadlineKpis } from "@/lib/meetings/kpis";
@@ -27,8 +27,7 @@ export const metadata = { title: "Dashboard — Secretary" };
  * The doing moved to the Overview tab. This tab keeps the figures.
  */
 export default async function SecretaryDashboardTab() {
-  const persona = await getCurrentPersona();
-  const subject = await getCurrentSubject();
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const visible = readableEntities(subject, ENTITIES);
 
   // One authorized read, guarded per entity inside the library before it
@@ -38,18 +37,18 @@ export default async function SecretaryDashboardTab() {
 
   if (visible.length === 0) {
     return (
-      <Shell entity={null} meetingId={null} active="dashboard" persona={persona}>
+      <Shell entity={null} meetingId={null} active="dashboard" viewerLabel={viewerLabel}>
         <p className={styles.eyebrow}>Secretary &middot; Dashboard</p>
         <h1 className={styles.title}>Whether the record is actually complete</h1>
         <Refused
-          reason={`${persona.label} holds no board grant on member data for either entity. Every figure is withheld rather than shown as zero: the two are not the same answer, and a tile reading nought would be a measurement this reader is not entitled to.`}
+          reason={`${viewerLabel} holds no board grant on member data for either entity. Every figure is withheld rather than shown as zero: the two are not the same answer, and a tile reading nought would be a measurement this reader is not entitled to.`}
         />
       </Shell>
     );
   }
 
   return (
-    <Shell entity={null} meetingId={null} active="dashboard" persona={persona}>
+    <Shell entity={null} meetingId={null} active="dashboard" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Secretary &middot; Dashboard</p>
       <h1 className={styles.title}>Whether the record is actually complete</h1>
       <p className={styles.lede}>

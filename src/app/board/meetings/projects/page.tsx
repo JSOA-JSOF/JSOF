@@ -1,5 +1,5 @@
 import { ENTITIES } from "@/lib/authz/model";
-import { getCurrentPersona, getCurrentSubject } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { readableEntities } from "@/lib/meetings/access";
 import { roleLabel } from "@/lib/meetings/distribution";
 import { secretaryProjects } from "@/lib/meetings/workspace";
@@ -72,25 +72,24 @@ function ProjectRow({ project }: { project: Project }) {
  * accountable and the offices holding a part.
  */
 export default async function SecretaryProjectsTab() {
-  const persona = await getCurrentPersona();
-  const subject = await getCurrentSubject();
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const visible = readableEntities(subject, ENTITIES);
   const projects = secretaryProjects(subject);
 
   if (visible.length === 0) {
     return (
-      <Shell entity={null} meetingId={null} active="projects" persona={persona}>
+      <Shell entity={null} meetingId={null} active="projects" viewerLabel={viewerLabel}>
         <p className={styles.eyebrow}>Secretary &middot; Projects</p>
         <h1 className={styles.title}>Lines of effort this office carries</h1>
         <Refused
-          reason={`${persona.label} holds no board grant on member data for either entity. The register names roles, outcomes and dates and carries no figures, but which lines of effort the board is running and which of them are stuck is board-tier information. The whole register is withheld, which is not the same as this office holding nothing.`}
+          reason={`${viewerLabel} holds no board grant on member data for either entity. The register names roles, outcomes and dates and carries no figures, but which lines of effort the board is running and which of them are stuck is board-tier information. The whole register is withheld, which is not the same as this office holding nothing.`}
         />
       </Shell>
     );
   }
 
   return (
-    <Shell entity={null} meetingId={null} active="projects" persona={persona}>
+    <Shell entity={null} meetingId={null} active="projects" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Secretary &middot; Projects</p>
       <h1 className={styles.title}>Lines of effort this office carries</h1>
       <p className={styles.lede}>

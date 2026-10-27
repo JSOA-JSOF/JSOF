@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { canReadGovernance, canReadMinutes, canWriteMinutes } from "@/lib/meetings/access";
-import { getCurrentPersona, subjectFor } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { bookRefForMeeting } from "@/lib/meetings/reference";
 import { meetingsRepository } from "@/lib/meetings/repository";
 import { SAMPLE_TRANSCRIPT } from "@/lib/meetings/seed";
@@ -24,20 +24,19 @@ export default async function TranscriptPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const persona = await getCurrentPersona();
-  const subject = subjectFor(persona);
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const repo = await meetingsRepository();
   const meeting = await repo.getMeeting(id);
   if (!meeting) notFound();
 
   if (!canReadMinutes(subject, meeting.entity)) {
     return (
-      <Shell entity={meeting.entity} meetingId={id} active="transcript" persona={persona}>
+      <Shell entity={meeting.entity} meetingId={id} active="transcript" viewerLabel={viewerLabel}>
         <Refused
           reason={
             canReadGovernance(subject, meeting.entity)
-              ? `A transcript is the roll call and everything anyone said, so it sits with the minute book at row level. ${persona.label} holds aggregate access to member data on ${meeting.entity} and cannot open it.`
-              : `${persona.label} holds no board grant on member data for ${meeting.entity}.`
+              ? `A transcript is the roll call and everything anyone said, so it sits with the minute book at row level. ${viewerLabel} holds aggregate access to member data on ${meeting.entity} and cannot open it.`
+              : `${viewerLabel} holds no board grant on member data for ${meeting.entity}.`
           }
         />
       </Shell>
@@ -51,7 +50,7 @@ export default async function TranscriptPage({
   );
 
   return (
-    <Shell entity={meeting.entity} meetingId={id} active="transcript" persona={persona}>
+    <Shell entity={meeting.entity} meetingId={id} active="transcript" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Transcript intake &middot; {bookRefForMeeting(meeting)}</p>
       <h1 className={styles.title}>Turn a transcript into a draft to edit</h1>
       <EntityBanner entity={meeting.entity} />

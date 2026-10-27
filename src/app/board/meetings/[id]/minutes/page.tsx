@@ -6,7 +6,7 @@ import {
   formatMeetingDate,
   roleLabel,
 } from "@/lib/meetings/distribution";
-import { getCurrentPersona, subjectFor } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import {
   MINUTE_FLAG_TEXT,
   checkMinute,
@@ -40,8 +40,7 @@ export default async function MinutesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const persona = await getCurrentPersona();
-  const subject = subjectFor(persona);
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const repo = await meetingsRepository();
   const meeting = await repo.getMeeting(id);
   if (!meeting) notFound();
@@ -49,14 +48,14 @@ export default async function MinutesPage({
   if (!canReadMinutes(subject, meeting.entity)) {
     const aggregateOnly = canReadGovernance(subject, meeting.entity);
     return (
-      <Shell entity={meeting.entity} meetingId={id} active="minutes" persona={persona}>
+      <Shell entity={meeting.entity} meetingId={id} active="minutes" viewerLabel={viewerLabel}>
         <p className={styles.eyebrow}>Minutes &middot; {bookRefForMeeting(meeting)}</p>
         <h1 className={styles.title}>The {meeting.entity} minute book</h1>
         <Refused
           reason={
             aggregateOnly
-              ? `${persona.label} holds aggregate access to member data on ${meeting.entity} and the minute book is row level. The book names who moved, who seconded, who recused and why, so aggregate access is not enough. The agenda and the compliance calendar, which name only roles, are readable by this role.`
-              : `${persona.label} holds no board grant on member data for ${meeting.entity}, so no part of the ${meeting.entity} minute book is readable by this role.`
+              ? `${viewerLabel} holds aggregate access to member data on ${meeting.entity} and the minute book is row level. The book names who moved, who seconded, who recused and why, so aggregate access is not enough. The agenda and the compliance calendar, which name only roles, are readable by this role.`
+              : `${viewerLabel} holds no board grant on member data for ${meeting.entity}, so no part of the ${meeting.entity} minute book is readable by this role.`
           }
         />
       </Shell>
@@ -71,7 +70,7 @@ export default async function MinutesPage({
   const present = meeting.attendees.filter((a) => a.present);
 
   return (
-    <Shell entity={meeting.entity} meetingId={id} active="minutes" persona={persona}>
+    <Shell entity={meeting.entity} meetingId={id} active="minutes" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Minutes &middot; {bookRefForMeeting(meeting)}</p>
       <h1 className={styles.title}>
         {ENTITY_LONG_NAME[meeting.entity]}, {formatMeetingDate(meeting.scheduledStart)}

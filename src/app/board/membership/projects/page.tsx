@@ -34,7 +34,7 @@ function roleLabel(role: string): string {
  * Chair. The tab says so instead of showing an empty box.
  */
 export default async function MembershipProjectsPage() {
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
 
   let refusal: string | null = null;
   try {
@@ -57,7 +57,7 @@ export default async function MembershipProjectsPage() {
       </p>
 
       {refusal ? (
-        <Refused persona={persona} what="this role's lines of effort" detail={refusal} />
+        <Refused viewerLabel={viewerLabel} what="this role's lines of effort" detail={refusal} />
       ) : (
         <>
           <h2 className={styles.sectionHead}>Owned by this office</h2>

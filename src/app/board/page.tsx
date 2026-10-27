@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { ROLE_DEFINITIONS } from "@/lib/authz/model";
-import { getCurrentPersona } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import styles from "./board.module.css";
 
 const AREAS = [
@@ -33,8 +33,8 @@ const AREAS = [
 ];
 
 export default async function BoardHome() {
-  const persona = await getCurrentPersona();
-  const grants = persona.assignments.map((assignment) => ({
+  const { subject } = await requireBoardViewer();
+  const grants = subject.assignments.map((assignment) => ({
     entity: assignment.entity,
     role: assignment.role,
     definition: ROLE_DEFINITIONS[assignment.role],

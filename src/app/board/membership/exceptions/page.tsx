@@ -38,7 +38,7 @@ export default async function ExceptionsPage({
   searchParams: Promise<{ refused?: string; done?: string }>;
 }) {
   const { refused, done } = await searchParams;
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
 
   let queue: Application[] = [];
   let decided: Application[] = [];
@@ -62,7 +62,7 @@ export default async function ExceptionsPage({
       </p>
 
       {refusal ? (
-        <Refused persona={persona} what="the chair exception queue" detail={refusal} />
+        <Refused viewerLabel={viewerLabel} what="the chair exception queue" detail={refusal} />
       ) : (
         <>
           {done && (
@@ -77,7 +77,7 @@ export default async function ExceptionsPage({
             <div className={styles.refused}>
               <p className={styles.refusedTitle}>That decision was refused</p>
               <p className={styles.refusedBody}>
-                Nothing was changed. Acting as {persona.label}: {persona.note ?? ""}
+                Nothing was changed. Acting as {viewerLabel}.
               </p>
               <p className={styles.refusedDetail}>{refused}</p>
             </div>

@@ -188,3 +188,25 @@
   font-size: 0.88rem;
   color: var(--mute);
 }
+
+/* Who is looking, where the dev switcher would be. One or the other,
+   never both: two ways to say who you are is a way to be wrong about
+   which one the page believed. */
+.viewer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.82rem;
+  color: var(--board-ink-2, #b9b3a6);
+}
+
+.signOut {
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  cursor: pointer;
+}

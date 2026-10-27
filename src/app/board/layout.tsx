@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { findingsFor, getCurrentPersona, PERSONAS, subjectFor } from "@/lib/authz/session";
+import { signOut } from "@/lib/auth/actions";
+import { findingsFor, PERSONAS, requireBoardViewer } from "@/lib/authz/session";
 import styles from "./board.module.css";
 import { RoleSwitcher } from "./RoleSwitcher";
 
@@ -42,8 +43,12 @@ export default async function BoardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const persona = await getCurrentPersona();
-  const findings = findingsFor(subjectFor(persona));
+  // Redirects to /sign-in when there is no session. This used to call
+  // getCurrentPersona(), which throws on NODE_ENV=production, so the
+  // board shell took the whole board layer down there before a single
+  // page rendered.
+  const { subject, label, personaId } = await requireBoardViewer();
+  const findings = findingsFor(subject);
 
   return (
     <div className={styles.shell}>
@@ -58,20 +63,39 @@ export default async function BoardLayout({
             </Link>
           ))}
         </nav>
-        <RoleSwitcher
-          personas={PERSONAS.map(({ id, label, note }) => ({ id, label, note }))}
-          currentId={persona.id}
-        />
+        {personaId ? (
+          <RoleSwitcher
+            personas={PERSONAS.map(({ id, label, note }) => ({ id, label, note }))}
+            currentId={personaId}
+          />
+        ) : (
+          <span className={styles.viewer}>
+            {label}
+            <form action={signOut}>
+              <button type="submit" className={styles.signOut}>
+                Sign out
+              </button>
+            </form>
+          </span>
+        )}
       </header>
 
-      <div className={styles.devStrip}>
-        <strong>Demo</strong>
-        <span>
-          No authentication yet, and no live member data. The role switcher above
-          stands in for sign-in so each screen can be checked against the
-          permissions it will really have.
-        </span>
-      </div>
+      {/*
+        Only where the switcher is real. Saying "no authentication yet"
+        to somebody who has just signed in with a one-time code and a
+        TOTP challenge would be false, and the strip is the first thing
+        on the page.
+      */}
+      {personaId ? (
+        <div className={styles.devStrip}>
+          <strong>Demo</strong>
+          <span>
+            No live member data. The role switcher above stands in for sign-in,
+            so each screen can be checked against the permissions it will
+            really have.
+          </span>
+        </div>
+      ) : null}
 
       {findings.length > 0 ? (
         <div className={styles.findings}>

@@ -12,7 +12,7 @@ import {
   urgencyOf,
 } from "@/lib/meetings/calendar";
 import { ENTITY_LONG_NAME, ENTITY_SUBSECTION, roleLabel } from "@/lib/meetings/distribution";
-import { getCurrentPersona, subjectFor } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { meetingsRepository } from "@/lib/meetings/repository";
 import type { ComplianceItem } from "@/lib/meetings/types";
 import { Refused, Shell, hueFor } from "../Shell";
@@ -129,18 +129,17 @@ function EntityColumn({
 }
 
 export default async function CalendarPage() {
-  const persona = await getCurrentPersona();
-  const subject = subjectFor(persona);
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const repo = await meetingsRepository();
   const visible = ENTITIES.filter((entity) => canReadGovernance(subject, entity));
   const today = new Date();
 
   if (visible.length === 0) {
     return (
-      <Shell entity={null} meetingId={null} active="calendar" persona={persona}>
+      <Shell entity={null} meetingId={null} active="calendar" viewerLabel={viewerLabel}>
         <h1 className={styles.title}>Compliance calendar</h1>
         <Refused
-          reason={`${persona.label} holds no board grant on member data for either entity. The calendar names only roles and dates and carries no figures, but it is still board-tier information about how the organizations are run.`}
+          reason={`${viewerLabel} holds no board grant on member data for either entity. The calendar names only roles and dates and carries no figures, but it is still board-tier information about how the organizations are run.`}
         />
       </Shell>
     );
@@ -151,7 +150,7 @@ export default async function CalendarPage() {
   const visibleUnverified = unverified.filter((i) => visible.includes(i.entity));
 
   return (
-    <Shell entity={null} meetingId={null} active="calendar" persona={persona}>
+    <Shell entity={null} meetingId={null} active="calendar" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Compliance</p>
       <h1 className={styles.title}>Filings, renewals, and who owns each one</h1>
       <p className={styles.lede}>

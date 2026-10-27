@@ -1,5 +1,4 @@
 import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
-import type { Persona } from "@/lib/authz/session";
 import type { WorkspaceTab } from "@/lib/workspace/types";
 
 import styles from "./board.module.css";
@@ -54,11 +53,13 @@ export function MembershipShell({
  * colleague, and should not be offered a way around it.
  */
 export function Refused({
-  persona,
+  viewerLabel,
   what,
   detail,
 }: {
-  persona: Persona;
+  /** Who the page says is looking. A string, so a real session and the
+   * dev persona both produce one. */
+  viewerLabel: string;
   what: string;
   detail?: string;
 }) {
@@ -66,7 +67,7 @@ export function Refused({
     <div className={styles.refused}>
       <p className={styles.refusedTitle}>This role cannot open {what}</p>
       <p className={styles.refusedBody}>
-        You are acting as <strong>{persona.label}</strong>.{persona.note ? ` ${persona.note}` : ""}{" "}
+        You are acting as <strong>{viewerLabel}</strong>.{" "}
         Nothing was read and the attempt is in the audit log. If you need this, ask the
         President to change the role assignment rather than working around it.
       </p>

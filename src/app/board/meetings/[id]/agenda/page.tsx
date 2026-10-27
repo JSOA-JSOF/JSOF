@@ -14,7 +14,7 @@ import {
   noticeRequiredHours,
   roleLabel,
 } from "@/lib/meetings/distribution";
-import { getCurrentPersona, subjectFor } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { bookRefForMeeting, minuteRefForMeeting } from "@/lib/meetings/reference";
 import { meetingsRepository } from "@/lib/meetings/repository";
 import { AGENDA_ITEM_TYPE_LABELS } from "@/lib/meetings/types";
@@ -30,19 +30,18 @@ export default async function AgendaPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const persona = await getCurrentPersona();
-  const subject = subjectFor(persona);
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const repo = await meetingsRepository();
   const meeting = await repo.getMeeting(id);
   if (!meeting) notFound();
 
   if (!canReadGovernance(subject, meeting.entity)) {
     return (
-      <Shell entity={meeting.entity} meetingId={id} active="agenda" persona={persona}>
+      <Shell entity={meeting.entity} meetingId={id} active="agenda" viewerLabel={viewerLabel}>
         <Refused
           reason={refusalMessage(
             new Error(
-              `${persona.label} holds no board grant on member data for ${meeting.entity}, ` +
+              `${viewerLabel} holds no board grant on member data for ${meeting.entity}, ` +
                 `so the ${meeting.entity} agenda is not readable by this role.`,
             ),
           )}
@@ -67,7 +66,7 @@ export default async function AgendaPage({
   );
 
   return (
-    <Shell entity={meeting.entity} meetingId={id} active="agenda" persona={persona}>
+    <Shell entity={meeting.entity} meetingId={id} active="agenda" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Agenda &middot; {bookRefForMeeting(meeting)}</p>
       <h1 className={styles.title}>{meeting.title}</h1>
       <EntityBanner entity={meeting.entity} />

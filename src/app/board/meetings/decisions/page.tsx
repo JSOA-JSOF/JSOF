@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ENTITIES, type Entity } from "@/lib/authz/model";
 import { canReadMinutes, readableEntities } from "@/lib/meetings/access";
 import { ENTITY_LONG_NAME, ENTITY_SUBSECTION } from "@/lib/meetings/distribution";
-import { getCurrentPersona, subjectFor } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import {
   MINUTE_REF_EXAMPLE,
   MINUTE_REF_FORMAT,
@@ -124,21 +124,20 @@ function EntityColumn({
 }
 
 export default async function DecisionsPage() {
-  const persona = await getCurrentPersona();
-  const subject = subjectFor(persona);
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const repo = await meetingsRepository();
   const visible = ENTITIES.filter((entity) => canReadMinutes(subject, entity));
 
   if (visible.length === 0) {
     const aggregate = readableEntities(subject, ENTITIES);
     return (
-      <Shell entity={null} meetingId={null} active="decisions" persona={persona}>
+      <Shell entity={null} meetingId={null} active="decisions" viewerLabel={viewerLabel}>
         <h1 className={styles.title}>Decision and action register</h1>
         <Refused
           reason={
             aggregate.length > 0
-              ? `${persona.label} holds aggregate access to member data and the register is row level: it names who moved, who seconded and who recused. A count of decisions would be aggregate; this is not a count.`
-              : `${persona.label} holds no board grant on member data for either entity.`
+              ? `${viewerLabel} holds aggregate access to member data and the register is row level: it names who moved, who seconded and who recused. A count of decisions would be aggregate; this is not a count.`
+              : `${viewerLabel} holds no board grant on member data for either entity.`
           }
         />
       </Shell>
@@ -151,7 +150,7 @@ export default async function DecisionsPage() {
   );
 
   return (
-    <Shell entity={null} meetingId={null} active="decisions" persona={persona}>
+    <Shell entity={null} meetingId={null} active="decisions" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Register</p>
       <h1 className={styles.title}>Every decision, in the book it was taken in</h1>
       <p className={styles.lede}>

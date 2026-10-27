@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { subjectFromParam } from "../src/lib/donations/devSubject";
 import { DEV_VIEWERS, resolveDevViewer } from "../src/lib/store/dev";
 
@@ -65,5 +68,49 @@ describe("identity resolvers refuse in production", () => {
     expect(subjectFromParam("TREASURER:JSOF").assignments).toEqual([
       { role: "TREASURER", entity: "JSOF" },
     ]);
+  });
+});
+
+describe("no rendered route resolves identity through a dev-only function", () => {
+  /**
+   * `getCurrentPersona()` calls `assertDevOnly()`, which throws on
+   * NODE_ENV=production. Fourteen files called it, one of them the
+   * board layout, so the entire board layer failed in production
+   * before a single page rendered. They now go through
+   * `requireBoardViewer()`, which resolves a real session and falls
+   * back to a persona only where that is allowed.
+   *
+   * This is a rule rather than a count, so the next route added does
+   * not quietly reintroduce it.
+   */
+  function walk(dir: string): string[] {
+    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
+    return readdirSync(dir).flatMap((entry) => {
+      const full = join(dir, entry);
+      return statSync(full).isDirectory() ? walk(full) : [full];
+    });
+  }
+
+  /**
+   * Comments stripped first. The first version of this test failed on
+   * the comment in the board layout explaining why the call was
+   * removed, which is the wrong thing to fail on: a test that cannot
+   * tell code from prose teaches people to delete the prose.
+   */
+  function withoutComments(source: string): string {
+    return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  }
+
+  it("calls it from nowhere under src/app", () => {
+    const offenders = walk(join(import.meta.dirname, "..", "src", "app"))
+      .filter((path) => /\.tsx?$/.test(path))
+      .filter((path) =>
+        /getCurrentPersona\s*\(/.test(withoutComments(readFileSync(path, "utf8"))),
+      );
+
+    expect(
+      offenders,
+      "these resolve identity through a function that throws in production",
+    ).toEqual([]);
   });
 });

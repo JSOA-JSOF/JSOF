@@ -1,20 +1,21 @@
 /**
- * The current subject for the membership board routes.
+ * The current actor for the membership board routes.
  *
- * Thin by design. The dev persona switcher lives in the shared board shell and
- * in `src/lib/authz/session.ts`, so this module resolves the subject through
- * that rather than carrying a second switcher of its own: two switchers on one
+ * Thin by design. It resolves through `src/lib/authz/session.ts` rather
+ * than carrying a switcher of its own, because two switchers on one
  * page is a way to be wrong about which role you are looking through.
  *
- * When Auth.js and TOTP land, nothing here changes.
+ * It used to return a `Persona`, which is a dev-only object, and that
+ * is why these routes could not run in production. It now returns a
+ * label, which both a real session and the dev switcher can produce.
  */
 
-import { getCurrentPersona, subjectFor, type Persona } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import type { Subject } from "@/lib/authz/policy";
 
-export type BoardActor = { persona: Persona; subject: Subject };
+export type BoardActor = { subject: Subject; label: string };
 
 export async function currentActor(): Promise<BoardActor> {
-  const persona = await getCurrentPersona();
-  return { persona, subject: subjectFor(persona) };
+  const { subject, label } = await requireBoardViewer();
+  return { subject, label };
 }

@@ -27,7 +27,7 @@ export const metadata = {
  * able to open the roster.
  */
 export default async function CompositionPage() {
-  const { persona, subject } = await currentActor();
+  const { subject, label: viewerLabel } = await currentActor();
 
   let report: CompositionReport | null = null;
   let refusal: string | null = null;
@@ -48,7 +48,7 @@ export default async function CompositionPage() {
       </p>
 
       {refusal || !report ? (
-        <Refused persona={persona} what="the composition report" detail={refusal ?? undefined} />
+        <Refused viewerLabel={viewerLabel} what="the composition report" detail={refusal ?? undefined} />
       ) : (
         <>
           <div className={styles.summary}>

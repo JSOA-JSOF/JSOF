@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { ENTITIES } from "@/lib/authz/model";
-import { getCurrentPersona, getCurrentSubject } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { readableEntities } from "@/lib/meetings/access";
 import {
   ENTITY_LONG_NAME,
@@ -56,25 +56,24 @@ function PlanningRow({ item, showProposer }: { item: PlanningItem; showProposer:
  * have already got onto the agenda.
  */
 export default async function SecretaryPlanningTab() {
-  const persona = await getCurrentPersona();
-  const subject = await getCurrentSubject();
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const visible = readableEntities(subject, ENTITIES);
   const planning = await secretaryPlanning(subject);
 
   if (visible.length === 0) {
     return (
-      <Shell entity={null} meetingId={null} active="planning" persona={persona}>
+      <Shell entity={null} meetingId={null} active="planning" viewerLabel={viewerLabel}>
         <p className={styles.eyebrow}>Secretary &middot; Planning</p>
         <h1 className={styles.title}>The next agenda, each board separately</h1>
         <Refused
-          reason={`${persona.label} holds no board grant on member data for either entity. An agenda names roles and titles rather than people, but it is still board-tier information about how the organizations are run. Both agendas are withheld, which is not the same as there being no items on them.`}
+          reason={`${viewerLabel} holds no board grant on member data for either entity. An agenda names roles and titles rather than people, but it is still board-tier information about how the organizations are run. Both agendas are withheld, which is not the same as there being no items on them.`}
         />
       </Shell>
     );
   }
 
   return (
-    <Shell entity={null} meetingId={null} active="planning" persona={persona}>
+    <Shell entity={null} meetingId={null} active="planning" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Secretary &middot; Planning</p>
       <h1 className={styles.title}>The next agenda, each board separately</h1>
       <p className={styles.lede}>

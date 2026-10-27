@@ -10,7 +10,7 @@ import {
   noticeRequiredHours,
   roleLabel,
 } from "@/lib/meetings/distribution";
-import { getCurrentPersona, subjectFor } from "@/lib/authz/session";
+import { requireBoardViewer } from "@/lib/authz/session";
 import { bookRefForMeeting } from "@/lib/meetings/reference";
 import { meetingsRepository } from "@/lib/meetings/repository";
 import { EntityBanner, Refused, Shell } from "../../Shell";
@@ -25,17 +25,16 @@ export default async function DistributePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const persona = await getCurrentPersona();
-  const subject = subjectFor(persona);
+  const { subject, label: viewerLabel } = await requireBoardViewer();
   const repo = await meetingsRepository();
   const meeting = await repo.getMeeting(id);
   if (!meeting) notFound();
 
   if (!canReadGovernance(subject, meeting.entity)) {
     return (
-      <Shell entity={meeting.entity} meetingId={id} active="distribute" persona={persona}>
+      <Shell entity={meeting.entity} meetingId={id} active="distribute" viewerLabel={viewerLabel}>
         <Refused
-          reason={`${persona.label} holds no board grant on member data for ${meeting.entity}, so the ${meeting.entity} agenda and its notice are not readable by this role.`}
+          reason={`${viewerLabel} holds no board grant on member data for ${meeting.entity}, so the ${meeting.entity} agenda and its notice are not readable by this role.`}
         />
       </Shell>
     );
@@ -45,7 +44,7 @@ export default async function DistributePage({
   const writable = canWriteMinutes(subject, meeting.entity);
 
   return (
-    <Shell entity={meeting.entity} meetingId={id} active="distribute" persona={persona}>
+    <Shell entity={meeting.entity} meetingId={id} active="distribute" viewerLabel={viewerLabel}>
       <p className={styles.eyebrow}>Send agenda &middot; {bookRefForMeeting(meeting)}</p>
       <h1 className={styles.title}>Notice and agenda for {meeting.entity}</h1>
       <EntityBanner entity={meeting.entity} />
