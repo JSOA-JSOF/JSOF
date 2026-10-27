@@ -65,6 +65,23 @@ export const ANONYMOUS_SUBJECT: Subject = {
 };
 
 export function subjectFromParam(param: string | string[] | undefined): Subject {
+  // Never outside development.
+  //
+  // This is the same hole as the store's `?viewer=`, which was found on
+  // the live site on 23 October and closed the same day. This one
+  // survived because it was shielded rather than guarded: every screen
+  // that reaches it sits under `src/app/board/layout.tsx`, which calls
+  // `getCurrentPersona()` first, and that throws in production. So the
+  // guard protecting nine donations screens lived in a sibling file,
+  // and would have disappeared the moment the board layout stopped
+  // calling a dev-only function, which is exactly what wiring real
+  // sessions into that layout will do.
+  //
+  // `?as=TREASURER:JSOF` returns real role assignments with
+  // `mfaSatisfied: true`. A guard one file away from the thing it
+  // guards is not a guard.
+  if (process.env.NODE_ENV === "production") return ANONYMOUS_SUBJECT;
+
   const raw = Array.isArray(param) ? param[0] : param;
   if (!raw) return ANONYMOUS_SUBJECT;
   const option = DEV_ROLE_OPTIONS.find((o) => o.value === raw);
