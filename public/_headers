@@ -1,0 +1,33 @@
+# Headers for files served by the Workers assets binding.
+#
+# next.config.ts sets security headers, but those run in the Next
+# request pipeline and static files never reach it: they are served
+# directly by the `assets` binding in wrangler.jsonc. That is why
+# /_next/static/** has been shipping with Cloudflare's default
+# `max-age=0, must-revalidate` despite the filenames being
+# content-hashed, and it is why the four security headers were very
+# likely absent on asset paths too.
+#
+# A hashed filename cannot change content without changing URL, so
+# revalidating it on every page view is work that can never find
+# anything.
+
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Type-Options: nosniff
+
+# Photographs, films and logos. Not content-hashed, so a year would
+# mean a replaced image sticking around in caches we cannot clear. A
+# day is long enough to matter on a second visit and short enough that
+# swapping a photograph takes effect the same week.
+/media/*
+  Cache-Control: public, max-age=86400
+  X-Content-Type-Options: nosniff
+
+# Everything the assets binding serves gets the same baseline as the
+# pages, because a header that only applies to some responses is a
+# header somebody will be surprised by.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY

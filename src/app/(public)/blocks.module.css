@@ -790,9 +790,18 @@
 
 /* An unconfirmed date is not a fact, so it does not get the hue that says
    one. The same rule the dashboards use: colour means something. */
+/*
+ * Quiet, but still readable.
+ *
+ * This was `--mute` at 85% opacity, which measured 3.04:1 on the
+ * tinted card used by /jsof/scholarships at 12.5px. Small text needs
+ * 4.5:1. The token on its own is fine; layering opacity over it is
+ * what broke it, and opacity compounds against whatever tint the card
+ * happens to have, so the fix is a darker token rather than a
+ * different amount of transparency.
+ */
 .effortNumberQuiet {
-  color: var(--mute);
-  opacity: 0.85;
+  color: var(--ink-2);
 }
 
 .effortLink:has(.effortPhoto) .effortNumber {

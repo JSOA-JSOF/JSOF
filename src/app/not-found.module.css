@@ -1,0 +1,84 @@
+/* Its own tokens. A 404 is reachable from the public tier, the board
+   tier and the drop pages, so it cannot assume any shell has loaded. */
+.page {
+  --gold: #9a7b22;
+  --ink: #111827;
+  --ink-2: #4a463c;
+  --mute: #6b665c;
+  --line: #e2ded4;
+
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 6vw, 64px) clamp(16px, 5vw, 40px);
+  background: #fff;
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.card {
+  width: 100%;
+  max-width: 34rem;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  color: var(--gold);
+}
+
+.title {
+  margin: 0 0 14px;
+  font-size: clamp(1.5rem, 6vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.body {
+  margin: 0 0 clamp(20px, 4vw, 28px);
+  color: var(--ink-2);
+  font-size: clamp(0.95rem, 3.4vw, 1.05rem);
+  line-height: 1.6;
+}
+
+.links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.links li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.links a {
+  color: var(--gold);
+  font-weight: 650;
+  text-decoration: none;
+  font-size: 1rem;
+}
+
+.links a:hover {
+  text-decoration: underline;
+}
+
+.links span {
+  color: var(--mute);
+  font-size: 0.86rem;
+}
+
+.small {
+  margin: clamp(22px, 5vw, 30px) 0 0;
+  color: var(--mute);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}

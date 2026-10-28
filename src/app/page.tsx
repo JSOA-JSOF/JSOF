@@ -27,6 +27,18 @@ export default function FrontDoor() {
   return (
     <div className={styles.shell}>
       <main className={styles.split}>
+      {/*
+        The page's one heading. Visually hidden because the crest and
+        the two doors already say this, and a line of text above them
+        would be the first redundant thing on a deliberately bare
+        page. It is here because the door previously had two h1s and
+        therefore no heading describing itself, which is a problem for
+        a screen reader before it is a problem for a crawler.
+      */}
+      <h1 className={styles.srOnly}>
+        Joint Special Operations Association and Joint Special Operations
+        Foundation
+      </h1>
         <DoorLink
           href="/jsoa"
           className={`${styles.door} ${styles.assoc}`}
@@ -35,7 +47,7 @@ export default function FrontDoor() {
           <span className={styles.photo} aria-hidden="true" />
           <span className={styles.body}>
             <span className={styles.kicker}>Joint Special Operations</span>
-            <h1 className={styles.name}>Association</h1>
+            <h2 className={styles.name}>Association</h2>
             <p className={styles.lede}>
               The membership side. Join, renew, and find out what the
               Association does for the JSOC community and their families.
@@ -53,7 +65,7 @@ export default function FrontDoor() {
           <span className={styles.photo} aria-hidden="true" />
           <span className={styles.body}>
             <span className={styles.kicker}>Joint Special Operations</span>
-            <h1 className={styles.name}>Foundation</h1>
+            <h2 className={styles.name}>Foundation</h2>
             <p className={styles.lede}>
               The giving side. Sponsor an event, fund a scholarship, or make a
               gift. Donations here are tax-deductible.
