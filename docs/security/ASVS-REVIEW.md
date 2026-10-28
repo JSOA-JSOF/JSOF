@@ -82,7 +82,7 @@ log cannot be rewritten by the application.
 
 ## Findings
 
-### 1. No rate limiting anywhere. V6.2, L2. **Open.**
+### 1. No rate limiting anywhere. V6.2, L2. **Fixed, 27 October.**
 
 Nothing limits sign-in link requests, TOTP attempts, or the photo
 drop. A six-digit TOTP with a one-step window is 10^6 over 90 seconds,
@@ -90,29 +90,40 @@ which is not brute-forceable by hand and is trivially so by a script.
 The sign-in form is also an unrestricted way to make the platform send
 mail to any address.
 
-**Fix**: a per-address and per-IP limit on link requests, a per-session
-attempt counter on TOTP that locks the session after a small number,
-and a per-IP limit on the drop upload.
+**Fixed**: `src/lib/ratelimit.ts`, in the database because a Worker
+isolate is recycled between requests. Three sign-in links per address
+per fifteen minutes, ten TOTP attempts per session per hour, two
+hundred uploads per client per hour. The sign-in counter runs before
+the address lookup and returns the same sentence either way, so the
+limit is not itself an oracle. The client key is a truncated hash,
+never a raw address.
 
-### 2. The TOTP secret is stored as written. V6.4 / V14, L2. **Open.**
+### 2. The TOTP secret is stored as written. V6.4 / V14, L2. **Fixed, 27 October.**
 
 `migrations/0001` says the secret is "encrypted at rest with a key held
 as a Worker secret, never the raw base32", and `beginEnrolment` binds
 the raw base32. The schema comment is a claim the code does not keep,
 which is worse than not making the claim.
 
-**Fix**: encrypt with a key from a Worker secret, or change the comment.
-The comment is right about what it should be, so the code should move.
+**Fixed**: `src/lib/auth/secretbox.ts`. AES-GCM with a per-secret IV,
+keyed from the `TOTP_KEY` Worker secret, which is set. Enrolment
+refuses when the key is absent rather than falling back to plaintext,
+because quietly writing the thing the comment forbids is how the
+comment stopped being true the first time. A row written before this
+is read as-is, so nobody is locked out by the improvement.
 
-### 3. No account recovery, and no way to revoke a credential. V6.5. **Open.**
+### 3. No account recovery, and no way to revoke a credential. V6.5. **Half fixed, 27 October.**
 
 `beginEnrolment` correctly refuses to replace a confirmed credential,
 nothing revokes one, and `revokeAllSessions` exists with zero callers.
 Lose the phone, lose the account permanently.
 
-**Fix**: administrative reset by a second officer holding `ADMIN_ROLES`,
-logged and notified. Not printed recovery codes: a code in a drawer is
-a second password with none of the controls.
+**Half fixed**: `revokeCredential` exists in `src/lib/auth/store.ts`.
+It removes the second factor, ends every session for that person, and
+writes an audit row. Deliberately not self-service: a recovery path
+somebody can walk alone is a second way in. What is still missing is
+the screen that calls it, which waits on the account administration
+work, and the notification to the owner.
 
 ### 4. Sensitive routes are not `noindex` as a class. V13. **Partly fixed.**
 

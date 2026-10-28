@@ -18,6 +18,13 @@ declare global {
     /** The platform database. See migrations/. */
     DB?: D1Database;
     EVENT_PHOTOS?: R2Bucket;
+    /**
+     * AES key for the TOTP secret at rest, 32 bytes base64. A Worker
+     * secret. Without it enrolment refuses rather than writing the
+     * raw base32, because a column whose comment promises encryption
+     * must not quietly hold plaintext.
+     */
+    TOTP_KEY?: string;
     /** The board's key for reading a drop back out. A Worker secret. */
     DROP_ADMIN_KEY?: string;
     STAGE?: string;

@@ -3,6 +3,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import type { Entity, Role } from "../authz/model";
 import type { RoleAssignment } from "../authz/policy";
+import { encryptionConfigured, openSecret, sealSecret } from "./secretbox";
 import {
   LOGIN_TOKEN_MINUTES,
   SESSION_HOURS,
@@ -198,13 +199,25 @@ export async function revokeAllSessions(personId: string): Promise<void> {
 
 /* Second factor ----------------------------------------------------- */
 
+/**
+ * The second factor, decrypted.
+ *
+ * Callers get the base32 the authenticator uses; what is in the
+ * column is sealed. A row written before encryption landed is
+ * returned as it is, so nobody is locked out by the improvement.
+ */
 export async function credentialFor(
   personId: string,
 ): Promise<{ totp_secret: string; confirmed_at: string | null } | null> {
-  return db()
+  const row = await db()
     .prepare("SELECT totp_secret, confirmed_at FROM credential WHERE person_id = ?")
     .bind(personId)
     .first<{ totp_secret: string; confirmed_at: string | null }>();
+  if (!row) return null;
+
+  const { env } = getCloudflareContext();
+  if (!env.TOTP_KEY) return row;
+  return { ...row, totp_secret: await openSecret(row.totp_secret, env.TOTP_KEY) };
 }
 
 /**
@@ -217,13 +230,56 @@ export async function credentialFor(
 export async function beginEnrolment(personId: string, secret: string): Promise<void> {
   const existing = await credentialFor(personId);
   if (existing?.confirmed_at) throw new Error("already enrolled");
+
+  // Refuses rather than falling back to plaintext. 0001's comment
+  // says this column never holds the raw base32, and quietly writing
+  // it when the key is absent is how that comment stopped being true
+  // the first time. In production the secret is always set; without
+  // it, enrolment is unavailable and says so.
+  const { env } = getCloudflareContext();
+  if (!encryptionConfigured(env)) {
+    throw new Error(
+      "TOTP_KEY is not configured, so a second factor cannot be enrolled. " +
+        "Set it with: openssl rand -base64 32 | npx wrangler secret put TOTP_KEY",
+    );
+  }
+
   await db()
     .prepare(
       "INSERT INTO credential (person_id, totp_secret, created_at) VALUES (?, ?, ?) " +
         "ON CONFLICT(person_id) DO UPDATE SET totp_secret = excluded.totp_secret, created_at = excluded.created_at",
     )
-    .bind(personId, secret, nowIso())
+    .bind(personId, await sealSecret(secret, env.TOTP_KEY!), nowIso())
     .run();
+}
+
+/**
+ * Remove somebody's second factor so they can enrol a new one.
+ *
+ * Finding 3 of the ASVS review: `beginEnrolment` correctly refuses to
+ * replace a confirmed credential, nothing revoked one, and
+ * `revokeAllSessions` had no callers. Losing the phone meant losing
+ * the account permanently.
+ *
+ * Deliberately not self-service. A recovery path somebody can walk
+ * alone is a second way in, and a second way in is the one an
+ * attacker uses. This is for an officer holding ADMIN_ROLES acting
+ * for somebody else, and it takes their sessions with it: an
+ * attacker who reached the point of needing a reset may already be
+ * holding one.
+ */
+export async function revokeCredential(
+  personId: string,
+  revokedBy: string,
+): Promise<void> {
+  await db().prepare("DELETE FROM credential WHERE person_id = ?").bind(personId).run();
+  await revokeAllSessions(personId);
+  await audit({
+    actorId: revokedBy,
+    action: "MFA_REVOKED",
+    subject: `person:${personId}`,
+    detail: "second factor removed and every session ended",
+  });
 }
 
 export async function confirmEnrolment(personId: string): Promise<void> {
