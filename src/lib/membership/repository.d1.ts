@@ -108,6 +108,8 @@ type ApplicationRow = {
   decision_outcome: string | null;
   decision_reason: string | null;
   converted_member_id: string | null;
+  assigned_to: string | null;
+  assigned_at: string | null;
 };
 
 type VouchRow = {
@@ -170,7 +172,7 @@ const APPLICATION_COLUMNS =
   "membership_category, qualifying_relationship, service_from, service_to, " +
   "attested_war_veteran, is_augmentee, sponsor_member_id, created_at, " +
   "submitted_at, step, vouch_expires_at, decided_at, decided_by, " +
-  "decision_outcome, decision_reason, converted_member_id";
+  "decision_outcome, decision_reason, converted_member_id, assigned_to, assigned_at";
 
 const MEMBER_COLUMNS =
   "id, entity, member_id, person_id, display_name, email, phone, " +
@@ -215,6 +217,8 @@ function applicationOf(row: ApplicationRow, flags: IntakeFlag[]): Application {
     flags,
     chairDecision: chairDecisionOf(row),
     convertedMemberId: orNull(row.converted_member_id),
+    assignedTo: orNull(row.assigned_to),
+    assignedAt: orNull(row.assigned_at),
   };
 }
 
@@ -249,6 +253,9 @@ function memberOf(row: MemberRow): Member {
     id: row.id,
     entity: row.entity as Entity,
     memberId: row.member_id,
+    // Read back, finally. The column has existed since 0003 and nothing read
+    // it or wrote it, which is what blocked every member-tier function.
+    personId: orNull(row.person_id),
     displayName: text(row.display_name),
     email: text(row.email),
     phone: text(row.phone),
@@ -569,6 +576,29 @@ export class D1MembershipRepository implements MembershipRepository {
     return int(row?.n);
   }
 
+  /**
+   * Give an item to a reviewer, or take it back.
+   *
+   * `assigned_to` references `person(id)`, so an id the identity table does
+   * not know fails here with a foreign-key error rather than being written and
+   * rendering as a reviewer nobody can find. That is why the caller resolves
+   * the reviewer before calling, and why the dev persona ids cannot be
+   * assigned against a real database — the same constraint that
+   * `src/lib/authz/session.ts` already documents for chair decisions.
+   */
+  async assignApplication(
+    id: string,
+    reviewerPersonId: string | null,
+    at: string | null,
+  ): Promise<Application> {
+    if (!(await this.applicationRow(id))) throw new Error(`No application ${id}`);
+    await requireDatabase()
+      .prepare("UPDATE application SET assigned_to = ?, assigned_at = ? WHERE id = ?")
+      .bind(reviewerPersonId, reviewerPersonId ? at : null, id)
+      .run();
+    return this.requireApplication(id);
+  }
+
   /* Vouch -------------------------------------------------------- */
 
   async createVouchRequest(request: VouchRequest): Promise<VouchRequest> {
@@ -673,6 +703,34 @@ export class D1MembershipRepository implements MembershipRepository {
   }
 
   /**
+   * By roster address. `member.email` is not unique — a shared family mailbox
+   * is normal here — so this is ordered by `rowid` to match the in-memory
+   * implementation's "first in roster order" rather than letting SQLite pick.
+   */
+  async getMemberByEmail(email: string): Promise<Member | null> {
+    const needle = email.trim().toLowerCase();
+    if (!needle) return null;
+    const row = await one<MemberRow>(
+      requireDatabase()
+        .prepare(
+          `SELECT ${MEMBER_COLUMNS} FROM member WHERE lower(email) = ? ORDER BY rowid LIMIT 1`,
+        )
+        .bind(needle),
+    );
+    return row ? memberOf(row) : null;
+  }
+
+  async getMemberByPersonId(personId: string): Promise<Member | null> {
+    if (!personId) return null;
+    const row = await one<MemberRow>(
+      requireDatabase()
+        .prepare(`SELECT ${MEMBER_COLUMNS} FROM member WHERE person_id = ? ORDER BY rowid LIMIT 1`)
+        .bind(personId),
+    );
+    return row ? memberOf(row) : null;
+  }
+
+  /**
    * The next member number for a year.
    *
    * One counter row per year, incremented in a single statement. Not a
@@ -707,12 +765,17 @@ export class D1MembershipRepository implements MembershipRepository {
           "membership_category, qualifying_relationship, service_from, " +
           "service_to, is_war_veteran, attested_war_veteran, state, " +
           "sponsor_member_id, joined_at, payment_cleared_at, last_audited_at, " +
-          "application_id) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "application_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .bind(
         id,
         member.entity,
         memberId,
+        // Was the literal NULL. `person_id` is a real foreign key, so this
+        // binds only an id that `invite()` has already created or found; the
+        // caller passes null when there was no identity store to write to,
+        // which is a member with no account rather than a failed creation.
+        member.personId,
         member.displayName,
         member.email,
         member.phone,
@@ -775,6 +838,60 @@ export class D1MembershipRepository implements MembershipRepository {
         db
           .prepare("UPDATE application SET state = ? WHERE id = ?")
           .bind(state, row.application_id),
+      );
+    }
+    await atomic(statements);
+
+    const updated = await this.getMember(id);
+    if (!updated) throw new Error(`No member ${id}`);
+    return updated;
+  }
+
+  /**
+   * The two contact fields, and the identity row with them.
+   *
+   * One batch, because of the edge case E30 is built around: `person.email`
+   * is the identity and `member.email` is the roster contact, they are
+   * separate columns in separate tables, and a member whose roster address
+   * changed while their sign-in address did not is a member who cannot sign
+   * in. Both or neither.
+   *
+   * `person.email` is UNIQUE, so a collision fails the batch and neither
+   * table moves. The caller checks first and refuses without saying whose
+   * address it is; this is the backstop for the race between the check and
+   * the write, not the user-facing message.
+   */
+  async updateMemberContact(
+    id: string,
+    patch: { email?: string; phone?: string },
+    options?: { alsoPersonEmail?: boolean },
+  ): Promise<Member> {
+    const row = await this.memberRow(id);
+    if (!row) throw new Error(`No member ${id}`);
+    const db = requireDatabase();
+
+    const assignments: string[] = [];
+    const values: unknown[] = [];
+    if (patch.email !== undefined) {
+      assignments.push("email = ?");
+      values.push(patch.email.trim());
+    }
+    if (patch.phone !== undefined) {
+      assignments.push("phone = ?");
+      values.push(patch.phone.trim());
+    }
+    if (assignments.length === 0) return memberOf(row);
+
+    const statements = [
+      db
+        .prepare(`UPDATE member SET ${assignments.join(", ")} WHERE id = ?`)
+        .bind(...values, id),
+    ];
+    if (options?.alsoPersonEmail && patch.email !== undefined && row.person_id) {
+      statements.push(
+        db
+          .prepare("UPDATE person SET email = ? WHERE id = ?")
+          .bind(patch.email.trim().toLowerCase(), row.person_id),
       );
     }
     await atomic(statements);

@@ -46,6 +46,20 @@ export type MembershipRepository = {
   recordChairDecision(id: string, decision: ChairDecision, state: MembershipState): Promise<Application>;
   listApplications(states?: MembershipState[]): Promise<Application[]>;
   countApplicationsByEmail(email: string): Promise<number>;
+  /**
+   * Give an item to a named reviewer, or take it back with a null reviewer.
+   *
+   * Overwrites `assigned_to`. That is deliberate and it is not the record: the
+   * assignment history lives in the append-only audit log, written by the
+   * caller in `board.ts`, because there is exactly one current holder and a
+   * queue that joined to a history table for every row would be a join nobody
+   * reads.
+   */
+  assignApplication(
+    id: string,
+    reviewerPersonId: string | null,
+    at: string | null,
+  ): Promise<Application>;
 
   /* Vouch -------------------------------------------------------- */
   createVouchRequest(request: VouchRequest): Promise<VouchRequest>;
@@ -59,8 +73,35 @@ export type MembershipRepository = {
   listMembers(): Promise<Member[]>;
   getMember(id: string): Promise<Member | null>;
   getMemberByMemberId(memberId: string): Promise<Member | null>;
+  /**
+   * By roster address. `member.email` is indexed and NOT unique, so this
+   * answers "is this address already on the roster" and deliberately does not
+   * pretend an address identifies one human: a shared family mailbox is
+   * normal in this population. The first match in roster order is returned.
+   */
+  getMemberByEmail(email: string): Promise<Member | null>;
+  /** The roster record belonging to a signed-in person. E28's whole join. */
+  getMemberByPersonId(personId: string): Promise<Member | null>;
   createMember(member: Omit<Member, "id" | "memberId"> & { memberId?: string }): Promise<Member>;
   setMemberState(id: string, state: MembershipState, auditedAt?: string): Promise<Member>;
+  /**
+   * Correct the two contact fields, and nothing else.
+   *
+   * Narrow on purpose. Name, category, service dates, standing and sponsor are
+   * not reachable from here: they are the compliance fields the composition
+   * report counts, and a method that could write any column would be the method
+   * somebody used to fix a standing without a decision behind it.
+   *
+   * `personEmail` asks for the identity row to be updated in the same
+   * transaction when the member holds an account. Both or neither: a member
+   * whose roster address changed and whose sign-in address did not is a member
+   * who cannot sign in.
+   */
+  updateMemberContact(
+    id: string,
+    patch: { email?: string; phone?: string },
+    options?: { alsoPersonEmail?: boolean },
+  ): Promise<Member>;
   nextMemberId(year: number): Promise<string>;
 
   /* Payment handoff --------------------------------------------- */
@@ -157,6 +198,8 @@ export class InMemoryMembershipRepository implements MembershipRepository {
       flags: [],
       chairDecision: null,
       convertedMemberId: null,
+      assignedTo: null,
+      assignedAt: null,
     };
     this.applications.push(application);
     return { ...application };
@@ -219,6 +262,17 @@ export class InMemoryMembershipRepository implements MembershipRepository {
       .sort((a, b) => (a.submittedAt ?? a.createdAt).localeCompare(b.submittedAt ?? b.createdAt));
   }
 
+  async assignApplication(
+    id: string,
+    reviewerPersonId: string | null,
+    at: string | null,
+  ): Promise<Application> {
+    const application = this.requireApplication(id);
+    application.assignedTo = reviewerPersonId;
+    application.assignedAt = reviewerPersonId ? at : null;
+    return { ...application };
+  }
+
   async countApplicationsByEmail(email: string): Promise<number> {
     const needle = email.trim().toLowerCase();
     if (!needle) return 0;
@@ -271,6 +325,19 @@ export class InMemoryMembershipRepository implements MembershipRepository {
     return found ? { ...found } : null;
   }
 
+  async getMemberByEmail(email: string): Promise<Member | null> {
+    const needle = email.trim().toLowerCase();
+    if (!needle) return null;
+    const found = this.members.find((m) => m.email.trim().toLowerCase() === needle);
+    return found ? { ...found } : null;
+  }
+
+  async getMemberByPersonId(personId: string): Promise<Member | null> {
+    if (!personId) return null;
+    const found = this.members.find((m) => m.personId === personId);
+    return found ? { ...found } : null;
+  }
+
   async nextMemberId(year: number): Promise<string> {
     const prefix = `JSOA-${year}-`;
     const used = this.members
@@ -307,6 +374,26 @@ export class InMemoryMembershipRepository implements MembershipRepository {
       const application = this.applications.find((a) => a.id === found.applicationId);
       if (application) application.state = state;
     }
+    return { ...found };
+  }
+
+  /**
+   * The in-memory store has no `person` table, so `alsoPersonEmail` has
+   * nothing to write and is accepted and ignored. The D1 implementation does
+   * both tables in one batch, and that is the one that matters: a service that
+   * passes the flag here and relies on it is a service that only works against
+   * the database, which is exactly the divergence `tests/d1.test.ts` exists to
+   * catch. `correctMemberContact` therefore refuses an email change for a
+   * linked member when there is no identity store to keep in step.
+   */
+  async updateMemberContact(
+    id: string,
+    patch: { email?: string; phone?: string },
+  ): Promise<Member> {
+    const found = this.members.find((m) => m.id === id);
+    if (!found) throw new Error(`No member ${id}`);
+    if (patch.email !== undefined) found.email = patch.email.trim();
+    if (patch.phone !== undefined) found.phone = patch.phone.trim();
     return { ...found };
   }
 
@@ -362,6 +449,14 @@ export class InMemoryMembershipRepository implements MembershipRepository {
  * assertion runs. The import therefore happens inside the call, where a failure
  * to resolve means "there is no server runtime here", which is exactly the case
  * in which the in-memory roster is the right answer anyway.
+ *
+ * A correction to the paragraph above, which was true when it was written and
+ * is now only half true: `vitest.config.ts` aliases `server-only` to a no-op,
+ * so a static import of a server-only module no longer kills the suite, and
+ * `notify.ts`, `board.ts` and `account.ts` all import one statically. The
+ * dynamic import here is kept for the OTHER reason, which still holds and is
+ * the load-bearing one: the binding has to be re-checked on every call, so the
+ * decision cannot be made at module load whatever the import style.
  *
  * The consequence is that the accessor cannot know which implementation it has
  * until the first method is called, so it returns a delegate: each method
@@ -425,6 +520,8 @@ const DELEGATE: MembershipRepository = {
   listApplications: async (states) => (await resolveRepository()).listApplications(states),
   countApplicationsByEmail: async (email) =>
     (await resolveRepository()).countApplicationsByEmail(email),
+  assignApplication: async (id, reviewerPersonId, at) =>
+    (await resolveRepository()).assignApplication(id, reviewerPersonId, at),
 
   createVouchRequest: async (request) =>
     (await resolveRepository()).createVouchRequest(request),
@@ -440,9 +537,14 @@ const DELEGATE: MembershipRepository = {
   getMember: async (id) => (await resolveRepository()).getMember(id),
   getMemberByMemberId: async (memberId) =>
     (await resolveRepository()).getMemberByMemberId(memberId),
+  getMemberByEmail: async (email) => (await resolveRepository()).getMemberByEmail(email),
+  getMemberByPersonId: async (personId) =>
+    (await resolveRepository()).getMemberByPersonId(personId),
   createMember: async (member) => (await resolveRepository()).createMember(member),
   setMemberState: async (id, state, auditedAt) =>
     (await resolveRepository()).setMemberState(id, state, auditedAt),
+  updateMemberContact: async (id, patch, options) =>
+    (await resolveRepository()).updateMemberContact(id, patch, options),
   nextMemberId: async (year) => (await resolveRepository()).nextMemberId(year),
 
   createCheckoutHandoff: async (handoff) =>

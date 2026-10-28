@@ -48,6 +48,12 @@ export default async function SubmittedPage() {
         <p className={styles.lede}>{INTAKE_MESSAGE}</p>
 
         <p className={styles.note}>
+          A confirmation carrying this reference is on its way to the address you gave. It
+          says the same things this page does and nothing more. Every applicant gets the
+          same one.
+        </p>
+
+        <p className={styles.note}>
           Keep the reference. The membership chair can find your application from it, and it is
           the only thing you need if you write to us. We will not confirm anything about your
           sponsor by email either, so please do not ask us to.

@@ -126,20 +126,30 @@ export async function answerVouch(
   await repo.setApplicationState(application.id, resolved);
 
   if (resolved === "AWAITING_PAYMENT") {
-    enqueue({
+    await enqueue({
       kind: "PAYMENT_LINK",
-      to: application.email,
+      to: application.email || null,
+      toName: application.applicantName || null,
       subject: "Your JSOA membership application: dues payment",
-      deliverable: true,
-      ref: paymentUrl(application.id),
+      stream: "TRANSACTIONAL",
+      body:
+        `A sponsor has confirmed your application for membership of the Joint ` +
+        `Special Operations Association.\n\n` +
+        `To pay the dues, open ${paymentUrl(application.id)}\n\n` +
+        `Dues are $200, paid once and not renewed. They are not a charitable ` +
+        `contribution. The payment page is the provider's own; we never see a ` +
+        `card number.`,
     });
   } else {
-    enqueue({
+    await enqueue({
       kind: "CHAIR_NOTICE",
       to: MEMBERSHIP_CHAIR_INBOX,
       subject: "An application needs a chair decision",
-      deliverable: true,
-      ref: application.id,
+      stream: "TRANSACTIONAL",
+      body:
+        `Application ${application.id} is with the chair. The sponsor either ` +
+        `declined or did not recognise the name, and neither is a rejection.\n\n` +
+        `The applicant has not been told who was asked or what they said.`,
     });
   }
 
@@ -163,12 +173,17 @@ export async function sweepExpiredVouches(
     const application = await repo.getApplication(request.applicationId);
     if (!application || application.state !== "AWAITING_VOUCH") continue;
     await repo.setApplicationState(application.id, nextState(application.state, { type: "VOUCH_EXPIRED" }));
-    enqueue({
+    await enqueue({
       kind: "CHAIR_NOTICE",
       to: MEMBERSHIP_CHAIR_INBOX,
       subject: "A vouch window closed without an answer",
-      deliverable: true,
-      ref: application.id,
+      stream: "TRANSACTIONAL",
+      body:
+        `The ${VOUCH_WINDOW_HOURS}-hour window on application ${application.id} ` +
+        `closed with no answer, so it has moved to the chair queue. This is also ` +
+        `what happens to an application whose sponsor ID matched nobody, because ` +
+        `the intake refuses to treat that case differently.\n\n` +
+        `The applicant was promised an outcome within four days.`,
     });
     moved += 1;
   }

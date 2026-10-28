@@ -157,7 +157,26 @@ export type Application = ApplicationFields & {
   flags: IntakeFlag[];
   chairDecision: ChairDecision | null;
   convertedMemberId: string | null;
+  /**
+   * The reviewer this item currently belongs to, by person id. Null means
+   * unheld, which the queue shows as unheld rather than as everyone's.
+   *
+   * One column, so a reassignment replaces it. The HISTORY of assignments is
+   * not here: it is in `membership_audit`, which is append-only by database
+   * trigger, so every assignment and reassignment survives and none is
+   * overwritten. See `assignToReviewer` in board.ts.
+   */
+  assignedTo: string | null;
+  assignedAt: string | null;
 };
+
+/**
+ * How long an item may sit unheld before the queue says so on the row.
+ *
+ * On the row rather than in a report: an aging figure somebody has to open a
+ * second screen to see is an aging figure nobody sees.
+ */
+export const UNASSIGNED_FLAG_DAYS = 2;
 
 /* ------------------------------------------------------------------ *
  * Vouch
@@ -220,6 +239,17 @@ export type Member = {
   entity: Entity;
   /** `JSOA-YYYY-NNNN`. A lookup key, not a secret: the sponsor click is the authentication. */
   memberId: string;
+  /**
+   * The account, once there is one. Null for a member who has no identity on
+   * the platform — an imported record, or one created where there was no
+   * identity store to write to.
+   *
+   * This is the join E11 is about and that E25 through E30 are blocked on.
+   * Without it there is no way from a signed-in person to their own record,
+   * which is why `member.person_id` existing in the schema and being written
+   * as literal NULL was the whole of the gap.
+   */
+  personId: string | null;
   /** Roster-tier only. Never rendered on a public page. */
   displayName: string;
   email: string;
@@ -239,6 +269,34 @@ export type Member = {
   paymentClearedAt: string | null;
   lastAuditedAt: string | null;
   applicationId: string | null;
+};
+
+/**
+ * What the roster screen may narrow by. E13.
+ *
+ * `q` matches a partial name, a partial member number or a partial email, and
+ * nothing else: it is a way to find a person you already know is there, not a
+ * query language over the roster.
+ *
+ * What is NOT here: anything that would make this a report. No free-text match
+ * on service dates, no range, no sort. The roster is a lookup tool for the
+ * office that owns it, and every extra axis is another shape of answer it can
+ * give about who belongs to this community.
+ */
+export type RosterFilter = {
+  q: string;
+  /** Null means every standing. */
+  state: MembershipState | null;
+  category: MembershipCategory | null;
+  /** A sponsor member ID as written on the record. Matched exactly, uppercased. */
+  sponsorMemberId: string | null;
+};
+
+export const EMPTY_ROSTER_FILTER: RosterFilter = {
+  q: "",
+  state: null,
+  category: null,
+  sponsorMemberId: null,
 };
 
 /* ------------------------------------------------------------------ *

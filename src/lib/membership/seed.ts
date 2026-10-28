@@ -184,6 +184,11 @@ export function seedMembers(): Member[] {
       id: `seed-mbr-${String(index + 1).padStart(3, "0")}`,
       entity: MEMBERSHIP_ENTITY,
       memberId: `JSOA-${year}-${String(sequence).padStart(4, "0")}`,
+      // No seeded member holds an account. That is the real roster's state
+      // too: these records predate the platform, so their accounts are an
+      // invitation somebody has to send rather than something the seed can
+      // assert. A member created through `clearDues` gets one.
+      personId: null,
       displayName: row.name,
       email: `${slug(row.name)}@example.org`,
       phone: phoneFor(index),
@@ -349,6 +354,12 @@ export function seedApplications(): Application[] {
             }
           : null,
       convertedMemberId: null,
+      // Nothing is seeded as assigned, which is the state the office is
+      // actually in: assignment did not exist, so every item in the chair
+      // queue is unheld. The queue flags the ones that have been unheld
+      // longest, and the seed is what makes that visible on first load.
+      assignedTo: null,
+      assignedAt: null,
       applicantName: row.name,
       email: `${slug(row.name)}@example.org`,
       phone: phoneFor(200 + index),

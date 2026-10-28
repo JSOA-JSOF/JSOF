@@ -28,7 +28,11 @@
  *   - the return value is `acknowledge()` from state.ts, unmodified. Nothing is
  *     added to it. `tests/invariants.test.ts` already asserts that the shape
  *     carries no sponsor-derived field, and this module must not be the place
- *     that puts one back.
+ *     that puts one back;
+ *   - the applicant's confirmation is enqueued on every path, with a body that
+ *     is a function of the reference and of nothing else. A missing applicant
+ *     address is not a branch either: the outbox records UNDELIVERABLE and the
+ *     call is made regardless.
  *
  * Validation errors are a different matter and are allowed to differ, because
  * they are about data the applicant supplied about themselves. A missing email
@@ -41,10 +45,12 @@ import { next as nextState, TransitionError } from "./state";
 import {
   acknowledge,
   isWellFormedMemberId,
+  INTAKE_MESSAGE,
   VOUCH_WINDOW_HOURS,
   type IntakeAcknowledgment,
   type MembershipState,
 } from "./state";
+import type { MessageState } from "../comms/types";
 import { MEMBERSHIP_CHAIR_INBOX } from "./contacts";
 import { enqueue, vouchRequestUrl } from "./notify";
 import { newVouchToken, type MembershipRepository } from "./repository";
@@ -218,8 +224,57 @@ export function resolveSubmissionState(
 export type SubmissionResult = {
   acknowledgment: IntakeAcknowledgment;
   /** For the demo only. Not shown to the applicant and not part of the response. */
-  debug: { applicationId: string; state: MembershipState; flags: IntakeFlag[] };
+  debug: {
+    applicationId: string;
+    state: MembershipState;
+    flags: IntakeFlag[];
+    /**
+     * What the applicant's confirmation ended up as in the outbox. Chair-side
+     * only: it is how an undeliverable confirmation becomes visible to
+     * somebody rather than sitting in a log.
+     *
+     * It is derived from the APPLICANT's own address and from nothing about
+     * the sponsor, which is what makes it safe to compute here. No caller may
+     * surface it, vary a destination on it, or vary a status code on it; the
+     * route handler ignores `debug` entirely.
+     */
+    confirmation: { state: MessageState; kind: string };
+  };
 };
+
+/**
+ * The confirmation E07 contracts for, as a pure function of the reference.
+ *
+ * Pure and exported so the copy can be asserted without running the handler,
+ * and so that it is obvious by inspection that nothing about the sponsor
+ * reaches it. The only things that vary between two applicants' confirmations
+ * are the reference and the addressee.
+ *
+ * It says the three things the acceptance criteria name: the reference, the
+ * four-day commitment — the same promise `INTAKE_MESSAGE` makes on screen, so
+ * the two cannot drift — and that nothing has been charged.
+ */
+export function applicantConfirmationBody(reference: string): string {
+  return [
+    "We have your application for membership of the Joint Special Operations",
+    "Association.",
+    "",
+    `Your reference: ${reference}`,
+    "",
+    INTAKE_MESSAGE,
+    "",
+    "Nothing has been charged. Dues are $200, paid once and not renewed, and",
+    "they are asked for only after an application is accepted. They are not a",
+    "charitable contribution.",
+    "",
+    "Keep the reference. It is the only thing you need if you write to us, and",
+    "it is how the membership chair finds your application. We will not confirm",
+    "anything about your sponsor by email, so please do not ask us to.",
+  ].join("\n");
+}
+
+const APPLICANT_CONFIRMATION_SUBJECT =
+  "Your JSOA membership application has been received";
 
 /**
  * Submit an application. Returns the identical acknowledgment in every case.
@@ -238,16 +293,36 @@ export async function submitApplication(
     // No such draft. Still acknowledge, with a fresh reference, so that poking
     // at application ids answers nothing either.
     const reference = deadReference();
-    enqueue({
+    await enqueue({
       kind: "CHAIR_NOTICE",
       to: MEMBERSHIP_CHAIR_INBOX,
       subject: "Submission for an application that no longer exists",
-      deliverable: true,
-      ref: reference,
+      stream: "TRANSACTIONAL",
+      body:
+        `A submission arrived for application ${applicationId}, which does not ` +
+        `exist. The acknowledgment was rendered as usual, with reference ` +
+        `${reference}, because a submission that answers differently is a ` +
+        `submission that answers something.\n\nNobody is waiting on this. It is ` +
+        `here so that a pattern of them is visible.`,
+    });
+    // The same message as every other submission gets, with nobody to send it
+    // to. The queue records UNDELIVERABLE rather than throwing, which is what
+    // keeps this path the same shape as the real one.
+    const confirmation = await enqueue({
+      kind: "APPLICANT_CONFIRMATION",
+      to: null,
+      subject: APPLICANT_CONFIRMATION_SUBJECT,
+      stream: "TRANSACTIONAL",
+      body: applicantConfirmationBody(reference),
     });
     return {
       acknowledgment: acknowledge(reference),
-      debug: { applicationId, state: "DRAFT", flags: [] },
+      debug: {
+        applicationId,
+        state: "DRAFT",
+        flags: [],
+        confirmation: { state: confirmation.state, kind: confirmation.kind },
+      },
     };
   }
 
@@ -304,13 +379,45 @@ export async function submitApplication(
     deliverable,
   });
 
-  /* Queued, never awaited on a network call. See notify.ts. */
-  enqueue({
+  /* Written to the outbox, never sent here. See notify.ts.
+
+     `sponsor?.email ?? null` and NOT a branch. The queue turns a null address
+     into an UNDELIVERABLE row and does the same work either way, which is the
+     property this whole handler is built around: an `if (sponsor)` around this
+     call would make a submission naming a real member measurably slower than
+     one naming nobody, and that difference is the answer the form refuses to
+     give. `deliverable` on the vouch record above is the same fact, recorded
+     rather than acted on. */
+  await enqueue({
     kind: "VOUCH_REQUEST",
-    to: sponsor?.email ?? "(no sponsor address on file)",
+    to: sponsor?.email ?? null,
     subject: "A membership application names you as sponsor",
-    deliverable,
-    ref: vouchRequestUrl(token),
+    stream: "TRANSACTIONAL",
+    body:
+      `Somebody has applied for membership of the Joint Special Operations ` +
+      `Association and named you as their sponsor.\n\n` +
+      `To answer, open ${vouchRequestUrl(token)}\n\n` +
+      `The request is open for ${VOUCH_WINDOW_HOURS} hours. After that it ` +
+      `closes and the membership chair picks the application up instead, so ` +
+      `nothing is lost either way. If the name means nothing to you, say so — ` +
+      `that is a useful answer and it is not a rejection.`,
+  });
+
+  /* E07. The applicant's own confirmation, which did not exist: the handler
+     wrote to the sponsor and to the chair and never to the person who filled
+     the form in. Enqueued on every path, before the record is marked
+     submitted, so it is part of the same constant work as everything above.
+
+     Its body is a function of the reference alone. Two applicants with
+     different sponsors get byte-identical messages apart from the reference
+     and the addressee, which is acceptance criterion 2. */
+  const confirmation = await enqueue({
+    kind: "APPLICANT_CONFIRMATION",
+    to: application.email || null,
+    toName: application.applicantName || null,
+    subject: APPLICANT_CONFIRMATION_SUBJECT,
+    stream: "TRANSACTIONAL",
+    body: applicantConfirmationBody(application.reference),
   });
 
   const submitted = await repo.markSubmitted(application.id, {
@@ -322,7 +429,12 @@ export async function submitApplication(
 
   return {
     acknowledgment: acknowledge(submitted.reference),
-    debug: { applicationId: submitted.id, state: submitted.state, flags },
+    debug: {
+      applicationId: submitted.id,
+      state: submitted.state,
+      flags,
+      confirmation: { state: confirmation.state, kind: confirmation.kind },
+    },
   };
 }
 

@@ -24,6 +24,7 @@
  */
 
 import { mayRequestPayment, next as nextState, type MembershipState } from "./state";
+import { provisionMemberAccount } from "./account";
 import { enqueue } from "./notify";
 import type { MembershipRepository } from "./repository";
 import { deriveIsWarVeteran } from "./wartime";
@@ -139,12 +140,27 @@ export async function clearDues(
   const resolved = nextState(application.state, { type: "PAYMENT_CLEARED", paymentId: handoff.id });
   const at = now.toISOString();
 
+  /* E11. The account comes first, before anything is marked cleared.
+     `provisionMemberAccount` finds or creates the `person` row and grants
+     MEMBER for the Association, and it is idempotent in both halves, so a
+     webhook that is retried after a failure here reuses the identity rather
+     than minting a second one. Doing it first means a failure leaves the
+     handoff uncleared and the application where it was, which is a state the
+     provider will retry into; doing it last would mean a member with money
+     taken, a roster row, and no way to sign in. */
+  const account = await provisionMemberAccount({
+    email: application.email,
+    displayName: application.applicantName,
+    entity: MEMBERSHIP_ENTITY,
+  });
+
   await repo.markCheckoutCleared(handoff.id);
   await repo.setApplicationState(application.id, resolved);
 
   const isWarVeteran = deriveIsWarVeteran(application.serviceFrom, application.serviceTo);
   const member = await repo.createMember({
     entity: MEMBERSHIP_ENTITY,
+    personId: account.personId,
     displayName: application.applicantName,
     email: application.email,
     phone: application.phone,
@@ -162,15 +178,56 @@ export async function clearDues(
     applicationId: application.id,
   });
 
-  enqueue({
-    kind: "DECISION_NOTICE",
-    to: application.email,
-    subject: "Welcome to the Joint Special Operations Association",
-    deliverable: true,
-    ref: member.memberId,
+  /* What conferred the role, in the record. `role_grant.granted_by` names the
+     new person because there is no human in a webhook; the provenance — which
+     application, which payment — belongs here, where it can be read. */
+  await repo.appendAudit({
+    at,
+    personId: account.personId ?? "system:dues-cleared",
+    action: account.linked ? "MEMBER_ACCOUNT_LINKED" : "MEMBER_ACCOUNT_NOT_LINKED",
+    dataClass: "MEMBER_PII",
+    entity: MEMBERSHIP_ENTITY,
+    rowLevel: true,
+    subjectRef: `${member.memberId} from ${application.id} on ${handoff.id}`,
+  });
+
+  await enqueue({
+    kind: "DUES_RECEIPT",
+    to: member.email,
+    toName: member.displayName,
+    subject: "Your JSOA membership: dues received",
+    stream: "TRANSACTIONAL",
+    body: duesReceiptBody(member),
   });
 
   return member;
+}
+
+/**
+ * The dues receipt.
+ *
+ * Carries the non-deductibility statement because a (c)(19) membership
+ * payment is not a charitable contribution and the receipt is the artifact a
+ * member keeps and hands to whoever does their return. It states the amount
+ * once and says it is not charged again, which is the one-time basis the board
+ * settled on 27 October; three published statements said otherwise before
+ * that and two of them were wrong.
+ */
+export function duesReceiptBody(member: Member): string {
+  return [
+    `Your membership of the Joint Special Operations Association is on the roster.`,
+    ``,
+    `Member number: ${member.memberId}`,
+    `Dues received: ${formatCents(DUES_AMOUNT_CENTS)}`,
+    ``,
+    `This is a one-time payment. Membership does not renew and nothing further`,
+    `is owed.`,
+    ``,
+    DUES_NOT_DEDUCTIBLE,
+    ``,
+    `To see your own record, sign in at /sign-in with this address. If that`,
+    `address is wrong, or stops working, the membership chair can correct it.`,
+  ].join("\n");
 }
 
 export function formatCents(amountCents: number): string {
