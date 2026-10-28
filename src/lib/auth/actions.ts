@@ -15,7 +15,13 @@ import {
   revokeSession,
   startSession,
 } from "./store";
-import { SESSION_COOKIE, SESSION_HOURS, looksLikeEmail } from "./tokens";
+import { enqueue } from "../comms/queue";
+import {
+  LOGIN_TOKEN_MINUTES,
+  SESSION_COOKIE,
+  SESSION_HOURS,
+  looksLikeEmail,
+} from "./tokens";
 import { newTotpSecret, verifyTotp } from "./totp";
 import { getLiveSession } from "../authz/session";
 
@@ -29,6 +35,15 @@ import { getLiveSession } from "../authz/session";
  * of `requestLink` is the same sentence, and it does the same work
  * either way.
  */
+
+/**
+ * Where a sign-in link points.
+ *
+ * Fixed rather than taken from the request, because a Host header is
+ * attacker-controlled and a link built from one is how a sign-in email
+ * ends up pointing at somebody else's server.
+ */
+const SIGN_IN_BASE = "https://thejsof.org";
 
 const SAME_ANSWER =
   "If that address has an account, a sign-in link is on its way. It is good for fifteen minutes.";
@@ -45,15 +60,43 @@ export async function requestLink(
   const person = await personByEmail(email);
   if (person && !person.disabled_at) {
     const token = await issueLoginToken(person.id);
-    // TODO(E46): hand to the mail queue. Until Communications lands the
-    // link is written to the audit log, where an administrator with
-    // database access can read it. That is not a backdoor: it needs the
-    // same access that could mint a session directly.
+    const link = `${SIGN_IN_BASE}/sign-in/link?token=${token}`;
+
+    // Queued, never sent inline. The queue does the same work whether
+    // or not a message can be delivered, which is what keeps the
+    // response time from answering a question this handler refuses to
+    // answer in words.
+    //
+    // Entity is null: a sign-in link makes no tax claim and speaks in
+    // neither organization's voice. Whether platform mail may go out
+    // from the Foundation's verified domain is a question for the
+    // board; until it answers, ./comms/sender gives it an identity
+    // that is neither entity.
+    await enqueue({
+      stream: "TRANSACTIONAL",
+      entity: null,
+      kind: "SIGN_IN_LINK",
+      toAddress: person.email,
+      toName: person.display_name,
+      subject: "Your sign-in link",
+      bodyText:
+        `${person.display_name},\n\n` +
+        `Here is your sign-in link. It works once and it expires in ` +
+        `${LOGIN_TOKEN_MINUTES} minutes.\n\n${link}\n\n` +
+        `If you did not ask for this, you can ignore it. Nothing has ` +
+        `changed on your account and nobody has been told you were sent ` +
+        `a link.\n`,
+    });
+
     await audit({
       actorId: person.id,
       action: "SIGN_IN_LINK_ISSUED",
       subject: `person:${person.id}`,
-      detail: `/sign-in/link?token=${token}`,
+      // The link itself is no longer written here. It is in the
+      // outbox, which is where a thing that opens a session belongs,
+      // and the audit log records that one was issued rather than
+      // what it was.
+      detail: "queued to the sender's address",
     });
   } else {
     await audit({
