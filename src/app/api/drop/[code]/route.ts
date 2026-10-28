@@ -7,6 +7,7 @@ import {
   dropIsOpen,
   thumbKeyFor,
 } from "@/lib/drop/config";
+import { LIMITS, clientKey, consume } from "@/lib/ratelimit";
 
 /**
  * Receives one photograph and writes it to the bucket.
@@ -40,6 +41,18 @@ export async function POST(
   if (!drop) return fail(404, "Not found.");
   if (!dropIsOpen(drop, new Date())) {
     return fail(410, "This drop has closed. Write to connect@thejsoa.org.");
+  }
+
+  // Generous, and not a ration. Somebody emptying a camera roll after
+  // a tournament is the normal case and must not be stopped; this
+  // bounds a bucket that anyone who reads the code off a sign can
+  // write to.
+  const within = await consume(
+    `drop:${drop.prefix}:${await clientKey(request)}`,
+    LIMITS.dropUpload,
+  );
+  if (!within.allowed) {
+    return fail(429, "That is a lot of photos at once. Try again in a little while.");
   }
 
   const { env } = getCloudflareContext();

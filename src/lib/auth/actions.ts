@@ -16,11 +16,13 @@ import {
   startSession,
 } from "./store";
 import { enqueue } from "../comms/queue";
+import { LIMITS, consume } from "../ratelimit";
 import {
   LOGIN_TOKEN_MINUTES,
   SESSION_COOKIE,
   SESSION_HOURS,
   looksLikeEmail,
+  normaliseEmail,
 } from "./tokens";
 import { newTotpSecret, verifyTotp } from "./totp";
 import { getLiveSession } from "../authz/session";
@@ -56,6 +58,20 @@ export async function requestLink(
 ): Promise<LinkResult> {
   const email = String(form.get("email") ?? "");
   if (!looksLikeEmail(email)) return { message: SAME_ANSWER };
+
+  // Counted before the lookup, and the same answer either way.
+  //
+  // Limiting after deciding whether the address is known would make
+  // the limit itself an oracle: a known address would be throttled
+  // and an unknown one would not, which tells a stranger exactly what
+  // this handler spends the rest of its body refusing to say. It also
+  // stops the form being an unauthenticated way to make this
+  // organization send mail to any address somebody types.
+  const within = await consume(`signin:${normaliseEmail(email)}`, LIMITS.signInLink);
+  if (!within.allowed) {
+    await audit({ action: "SIGN_IN_LINK_THROTTLED", detail: "too many requests" });
+    return { message: SAME_ANSWER };
+  }
 
   const person = await personByEmail(email);
   if (person && !person.disabled_at) {
@@ -164,6 +180,19 @@ export async function submitCode(
 ): Promise<MfaResult> {
   const live = await getLiveSession();
   if (!live) return { error: "Not signed in." };
+
+  // Ten an hour per session. Six digits with a one-step window is
+  // about a million possibilities, which no person walks and a script
+  // walks in seconds.
+  const within = await consume(`mfa:${live.row.id}`, LIMITS.mfaAttempt);
+  if (!within.allowed) {
+    await audit({
+      actorId: live.row.person_id,
+      action: "MFA_THROTTLED",
+      subject: `session:${live.row.id}`,
+    });
+    return { error: "Too many attempts. Wait an hour, or sign in again." };
+  }
 
   const credential = await credentialFor(live.row.person_id);
   if (!credential) return { error: "No authenticator is set up yet." };
