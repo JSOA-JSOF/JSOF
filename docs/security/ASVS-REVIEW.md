@@ -125,23 +125,47 @@ somebody can walk alone is a second way in. What is still missing is
 the screen that calls it, which waits on the account administration
 work, and the notification to the owner.
 
-### 4. Sensitive routes are not `noindex` as a class. V13. **Partly fixed.**
+### 4. Sensitive routes are not `noindex` as a class. V13. **Fixed, 27 October.**
 
 `/drop` and `/sign-in` carry headers; `/board` and `/apply` rely on
 metadata per page. `robots.txt` now disallows all four, which is a
 request and not a control.
 
-**Fix**: one header rule covering every non-public prefix.
+**Fixed**: one rule in `next.config.ts` over `board`, `apply`, `drop`,
+`sign-in`, `soon` and `not-yet`. Verified live: all six carry
+`X-Robots-Tag: noindex, nofollow, noarchive`, and `/`, `/jsoa` and
+`/jsof/sponsors` carry none.
 
-### 5. No Content-Security-Policy. V3. **Open.**
+### 5. No Content-Security-Policy. V3. **Fixed, 27 October — and it found something.**
 
 `next.config.ts` sets nosniff, Referrer-Policy, X-Frame-Options and
 Permissions-Policy. There is no CSP. The site loads Google Fonts and
 nothing else third-party, so a strict policy is achievable now and gets
 harder with every addition.
 
-**Fix**: `default-src 'self'`, fonts allowed explicitly, `frame-ancestors
-'none'`, report-only first.
+**Fixed**: `default-src 'self'`, Google Fonts allowed explicitly,
+`object-src 'none'`, `frame-ancestors 'none'`, `form-action 'self'`.
+`blob:` is allowed on images because the photo drop previews a resized
+file before upload. Not report-only: the policy was achievable today
+and enforcing it immediately is what produced the finding below.
+
+Verified by loading the pages rather than reading the header: the
+front door, both films through the door, the drop page's film, and the
+blob preview path all work. Fonts load. Nothing legitimate broke.
+
+**What it caught.** The policy blocks
+`static.cloudflareinsights.com/beacon.min.js`, which Cloudflare injects
+automatically. Nobody added it. `docs/PRIVACY-AND-PAYMENTS.md` says no
+third-party tags ship by default and that analytics scripts are being
+litigated as wiretapping with no nonprofit exemption, so this is a
+documented policy being broken by a platform default.
+
+The CSP stops it executing, which is the right outcome, but the tag is
+still in the HTML of every page and a blocked script is a weaker
+statement than an absent one. **Turn Web Analytics auto-injection off
+at the Cloudflare zone**; it is a dashboard setting, not something in
+this repository. Until then the policy holds in the browser and the
+markup does not match the written position.
 
 ### 6. The store's member gate has no door. V8. **Open, and mine.**
 
