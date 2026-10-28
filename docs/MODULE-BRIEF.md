@@ -19,6 +19,8 @@ lane will be lost or will break someone else.
 | treasury | `src/app/board/treasury/**`, `src/lib/treasury/**` |
 | foundation | `src/app/donate/**`, `src/app/board/donations/**`, `src/lib/donations/**` |
 | store | `src/app/store/**`, `src/app/board/store/**`, `src/lib/store/**` |
+| member tier | `src/app/members/**`. The screens a member sees of their own record, as distinct from the board's view of it. It had no row, which is why `src/lib/membership/self.ts` was written with no route to render it: the library is complete and the page is in nobody's lane. |
+| comms | `src/lib/comms/**`, `src/app/board/comms/**`. `types.ts`, `queue.ts` and `sender.ts` are the shared seam every other module enqueues through, and are read-only to all of them. |
 
 Shared and **read-only to every module**: `src/lib/authz/**`,
 `src/lib/membership/state.ts`, `src/app/globals.css`, `src/app/layout.tsx`,

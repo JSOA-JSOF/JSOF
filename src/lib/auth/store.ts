@@ -304,6 +304,72 @@ export async function assignmentsFor(personId: string): Promise<RoleAssignment[]
   }));
 }
 
+/**
+ * Who holds an office, for a screen that has to offer a colleague.
+ *
+ * The membership lane needed this to let a reviewer assignment name
+ * somebody, and was right not to grow its own directory of people: a
+ * module that keeps a list of who is who ends up with a second,
+ * staler roster beside the real one.
+ *
+ * It returns the minimum a picker needs and no more. Not the email,
+ * because a list of addresses is a thing to be harvested and a picker
+ * does not need one; not the grant history, because "who can do this
+ * now" is the question being asked.
+ */
+export async function listPeopleWithRole(
+  role: Role,
+  entity: Entity,
+): Promise<{ id: string; displayName: string }[]> {
+  const { results } = await db()
+    .prepare(
+      "SELECT p.id, p.display_name FROM role_grant g " +
+        "JOIN person p ON p.id = g.person_id " +
+        "WHERE g.role = ? AND g.entity = ? AND g.revoked_at IS NULL " +
+        "AND p.disabled_at IS NULL " +
+        "ORDER BY p.display_name",
+    )
+    .bind(role, entity)
+    .all<{ id: string; display_name: string }>();
+  return results.map((row) => ({ id: row.id, displayName: row.display_name }));
+}
+
+/**
+ * Change the address an account signs in with.
+ *
+ * Here rather than in membership, because `person` is the identity
+ * lane's table. The membership repository has been writing it inside
+ * one `atomic` batch to keep the member row and the account row from
+ * diverging, which was the right call with what it had; this is the
+ * method it should use instead once it can do both in one place.
+ *
+ * It does not revoke sessions. Changing an address is not evidence
+ * that the account is compromised, and signing somebody out of a
+ * screen they are working on because they fixed a typo is a worse
+ * default than the risk it avoids. A compromise is handled by
+ * `revokeAllSessions`, which exists for exactly that.
+ */
+export async function updatePersonEmail(
+  personId: string,
+  email: string,
+  changedBy: string,
+): Promise<void> {
+  const normalised = normaliseEmail(email);
+  await db()
+    .prepare("UPDATE person SET email = ? WHERE id = ?")
+    .bind(normalised, personId)
+    .run();
+  await audit({
+    actorId: changedBy,
+    action: "EMAIL_CHANGED",
+    subject: `person:${personId}`,
+    // The address itself is not recorded. A log of every address the
+    // organization has ever held for somebody is more than this log
+    // needs to be useful.
+    detail: "sign-in address updated",
+  });
+}
+
 export async function grantRole(
   personId: string,
   role: Role,
