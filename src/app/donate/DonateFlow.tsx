@@ -299,6 +299,29 @@ export default function DonateFlow({ funds }: { funds: FundOption[] }) {
       {entity && amountCents !== null && step >= 3 && (
         <section className={styles.section}>
           <h2 className={styles.sectionHead}>3. Where should it go?</h2>
+
+          {/*
+           * No fund, no gift, and the page says so instead of inviting one.
+           *
+           * Every gift needs at least one fund and the two organizations never
+           * share one, so an organization with no open fund cannot take a gift
+           * at all. The old behaviour was an empty table, a live "Review this
+           * gift" button and a refusal at the end naming a rule the donor had
+           * no way to satisfy. A control that cannot complete its action does
+           * not render as a control.
+           */}
+          {entityFunds.length === 0 ? (
+            <div className={styles.refusal} role="alert">
+              <span className={styles.refusalHead}>
+                No fund is open for this organization
+              </span>
+              There is nowhere for this gift to go yet, so it cannot be taken
+              here today. Nothing has been charged and nothing has been
+              recorded. Please write to the organization before giving, or
+              choose the other one above.
+            </div>
+          ) : (
+            <>
           <p className={styles.hint}>
             One gift can be split across as many funds as you like. The split
             has to add up to {formatCents(amountCents)} exactly.
@@ -416,6 +439,8 @@ export default function DonateFlow({ funds }: { funds: FundOption[] }) {
               Change the amount
             </button>
           </div>
+            </>
+          )}
         </section>
       )}
 

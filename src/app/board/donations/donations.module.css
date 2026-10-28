@@ -441,3 +441,164 @@
   display: block;
   margin-bottom: 5px;
 }
+
+/* Entry forms, and what came back from one ------------------------- *
+ *
+ * Added with the fund and sponsorship entry screens. Every colour is a
+ * token; nothing here introduces a literal. The grid collapses to one
+ * column below 560px, which is what keeps the forms usable at 375px.
+ */
+
+.notice {
+  margin-top: 22px;
+  border: 1px solid var(--hue);
+  border-left-width: 3px;
+  background: var(--hueTint);
+  padding: 10px 12px;
+  font-size: 0.92rem;
+  max-width: 68ch;
+}
+
+.noticeRefused {
+  border-color: var(--warn);
+  background: var(--warn-tint);
+}
+
+.noticeHead {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  display: block;
+  margin-bottom: 4px;
+}
+
+.noticeRefused .noticeHead {
+  color: var(--warn);
+}
+
+.form {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  padding: 14px;
+  max-width: 68ch;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .formGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.label {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.input,
+.select,
+.textarea {
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 0.92rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.inputMoney {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.checkField {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--mute);
+  max-width: 64ch;
+}
+
+.formActions {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.submit {
+  background: var(--hue);
+  border: 1px solid var(--hue);
+  border-radius: 3px;
+  color: var(--panel);
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.submitQuiet {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--ink);
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.gateRow {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.gateNote {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--mute);
+  max-width: 68ch;
+}

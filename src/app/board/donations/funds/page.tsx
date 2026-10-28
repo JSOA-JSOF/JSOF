@@ -2,7 +2,12 @@ import Link from "next/link";
 
 import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import { AuthzError } from "@/lib/authz/policy";
-import { readFundAggregates, readFundRegister } from "@/lib/donations/actions";
+import {
+  canDefineFund,
+  listPublicFundOptions,
+  readFundAggregates,
+  readFundRegister,
+} from "@/lib/donations/actions";
 import {
   functionTabHref,
   functionTabs,
@@ -12,6 +17,8 @@ import { DEV_SWITCHER_PARAM } from "@/lib/donations/devSubject";
 import { resolveScreenViewer } from "@/lib/donations/screenSubject";
 import { formatCents } from "@/lib/donations/money";
 import Denied from "../Denied";
+import Notice, { firstOf } from "../Notice";
+import { closeFundAction, saveFundAction } from "../actions";
 import styles from "../donations.module.css";
 
 /*
@@ -53,6 +60,9 @@ export default async function FundsPage({
   const { subject, entity, roleLabel, qs } = await resolveScreenViewer(asParam);
   const hue = entity === "JSOA" ? "var(--jsoa)" : "var(--jsof)";
   const hueTint = entity === "JSOA" ? "var(--jsoa-tint)" : "var(--jsof-tint)";
+  const as = Array.isArray(asParam) ? asParam[0] : asParam;
+  const mayDefine = canDefineFund(subject, entity);
+  const offered = await listPublicFundOptions(entity);
 
   let register: FundRegister | null = null;
   let aggregates: FundAggregates | null = null;
@@ -111,12 +121,173 @@ export default async function FundsPage({
         />
 
 
+        <Notice done={firstOf(params.done)} refused={firstOf(params.refused)} />
+
         {denial && (
           <Denied
             roleLabel={roleLabel}
             needs={`at least aggregate access to ${entity} financial records`}
             detail={denial}
           />
+        )}
+
+        {/* Opening a fund.
+            This is the gap docs/PHASE2-FINDINGS.md puts at the top: against a
+            real database there was no fund at all and no way to make one, so
+            the donate form offered a donor nothing. It is deliberately not
+            fixed by loading seed.ts — that data is realistic and false, and
+            loading it would put invented funds on a live donate form. */}
+        <h2 className={styles.sectionHead}>Open a fund</h2>
+        {mayDefine ? (
+          <>
+            <p className={styles.sectionNote}>
+              A fund&rsquo;s name and purpose are published on the donate form,
+              so write them as a donor will read them. A restricted fund can be
+              spent only on the purpose stated here.
+            </p>
+            <form className={styles.form} action={saveFundAction}>
+              <input type="hidden" name="entity" value={entity} />
+              {as && <input type="hidden" name="as" value={as} />}
+              <div className={styles.formGrid}>
+                <div className={styles.field}>
+                  <label className={styles.label} htmlFor="fund-name">
+                    Fund name
+                  </label>
+                  <input
+                    className={styles.input}
+                    id="fund-name"
+                    name="name"
+                    required
+                    maxLength={120}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label} htmlFor="fund-restriction">
+                    Restriction
+                  </label>
+                  <select
+                    className={styles.select}
+                    id="fund-restriction"
+                    name="restriction"
+                    defaultValue="UNRESTRICTED"
+                  >
+                    <option value="UNRESTRICTED">
+                      Unrestricted — the board&rsquo;s to direct
+                    </option>
+                    <option value="RESTRICTED">
+                      Restricted — one stated purpose only
+                    </option>
+                  </select>
+                </div>
+                <div className={`${styles.field} ${styles.fieldWide}`}>
+                  <label className={styles.label} htmlFor="fund-purpose">
+                    Purpose, as the donor reads it
+                  </label>
+                  <textarea
+                    className={styles.textarea}
+                    id="fund-purpose"
+                    name="purpose"
+                    required
+                    maxLength={600}
+                  />
+                  <p className={styles.hint}>
+                    Required. A restriction the board cannot state is a
+                    restriction it cannot honour.
+                  </p>
+                </div>
+                <div className={styles.checkField}>
+                  <input
+                    type="checkbox"
+                    id="fund-open"
+                    name="openToGifts"
+                    defaultChecked
+                  />
+                  <label htmlFor="fund-open">
+                    Offer this fund on the public donate form for {entity}
+                  </label>
+                </div>
+              </div>
+              <div className={styles.formActions}>
+                <button className={styles.submit} type="submit">
+                  Open the fund
+                </button>
+                <span className={styles.hint}>
+                  It belongs to {entity}. A fund cannot be moved to the other
+                  organization later.
+                </span>
+              </div>
+            </form>
+          </>
+        ) : (
+          <p className={styles.gateNote}>
+            {roleLabel} cannot open a fund. A fund needs either write access to{" "}
+            {entity} financial records, or write access to {entity} published
+            content together with at least aggregate financial access — the
+            Treasurer or the Fundraising Chair. No form is shown here, because a
+            control that cannot complete its action should not look like one.
+          </p>
+        )}
+
+        {/* What the donate form is offering right now.
+            Built from `listPublicFundOptions`, which is the one read in this
+            module with no authorize() call: it returns names, restrictions
+            and purposes and no figure at all. So the Fundraising Chair, who
+            holds financial access at aggregate and cannot open the register
+            below, can still see and close what the public is being offered. */}
+        <h2 className={styles.sectionHead}>Offered on the donate form</h2>
+        {offered.length === 0 ? (
+          <p className={styles.sectionNote}>
+            Nothing. A donor opening /donate is offered no {entity} fund at all
+            and cannot complete a gift to this organization. Open one above.
+          </p>
+        ) : (
+          <>
+            <p className={styles.sectionNote}>
+              {offered.length} {offered.length === 1 ? "fund" : "funds"} a donor
+              can choose between today.
+            </p>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Fund</th>
+                    <th>Purpose, as published</th>
+                    {mayDefine && <th>Close</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {offered.map((option) => (
+                    <tr key={option.id}>
+                      <td>
+                        {option.name}{" "}
+                        <span className={styles.pill}>
+                          {option.restriction.toLowerCase()}
+                        </span>
+                      </td>
+                      <td>{option.purpose}</td>
+                      {mayDefine && (
+                        <td>
+                          <form action={closeFundAction}>
+                            <input type="hidden" name="entity" value={entity} />
+                            <input type="hidden" name="fundId" value={option.id} />
+                            {as && <input type="hidden" name="as" value={as} />}
+                            <button className={styles.submitQuiet} type="submit">
+                              Close to new gifts
+                            </button>
+                          </form>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className={styles.note}>
+              Closing a fund stops it being offered. Nothing is deleted: it keeps
+              its balance, its gifts and its place in the register, because a
+              closed campaign that vanished would take its reporting with it.
+            </p>
+          </>
         )}
 
         {balances.length > 0 && (

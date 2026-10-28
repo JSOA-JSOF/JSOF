@@ -58,6 +58,20 @@ export type OutboundMessage = {
   toName: string | null;
   subject: string;
   bodyText: string;
+  /**
+   * Optional, and absent for almost everything.
+   *
+   * It exists for one reason: the North Carolina solicitation
+   * disclosure has to be conspicuous — underlined, bordered or bold —
+   * and plain text has none of the three, so a statutory receipt
+   * cannot be compliant without it.
+   *
+   * A sign-in link must never use it. A link styled to look like
+   * something else is the shape of every phishing email anybody has
+   * ever seen, and teaching members that ours look like that is a
+   * training problem we would be creating on purpose.
+   */
+  bodyHtml: string | null;
   state: MessageState;
   stateReason: string | null;
   queuedAt: string;
@@ -76,6 +90,8 @@ export type Draft = {
   toName?: string | null;
   subject: string;
   bodyText: string;
+  /** See `OutboundMessage.bodyHtml`. Receipts only. */
+  bodyHtml?: string | null;
 };
 
 export type Suppression = {

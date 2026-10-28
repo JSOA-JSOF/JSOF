@@ -26,18 +26,31 @@
  */
 
 import type { Entity } from "../authz/model";
-import { authorize, type Subject } from "../authz/policy";
+import {
+  assertReleasable,
+  authorize,
+  can,
+  hasCapability,
+  AuthzError,
+  type Subject,
+} from "../authz/policy";
+import { enqueue } from "../comms/queue";
+import type { OutboundMessage } from "../comms/types";
 import { validateAllocations, type AllocationResult } from "./allocation";
 import { buildCheckoutHandoff, type CheckoutHandoff } from "./checkout";
 import { formatCents } from "./money";
 import {
   donationsRepository,
   type DonationsRepository,
+  type FundDraft,
   type GiftBehindFund,
   type PlacementDraft,
+  type SponsorshipDraft,
 } from "./repository";
 import {
+  assertDisclosureConspicuous,
   buildReceipt,
+  receiptDraft,
   renderReceiptHtml,
   renderReceiptText,
   ReceiptError,
@@ -56,10 +69,12 @@ import {
   type Allocation,
   type Donation,
   type DonationIntent,
+  type Fund,
   type FundBalance,
   type GiftBenefit,
   type PlacementCategory,
   type SponsorPlacement,
+  type Sponsorship,
 } from "./types";
 
 type Repo = DonationsRepository;
@@ -322,6 +337,163 @@ export async function readFundRegister(
   );
 }
 
+/* ================================================================== *
+ * Reference data: creating a fund
+ *
+ * `docs/PHASE2-FINDINGS.md` puts this at the top of the file: there was no
+ * way to create a fund, so against a real database the donate form offered
+ * none and no code path could change it. These are the handlers behind the
+ * Fundraising Chair's screen that closes it.
+ * ================================================================== */
+
+/**
+ * Who may define a fund.
+ *
+ * Not one data class, because a fund is not one thing. Its name, restriction
+ * and purpose are published on the donate form and are read by every donor,
+ * which makes them PUBLIC_CONTENT. It is also the bucket a restricted gift is
+ * held in, so inventing one is a claim about the ledger.
+ *
+ * So the gate is either of two standings, and nothing is widened to fit a
+ * screen:
+ *
+ *   - FINANCIAL WRITE on the entity — the Treasurer, who owns the ledger; or
+ *   - PUBLIC_CONTENT WRITE **and** at least FINANCIAL AGGREGATE — the
+ *     Fundraising Chair, who holds exactly that pair and is the office the
+ *     work belongs to.
+ *
+ * The aggregate floor is what keeps out a role that can publish and has no
+ * financial standing at all. The Webmaster holds PUBLIC_CONTENT WRITE and
+ * FINANCIAL NONE and is refused here: publishing a page is not the same act
+ * as deciding that the Foundation now holds money for a new restricted
+ * purpose.
+ *
+ * It is wider than the Fundraising Chair alone, and that is a finding rather
+ * than a design: three other chairs hold the same pair. Narrowing it needs a
+ * capability in `src/lib/authz/model.ts`, which is not this module's to add.
+ */
+export function canDefineFund(subject: Subject, entity: Entity): boolean {
+  const asTreasurer = can({
+    subject,
+    dataClass: "FINANCIAL",
+    entity,
+    required: "WRITE",
+    rowLevel: true,
+  });
+  const asChair =
+    can({ subject, dataClass: "PUBLIC_CONTENT", entity, required: "WRITE" }) &&
+    can({ subject, dataClass: "FINANCIAL", entity, required: "AGGREGATE" });
+  return asTreasurer || asChair;
+}
+
+function authorizeFundDefinition(subject: Subject, entity: Entity): void {
+  if (canDefineFund(subject, entity)) return;
+
+  throw new AuthzError(
+    `Denied: ${subject.personId} cannot define a ${entity} fund. A fund needs ` +
+      `either write access to ${entity} financial records, or write access to ` +
+      `${entity} published content together with at least aggregate financial ` +
+      `access. A fund's name and purpose are published on the donate form, and ` +
+      `the fund is where restricted money is held.`,
+    "DENIED",
+  );
+}
+
+export type SaveFundResult = {
+  fund: Fund;
+  /** True when the fund will now appear on the public donate form. */
+  offeredPublicly: boolean;
+};
+
+/**
+ * Creates a fund, or edits one.
+ *
+ * The entity is taken from the draft and authorized against the draft, never
+ * against whatever entity a screen happens to be showing. A fund created on
+ * the wrong entity is the board review's finding 1 — the memorial fund under
+ * the Association while the Foundation's page promises a deductible gift —
+ * manufactured anew.
+ */
+export async function saveFund(
+  subject: Subject,
+  draft: FundDraft,
+  repo: Repo = defaultRepo(),
+): Promise<SaveFundResult> {
+  authorizeFundDefinition(subject, draft.entity);
+  const fund = await repo.saveFund(draft);
+  return { fund, offeredPublicly: fund.openToGifts };
+}
+
+/**
+ * Closes a fund to new gifts.
+ *
+ * Nothing is deleted: the fund stays in the register and keeps its balance
+ * and its history, and only stops being offered. A closed campaign that
+ * vanished would take its reporting with it.
+ */
+export async function closeFundToGifts(
+  subject: Subject,
+  entity: Entity,
+  fundId: string,
+  repo: Repo = defaultRepo(),
+): Promise<Fund> {
+  authorizeFundDefinition(subject, entity);
+  const fund = await repo.getFund(fundId);
+  if (!fund) throw new Error(`No fund ${fundId}`);
+  if (fund.entity !== entity) {
+    throw new AuthzError(
+      `Fund ${fundId} belongs to ${fund.entity}, not ${entity}.`,
+      "DENIED",
+    );
+  }
+  const { fund: saved } = await saveFund(
+    subject,
+    {
+      id: fund.id,
+      entity: fund.entity,
+      name: fund.name,
+      restriction: fund.restriction,
+      purpose: fund.purpose,
+      openToGifts: false,
+    },
+    repo,
+  );
+  return saved;
+}
+
+/* ================================================================== *
+ * Reference data: recording a sponsorship
+ * ================================================================== */
+
+/**
+ * Records a sponsorship payment.
+ *
+ * FINANCIAL WRITE at row level, which means the Treasurer and not the
+ * Fundraising Chair. That is the module's existing split applied rather than
+ * routed around: a sponsorship record IS a payment amount, and the Chair
+ * holds FINANCIAL at AGGREGATE precisely so the person who negotiates the
+ * sponsorship is not the person who records the cash. The Chair writes the
+ * wording and the valuations stay out of their reach.
+ *
+ * It is also the only honest answer available. A handler that let the Chair
+ * write `paymentCents` would hand them the money row by row through a door
+ * marked published content.
+ */
+export async function recordSponsorship(
+  subject: Subject,
+  draft: Omit<SponsorshipDraft, "createdById">,
+  repo: Repo = defaultRepo(),
+): Promise<Sponsorship> {
+  authorize({
+    subject,
+    dataClass: "FINANCIAL",
+    entity: draft.entity,
+    required: "WRITE",
+    rowLevel: true,
+  });
+  return repo.saveSponsorship({ ...draft, createdById: subject.personId });
+}
+
 export async function recordBenefitFairMarketValue(
   subject: Subject,
   entity: Entity,
@@ -397,6 +569,89 @@ export async function issueReceipt(
     receipt,
     html: renderReceiptHtml(receipt),
     text: renderReceiptText(receipt),
+  };
+}
+
+/* ================================================================== *
+ * Sending the receipt
+ * ================================================================== */
+
+export type SentReceipt = IssuedReceipt & {
+  /** The outbox row. QUEUED, SUPPRESSED or UNDELIVERABLE — never "sent". */
+  message: OutboundMessage;
+};
+
+/**
+ * Issues a receipt for real and hands it to the outbox.
+ *
+ * FINANCIAL **WRITE**, not READ, and the difference is the point.
+ * `issueReceipt` renders a preview and needs only READ. This consumes a
+ * number out of the entity's receipt run and puts a statutory document in
+ * front of a donor, which are both acts rather than reads. The Finance Review
+ * Officer holds FINANCIAL READ and is mechanically read-only; it must be able
+ * to see every receipt and able to send none.
+ *
+ * The order of the four steps is deliberate:
+ *
+ *   1. Build a preview at sequence 0 and render it. Every refusal fires here
+ *      — a gift that is not PAID, benefits with no fair market value, a
+ *      disclosure that a styling change dropped below nine points.
+ *   2. Only then allocate the real number. A receipt number burned on a
+ *      refusal is a gap in the numbering somebody has to explain later, and
+ *      the explanation is "the send failed", which no auditor can verify.
+ *   3. Rebuild on the allocated number.
+ *   4. Enqueue. `enqueue` writes a row and returns; nothing is sent inside
+ *      this request.
+ *
+ * The entity on the message comes from the gift, through the receipt, and
+ * `enqueue` resolves the sending identity from it. A caller cannot choose the
+ * envelope. See `receiptDraft`.
+ */
+export async function sendReceipt(
+  subject: Subject,
+  entity: Entity,
+  donationId: string,
+  repo: Repo = defaultRepo(),
+): Promise<SentReceipt> {
+  authorize({
+    subject,
+    dataClass: "FINANCIAL",
+    entity,
+    required: "WRITE",
+    rowLevel: true,
+  });
+
+  const donation = await repo.getDonation(donationId);
+  if (!donation) {
+    throw new ReceiptError(`No gift ${donationId}`, "NOT_PAID");
+  }
+  if (donation.entity !== entity) {
+    throw new ReceiptError(
+      `Gift ${donationId} belongs to ${donation.entity}, not ${entity}. Receipt ` +
+        "templates are per entity and are never shared.",
+      "ALLOCATIONS_DO_NOT_SUM",
+    );
+  }
+
+  const funds = await repo.listFunds(donation.entity);
+
+  // Step 1. Everything that can refuse, refuses now, before a number moves.
+  assertDisclosureConspicuous(
+    renderReceiptHtml(buildReceipt({ donation, funds, sequence: 0 })),
+  );
+
+  // Steps 2 and 3.
+  const sequence = await repo.nextReceiptSequence(donation.entity);
+  const receipt = buildReceipt({ donation, funds, sequence });
+
+  // Step 4. The entity travels with the receipt; it is not an argument here.
+  const message = await enqueue(receiptDraft(receipt, donation.donorEmail));
+
+  return {
+    receipt,
+    html: renderReceiptHtml(receipt),
+    text: renderReceiptText(receipt),
+    message,
   };
 }
 
@@ -519,6 +774,168 @@ export async function saveAcknowledgmentString(
     placement,
     review: reviewAcknowledgment(placement.approvedAcknowledgmentString),
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * The release gate: send, then a different person approves
+ *
+ * Two handlers, two different standings, because that is what a gate is. The
+ * author asks; somebody else answers. Nothing here writes, rewrites or
+ * generates the acknowledgment string: approval is a signature on words that
+ * already exist, and one adjective is the difference between an
+ * acknowledgment and taxable advertising.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The author sends the wording for release. PUBLIC_CONTENT WRITE: the
+ * Fundraising Chair, the Communications Chair, the Webmaster.
+ */
+export async function sendPlacementForRelease(
+  subject: Subject,
+  entity: Entity,
+  sponsorshipId: string,
+  placementId: string,
+  repo: Repo = defaultRepo(),
+): Promise<PlacementView> {
+  authorize({ subject, dataClass: "PUBLIC_CONTENT", entity, required: "WRITE" });
+  await assertPlacementBelongsTo(repo, entity, sponsorshipId);
+  const placement = await repo.submitPlacementForRelease(sponsorshipId, placementId);
+  return toPlacementView(placement);
+}
+
+/**
+ * The second reader approves it, and it may publish.
+ *
+ * PUBLIC_CONTENT at **READ**, plus the `APPROVE_RELEASE` capability, and that
+ * combination is chosen rather than convenient. Requiring WRITE would mean
+ * only the Memorial Chair could ever approve, because the two standing
+ * release approvers the role table names — the President and VP Operations —
+ * hold PUBLIC_CONTENT at READ. Requiring the capability is what keeps the
+ * Webmaster out: it holds WRITE and PUBLISH and no APPROVE_RELEASE, which is
+ * the role table saying in terms that it can publish and cannot approve its
+ * own content.
+ *
+ * `assertReleasable` from the shared policy does both halves of invariant 3:
+ * the approver is not the author, and the approver holds the capability. It
+ * is called rather than reimplemented, because a second copy of an invariant
+ * is a second place for it to drift.
+ *
+ * `carriesIdentity` is passed true for every sponsor placement. ARCHITECTURE
+ * puts sponsor-supplied copy through the release gate unconditionally, and a
+ * placement names a party and publishes its words under the organization's
+ * banner. Deciding per placement whether a name is identifying enough is
+ * exactly the judgment the gate exists to take away from one person.
+ */
+export async function approvePlacementForPublication(
+  subject: Subject,
+  entity: Entity,
+  sponsorshipId: string,
+  placementId: string,
+  repo: Repo = defaultRepo(),
+): Promise<PlacementView> {
+  authorize({ subject, dataClass: "PUBLIC_CONTENT", entity, required: "READ" });
+  const sponsorship = await assertPlacementBelongsTo(repo, entity, sponsorshipId);
+  const existing = sponsorship.placements.find((p) => p.id === placementId);
+  if (!existing) throw new Error(`No placement ${placementId}`);
+
+  assertReleasable(subject, {
+    id: existing.id,
+    createdById: existing.authoredById,
+    entity: sponsorship.entity,
+    carriesIdentity: true,
+  });
+
+  const placement = await repo.approvePlacement(
+    sponsorshipId,
+    placementId,
+    subject.personId,
+  );
+  return toPlacementView(placement);
+}
+
+/* ------------------------------------------------------------------ *
+ * What a screen may offer
+ *
+ * Board review R10: a control that cannot complete its action does not
+ * render as a control. These three predicates are what a screen asks before
+ * drawing a form, so a role that cannot submit it is shown an inert note
+ * naming the office that can, instead of a button into a refusal.
+ *
+ * They are the same checks the handlers enforce, read through `can` rather
+ * than restated, so a screen cannot offer something the handler then refuses.
+ * ------------------------------------------------------------------ */
+
+/** FINANCIAL WRITE: the Treasurer records the money. */
+export function canRecordSponsorship(subject: Subject, entity: Entity): boolean {
+  return can({
+    subject,
+    dataClass: "FINANCIAL",
+    entity,
+    required: "WRITE",
+    rowLevel: true,
+  });
+}
+
+/**
+ * FINANCIAL WRITE, same as `sendReceipt` enforces.
+ *
+ * The same check as recording a sponsorship, and a separate function anyway:
+ * these are two different questions that happen to have one answer today, and
+ * a screen asking "may this person send a receipt" should not read as though
+ * it were asking about sponsors.
+ */
+export function canSendReceipt(subject: Subject, entity: Entity): boolean {
+  return can({
+    subject,
+    dataClass: "FINANCIAL",
+    entity,
+    required: "WRITE",
+    rowLevel: true,
+  });
+}
+
+/** PUBLIC_CONTENT WRITE: whoever drafts the wording and sends it for release. */
+export function canAuthorWording(subject: Subject, entity: Entity): boolean {
+  return can({ subject, dataClass: "PUBLIC_CONTENT", entity, required: "WRITE" });
+}
+
+/**
+ * PUBLIC_CONTENT READ plus APPROVE_RELEASE: the second reader.
+ *
+ * True for the President, VP Operations and the Memorial Chair, and false for
+ * the Webmaster, which holds WRITE and PUBLISH and no APPROVE_RELEASE. It
+ * does not say whether this particular person may approve this particular
+ * placement — they cannot if they wrote it, and only `assertReleasable`
+ * knows that.
+ */
+export function canApproveRelease(subject: Subject, entity: Entity): boolean {
+  return (
+    can({ subject, dataClass: "PUBLIC_CONTENT", entity, required: "READ" }) &&
+    hasCapability(subject, "APPROVE_RELEASE", entity)
+  );
+}
+
+/**
+ * The sponsorship, confirmed to be on the entity the caller was authorized
+ * against. Without this a PUBLIC_CONTENT grant on one entity would reach a
+ * placement on the other, which is the entity confusion this module exists
+ * to refuse.
+ */
+async function assertPlacementBelongsTo(
+  repo: Repo,
+  entity: Entity,
+  sponsorshipId: string,
+): Promise<Sponsorship> {
+  const sponsorship = await repo.getSponsorship(sponsorshipId);
+  if (!sponsorship) throw new Error(`No sponsorship ${sponsorshipId}`);
+  if (sponsorship.entity !== entity) {
+    throw new AuthzError(
+      `Sponsorship ${sponsorshipId} belongs to ${sponsorship.entity}, not ` +
+        `${entity}. The two organizations never share a sponsor record.`,
+      "DENIED",
+    );
+  }
+  return sponsorship;
 }
 
 /** Changing a benefit valuation is a FINANCIAL write, not a content edit. */

@@ -2,7 +2,11 @@ import Link from "next/link";
 
 import { RoleTabs } from "@/components/workspace-shell/RoleTabs";
 import { AuthzError } from "@/lib/authz/policy";
-import { issueReceipt, readDonationRegister } from "@/lib/donations/actions";
+import {
+  canSendReceipt,
+  issueReceipt,
+  readDonationRegister,
+} from "@/lib/donations/actions";
 import {
   functionTabHref,
   functionTabs,
@@ -17,6 +21,8 @@ import {
 import { formatCents } from "@/lib/donations/money";
 import { ReceiptError } from "@/lib/donations/receipts";
 import Denied from "../Denied";
+import Notice, { firstOf } from "../Notice";
+import { sendReceiptAction } from "../actions";
 import styles from "../donations.module.css";
 
 export const metadata = {
@@ -63,6 +69,11 @@ export default async function DonationsBoardPage({
   const { subject, entity, roleLabel, qs } = await resolveScreenViewer(asParam);
   const hue = entity === "JSOA" ? "var(--jsoa)" : "var(--jsof)";
   const hueTint = entity === "JSOA" ? "var(--jsoa-tint)" : "var(--jsof-tint)";
+  const as = Array.isArray(asParam) ? asParam[0] : asParam;
+  // Sending is a financial WRITE, not the READ that renders the preview
+  // below. The Finance Review Officer can see every receipt on this screen and
+  // can send none, which is what makes the independence mechanical.
+  const maySend = canSendReceipt(subject, entity);
 
   let register: GiftCard[] | null = null;
   let denial: string | null = null;
@@ -130,6 +141,8 @@ export default async function DonationsBoardPage({
           is what a donor fills in before any of this exists.
         </p>
 
+
+        <Notice done={firstOf(params.done)} refused={firstOf(params.refused)} />
 
         {denial && (
           <Denied
@@ -265,6 +278,37 @@ export default async function DonationsBoardPage({
                         </div>
                       </details>
                     )
+                  )}
+
+                  {/* Handing the receipt to the donor.
+                      The preview above consumes no receipt number. This takes
+                      the next one in the entity's own run and writes the
+                      message to the outbox, which never sends from inside a
+                      request. The envelope is the entity's: a 501(c)(19)
+                      receipt does not go out as the Foundation. */}
+                  {!receiptProblem && preview && maySend && (
+                    <form action={sendReceiptAction} className={styles.gateRow}>
+                      <input type="hidden" name="entity" value={entity} />
+                      <input type="hidden" name="donationId" value={donation.id} />
+                      {as && <input type="hidden" name="as" value={as} />}
+                      <button className={styles.submit} type="submit">
+                        Issue and queue the receipt
+                      </button>
+                      <span className={styles.hint}>
+                        To {donation.donorEmail}, as{" "}
+                        {preview.receipt.identity.legalName}. Takes the next
+                        number in {entity}&rsquo;s run.
+                      </span>
+                    </form>
+                  )}
+
+                  {!receiptProblem && preview && !maySend && (
+                    <p className={styles.gateNote}>
+                      {roleLabel} can read this receipt and cannot issue it.
+                      Issuing one takes a number out of {entity}&rsquo;s receipt
+                      run and puts a statutory document in front of a donor,
+                      which needs write access to {entity} financial records.
+                    </p>
                   )}
                 </div>
               );

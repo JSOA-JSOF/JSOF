@@ -40,6 +40,7 @@ function rowToMessage(row: Record<string, unknown>): OutboundMessage {
     toName: (row.to_name as string | null) ?? null,
     subject: String(row.subject),
     bodyText: String(row.body_text),
+    bodyHtml: (row.body_html as string | null) ?? null,
     state: row.state as OutboundMessage["state"],
     stateReason: (row.state_reason as string | null) ?? null,
     queuedAt: String(row.queued_at),
@@ -101,6 +102,7 @@ export async function enqueue(draft: Draft): Promise<OutboundMessage> {
     toName: draft.toName ?? null,
     subject: draft.subject,
     bodyText: draft.bodyText,
+    bodyHtml: draft.bodyHtml ?? null,
     state,
     stateReason: reason,
     queuedAt: at,
@@ -116,8 +118,8 @@ export async function enqueue(draft: Draft): Promise<OutboundMessage> {
     db
       .prepare(
         "INSERT INTO outbound_message (id, stream, entity, kind, to_address, to_name, " +
-          "subject, body_text, state, state_reason, queued_at, attempts) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+          "subject, body_text, body_html, state, state_reason, queued_at, attempts) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
       )
       .bind(
         id,
@@ -128,6 +130,7 @@ export async function enqueue(draft: Draft): Promise<OutboundMessage> {
         draft.toName ?? null,
         draft.subject,
         draft.bodyText,
+        draft.bodyHtml ?? null,
         state,
         reason,
         at,

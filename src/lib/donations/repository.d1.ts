@@ -51,15 +51,22 @@ import {
   orNull,
   text,
   toBool,
+  toInt,
 } from "../db";
 import { validateAllocations } from "./allocation";
 import { CURRENCY, type Currency } from "./money";
 import {
   BENEFITS_WITHOUT_FMV_MESSAGE,
   RepositoryError,
+  assertApprovable,
+  assertSubmittableForRelease,
+  normaliseFundDraft,
+  normaliseSponsorshipDraft,
   type DonationsRepository,
+  type FundDraft,
   type GiftBehindFund,
   type PlacementDraft,
+  type SponsorshipDraft,
 } from "./repository";
 import type {
   Allocation,
@@ -417,6 +424,59 @@ export class D1DonationsRepository implements DonationsRepository {
   }
 
   /**
+   * Creates a fund, or edits one.
+   *
+   * `open_to_gifts` is the one boolean this interface now writes, so `toInt`
+   * is used rather than binding a JavaScript boolean: D1 refuses a boolean
+   * bind, and the test double refuses it too, on purpose.
+   *
+   * An edit does not touch `entity`, and `normaliseFundDraft` refuses a draft
+   * that tries to change it. A fund that moved entity would re-home every
+   * gift already allocated to it, and the allocation trigger would then abort
+   * writes against a fund that had been legal when the gift was taken.
+   */
+  async saveFund(draft: FundDraft): Promise<Fund> {
+    const existing = draft.id ? await this.getFund(draft.id) : undefined;
+    if (draft.id && !existing) {
+      throw new RepositoryError(`No fund ${draft.id}`, "NOT_FOUND");
+    }
+    const { name, purpose } = normaliseFundDraft(draft, existing);
+
+    if (existing) {
+      await this.db
+        .prepare(
+          "UPDATE fund SET name = ?, restriction = ?, purpose = ?, " +
+            "  open_to_gifts = ? WHERE id = ?",
+        )
+        .bind(name, draft.restriction, purpose, toInt(draft.openToGifts), existing.id)
+        .run();
+      const saved = await this.getFund(existing.id);
+      if (!saved) throw new RepositoryError(`No fund ${existing.id}`, "NOT_FOUND");
+      return saved;
+    }
+
+    const id = draft.id ?? newId();
+    await this.db
+      .prepare(
+        "INSERT INTO fund (id, entity, name, restriction, purpose, currency, " +
+          "  open_to_gifts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .bind(
+        id,
+        draft.entity,
+        name,
+        draft.restriction,
+        purpose,
+        CURRENCY,
+        toInt(draft.openToGifts),
+      )
+      .run();
+    const saved = await this.getFund(id);
+    if (!saved) throw new RepositoryError(`No fund ${id}`, "NOT_FOUND");
+    return saved;
+  }
+
+  /**
    * Balance and gift count per fund, for one entity.
    *
    * Cleared gifts only: a gift awaiting payment is not money, so there is no
@@ -592,11 +652,26 @@ export class D1DonationsRepository implements DonationsRepository {
     intent: DonationIntent,
     meta: { createdById: string; checkoutSessionRef: string; receivedAt: string },
   ): Promise<Donation> {
+    // Every fund the allocations actually name, looked up by id across both
+    // entities rather than taken from this entity's list.
+    //
+    // Scoping the lookup to the gift's own entity makes a cross-entity
+    // allocation read as "there is no fund with the reference 40d228b8…",
+    // because the other entity's fund simply is not in the list. It is
+    // refused either way and nothing is written either way; what changes is
+    // whether the Treasurer is told that the fund they picked belongs to the
+    // other organization, which is the confusion the board review found
+    // running through the whole site.
+    const referenced = [...new Set(intent.allocations.map((a) => a.fundId))];
+    const resolved = (
+      await Promise.all(referenced.map((fundId) => this.getFund(fundId)))
+    ).filter((fund): fund is Fund => fund !== undefined);
+
     const check = validateAllocations({
       entity: intent.entity,
       totalCents: intent.amountCents,
       allocations: intent.allocations,
-      funds: await this.listFunds(intent.entity),
+      funds: resolved,
       allowClosedFunds: true,
     });
     if (!check.ok) {
@@ -752,6 +827,136 @@ export class D1DonationsRepository implements DonationsRepository {
   }
 
   /**
+   * Creates a sponsorship, or edits one.
+   *
+   * `contingent_on_attendance` is bound as the literal 0 rather than from a
+   * value. The column's CHECK permits only 0 and the domain type has only
+   * `false`, so binding anything else would be writing a row the schema has
+   * already said is not a sponsorship.
+   *
+   * `created_by_id` is set on insert and left alone by an edit. It is the
+   * actor the no-self-approval rule reads, so an edit must not quietly
+   * reassign who recorded the payment.
+   */
+  async saveSponsorship(draft: SponsorshipDraft): Promise<Sponsorship> {
+    const existing = draft.id ? await this.getSponsorship(draft.id) : undefined;
+    if (draft.id && !existing) {
+      throw new RepositoryError(`No sponsorship ${draft.id}`, "NOT_FOUND");
+    }
+    const { sponsorName, eventName, tier } = normaliseSponsorshipDraft(draft, existing);
+
+    if (existing) {
+      await this.db
+        .prepare(
+          "UPDATE sponsorship SET sponsor_name = ?, event_name = ?, tier = ?, " +
+            "  payment_cents = ?, exclusivity = ?, received_at = ? WHERE id = ?",
+        )
+        .bind(
+          sponsorName,
+          eventName,
+          tier,
+          draft.paymentCents,
+          draft.exclusivity,
+          draft.receivedAt,
+          existing.id,
+        )
+        .run();
+      const saved = await this.getSponsorship(existing.id);
+      if (!saved) {
+        throw new RepositoryError(`No sponsorship ${existing.id}`, "NOT_FOUND");
+      }
+      return saved;
+    }
+
+    const id = draft.id ?? newId();
+    await this.db
+      .prepare(
+        "INSERT INTO sponsorship (id, entity, sponsor_name, event_name, tier, " +
+          "  payment_cents, currency, contingent_on_attendance, exclusivity, " +
+          "  received_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+      )
+      .bind(
+        id,
+        draft.entity,
+        sponsorName,
+        eventName,
+        tier,
+        draft.paymentCents,
+        CURRENCY,
+        draft.exclusivity,
+        draft.receivedAt,
+        draft.createdById,
+      )
+      .run();
+    const saved = await this.getSponsorship(id);
+    if (!saved) throw new RepositoryError(`No sponsorship ${id}`, "NOT_FOUND");
+    return saved;
+  }
+
+  /**
+   * The release gate's two transitions.
+   *
+   * Both read the placement through the sponsorship, so a placement id
+   * belonging to a different sponsorship is a NOT_FOUND rather than a write
+   * against the wrong row. Neither statement mentions
+   * `approved_acknowledgment`: the wording is what is being approved and is
+   * never rewritten by the act of approving it.
+   */
+  async submitPlacementForRelease(
+    sponsorshipId: string,
+    placementId: string,
+  ): Promise<SponsorPlacement> {
+    const placement = await this.locatePlacement(sponsorshipId, placementId);
+    assertSubmittableForRelease(placement);
+    await this.db
+      .prepare(
+        "UPDATE sponsor_placement SET publication_state = 'AWAITING_RELEASE', " +
+          "  approved_by_id = NULL WHERE id = ?",
+      )
+      .bind(placement.id)
+      .run();
+    return this.requirePlacement(placement.id);
+  }
+
+  async approvePlacement(
+    sponsorshipId: string,
+    placementId: string,
+    approverId: string,
+  ): Promise<SponsorPlacement> {
+    const placement = await this.locatePlacement(sponsorshipId, placementId);
+    assertApprovable(placement, approverId);
+    await this.db
+      .prepare(
+        "UPDATE sponsor_placement SET publication_state = 'APPROVED', " +
+          "  approved_by_id = ? WHERE id = ?",
+      )
+      .bind(approverId, placement.id)
+      .run();
+    return this.requirePlacement(placement.id);
+  }
+
+  private async locatePlacement(
+    sponsorshipId: string,
+    placementId: string,
+  ): Promise<SponsorPlacement> {
+    const sponsorship = await this.getSponsorship(sponsorshipId);
+    if (!sponsorship) {
+      throw new RepositoryError(`No sponsorship ${sponsorshipId}`, "NOT_FOUND");
+    }
+    const placement = sponsorship.placements.find((p) => p.id === placementId);
+    if (!placement) {
+      throw new RepositoryError(`No placement ${placementId}`, "NOT_FOUND");
+    }
+    return placement;
+  }
+
+  private async requirePlacement(placementId: string): Promise<SponsorPlacement> {
+    const saved = await this.readPlacement(placementId);
+    if (!saved) throw new RepositoryError(`No placement ${placementId}`, "NOT_FOUND");
+    return saved;
+  }
+
+  /**
    * Saves a placement's wording and valuation.
    *
    * Changed wording goes back through the release gate and loses its
@@ -780,12 +985,15 @@ export class D1DonationsRepository implements DonationsRepository {
         ? "AWAITING_RELEASE"
         : (draft.publicationState ?? existing.publicationState);
       const approvedById = wordingChanged ? null : existing.approvedById;
+      // Authorship follows the words. Keeping the original author on changed
+      // wording let the editor approve their own text as a second reader.
+      const authoredById = wordingChanged ? draft.authoredById : existing.authoredById;
 
       await this.db
         .prepare(
           "UPDATE sponsor_placement SET kind = ?, approved_acknowledgment = ?, " +
             "  benefit_fmv_cents = ?, publication_state = ?, approved_by_id = ?, " +
-            "  notes = ? WHERE id = ?",
+            "  authored_by_id = ?, notes = ? WHERE id = ?",
         )
         .bind(
           draft.kind,
@@ -793,6 +1001,7 @@ export class D1DonationsRepository implements DonationsRepository {
           draft.benefitFairMarketValueCents,
           publicationState,
           approvedById,
+          authoredById,
           notes,
           existing.id,
         )
@@ -848,8 +1057,15 @@ export class D1DonationsRepository implements DonationsRepository {
   }
 }
 
-/* `toInt` from the shared layer is not used here, and that is deliberate
- * rather than an omission: the only two boolean columns in this schema,
- * `fund.open_to_gifts` and `sponsorship.contingent_on_attendance`, are set by
- * the migration and written by nothing in this interface. Booleans go out
- * through `toBool` and never come back in. */
+/* This schema has two boolean columns and they are written differently on
+ * purpose.
+ *
+ * `fund.open_to_gifts` goes in through `toInt`, because closing a fund to new
+ * gifts is a thing the Fundraising Chair's screen does and `saveFund` writes
+ * it. D1 refuses a boolean bind, so the conversion is explicit.
+ *
+ * `sponsorship.contingent_on_attendance` is never written from a value at
+ * all: `saveSponsorship` binds the literal 0. There is no code path that can
+ * set it, which is the same answer the column's CHECK gives and the same
+ * answer the domain type gives. A fee tied to attendance or impressions is
+ * not a sponsorship payment, so nothing here can file one as one. */

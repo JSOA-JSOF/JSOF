@@ -6,13 +6,56 @@
  * be able to break, plus the wrong-role request that has to fail.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { openTestDatabase, type TestDatabase } from "./support/d1";
+
+/*
+ * A D1 binding, but only where a test asks for one.
+ *
+ * `vi.mock` is hoisted and applies to the whole file, so the mock throws
+ * while `liveDatabase` is null — which is what `database()` sees outside a
+ * request context, and what keeps every test below running against the
+ * in-memory repository at the speed the suite depends on.
+ *
+ * Two kinds of test open a real one. The outbox tests, because `enqueue`
+ * writes a row and returns the message either way, so asserting that the row
+ * actually lands needs a database. And the D1 repository tests, because
+ * nothing in `npm test` covered a line of `repository.d1.ts` before: the
+ * phase-2 ports built harnesses in scratch directories and threw them away.
+ */
+let liveDatabase: TestDatabase | null = null;
+
+vi.mock("@opennextjs/cloudflare", () => ({
+  getCloudflareContext: () => {
+    if (!liveDatabase) throw new Error("no binding in this test");
+    return { env: { DB: liveDatabase.binding } };
+  },
+}));
+
+function openDatabase(): TestDatabase {
+  liveDatabase?.close();
+  liveDatabase = openTestDatabase();
+  return liveDatabase;
+}
+
+function closeDatabase(): void {
+  liveDatabase?.close();
+  liveDatabase = null;
+}
 
 import type { Entity } from "../src/lib/authz/model";
 import { AuthzError, type Subject } from "../src/lib/authz/policy";
 import { validateAllocations } from "../src/lib/donations/allocation";
 import {
+  approvePlacementForPublication,
+  canApproveRelease,
+  canAuthorWording,
+  canDefineFund,
+  canRecordSponsorship,
+  canSendReceipt,
   checkAllocations,
+  closeFundToGifts,
   issueReceipt,
   listPublicFundOptions,
   prepareDonationIntent,
@@ -22,7 +65,11 @@ import {
   readSponsorAcknowledgments,
   readSponsorRegister,
   recordClearedDonation,
+  recordSponsorship,
   saveAcknowledgmentString,
+  saveFund,
+  sendPlacementForRelease,
+  sendReceipt,
 } from "../src/lib/donations/actions";
 import { buildCheckoutHandoff, PCI_NOTE } from "../src/lib/donations/checkout";
 import {
@@ -34,11 +81,16 @@ import {
   donationsRepository,
   InMemoryDonationsRepository,
   RepositoryError,
+  type FundDraft,
+  type SponsorshipDraft,
 } from "../src/lib/donations/repository";
+import { D1DonationsRepository } from "../src/lib/donations/repository.d1";
 import {
   buildReceipt,
   checkDisclosureConspicuous,
   ENTITY_IDENTITY,
+  receiptDraft,
+  RECEIPT_MESSAGE_KIND,
   ReceiptError,
   renderReceiptHtml,
   renderReceiptText,
@@ -1595,5 +1647,1021 @@ describe("workspace: the tab spine", () => {
       ),
     ).toEqual(["JSOF", "JSOA"]);
     expect(entitiesInScope(nobody)).toEqual([]);
+  });
+});
+
+/* ================================================================== *
+ * Reference data: a fund has to be creatable
+ *
+ * docs/PHASE2-FINDINGS.md item 1. There was no `saveFund`, so against a real
+ * database the donate form offered a donor no fund at all and no code path
+ * could change it. It was invisible for as long as the arrays came from
+ * seed.ts. The first test here is that gap, written down.
+ * ================================================================== */
+
+/** The state a fresh database is actually in: no funds, no gifts, no sponsors. */
+function emptyRepo() {
+  return new InMemoryDonationsRepository([], [], []);
+}
+
+const presidentJsof = subject("p-pres-jsof", [{ role: "PRESIDENT", entity: "JSOF" }]);
+const vpOperationsJsof = subject("p-vpops-jsof", [
+  { role: "VP_OPERATIONS", entity: "JSOF" },
+]);
+const webmasterJsof = subject("p-web-jsof", [{ role: "WEBMASTER", entity: "JSOF" }]);
+const financeReviewJsof = subject("p-fro-jsof", [
+  { role: "FINANCE_REVIEW_OFFICER", entity: "JSOF" },
+]);
+/** The person the seed records as having authored every placement. */
+const seedAuthorChair = subject("p-fundraising-chair", [
+  { role: "FUNDRAISING_CHAIR", entity: "JSOF" },
+]);
+
+function fundDraft(overrides: Partial<FundDraft> = {}): FundDraft {
+  return {
+    entity: "JSOF",
+    name: "Hurricane Relief Fund",
+    restriction: "RESTRICTED",
+    purpose: "Emergency assistance after a declared disaster.",
+    openToGifts: true,
+    ...overrides,
+  };
+}
+
+describe("a fund can be created, and until one is there is nothing to give to", () => {
+  it("offers a donor no fund at all on an empty register", async () => {
+    // The gap itself. This is what a deployed donate form showed against a
+    // fresh database, and why the fix is a create path rather than the seed.
+    const store = emptyRepo();
+    expect(await listPublicFundOptions("JSOF", store)).toEqual([]);
+    expect(await listPublicFundOptions("JSOA", store)).toEqual([]);
+  });
+
+  it("puts a fund the Fundraising Chair opens onto the donate form", async () => {
+    const store = emptyRepo();
+    const { fund, offeredPublicly } = await saveFund(
+      fundraisingChairJsof,
+      fundDraft(),
+      store,
+    );
+
+    expect(offeredPublicly).toBe(true);
+    expect(fund.currency).toBe("USD");
+    const offered = await listPublicFundOptions("JSOF", store);
+    expect(offered.map((option) => option.name)).toEqual(["Hurricane Relief Fund"]);
+    // No figure on a public option, ever.
+    expect(Object.keys(offered[0]!)).toEqual([
+      "id",
+      "entity",
+      "name",
+      "restriction",
+      "purpose",
+    ]);
+  });
+
+  it("lets the Treasurer open one too, on the entity they hold", async () => {
+    const store = emptyRepo();
+    await saveFund(treasurerJsof, fundDraft(), store);
+    expect(await listPublicFundOptions("JSOF", store)).toHaveLength(1);
+  });
+
+  it("keeps a fund closed to gifts out of the donate form and in the register", async () => {
+    const store = emptyRepo();
+    const { offeredPublicly } = await saveFund(
+      treasurerJsof,
+      fundDraft({ openToGifts: false }),
+      store,
+    );
+    expect(offeredPublicly).toBe(false);
+    expect(await listPublicFundOptions("JSOF", store)).toEqual([]);
+    // Still in the register: nothing is deleted, only closed.
+    expect(await store.listFunds("JSOF")).toHaveLength(1);
+  });
+
+  it("does not offer one entity's fund to the other", async () => {
+    const store = emptyRepo();
+    await saveFund(treasurerJsoa, fundDraft({ entity: "JSOA" }), store);
+    expect(await listPublicFundOptions("JSOA", store)).toHaveLength(1);
+    expect(await listPublicFundOptions("JSOF", store)).toEqual([]);
+  });
+
+  it("refuses a fund with no stated purpose", async () => {
+    const store = emptyRepo();
+    await expect(
+      saveFund(treasurerJsof, fundDraft({ purpose: "   " }), store),
+    ).rejects.toThrow(RepositoryError);
+    await expect(
+      saveFund(treasurerJsof, fundDraft({ purpose: "" }), store),
+    ).rejects.toThrow(/cannot state is one it cannot honour/);
+    expect(await store.listFunds("JSOF")).toEqual([]);
+  });
+
+  it("refuses a fund with no name", async () => {
+    const store = emptyRepo();
+    await expect(
+      saveFund(treasurerJsof, fundDraft({ name: " " }), store),
+    ).rejects.toThrow(/needs a name/);
+  });
+
+  it("refuses to move an existing fund to the other entity", async () => {
+    // The board review's finding 1 manufactured anew: the memorial fund under
+    // the Association while the Foundation's page promises a deductible gift.
+    const store = emptyRepo();
+    const { fund } = await saveFund(treasurerJsof, fundDraft(), store);
+
+    const bothTreasurers = subject("p-both", [
+      { role: "TREASURER", entity: "JSOF" },
+      { role: "TREASURER", entity: "JSOA" },
+    ]);
+    await expect(
+      saveFund(bothTreasurers, { ...fundDraft({ entity: "JSOA" }), id: fund.id }, store),
+    ).rejects.toThrow(/cannot be moved to JSOA/);
+
+    expect((await store.getFund(fund.id))!.entity).toBe("JSOF");
+  });
+
+  it("closes a fund to new gifts without deleting anything", async () => {
+    const store = emptyRepo();
+    const { fund } = await saveFund(fundraisingChairJsof, fundDraft(), store);
+
+    const closed = await closeFundToGifts(fundraisingChairJsof, "JSOF", fund.id, store);
+    expect(closed.openToGifts).toBe(false);
+    expect(await listPublicFundOptions("JSOF", store)).toEqual([]);
+    const register = await store.listFunds("JSOF");
+    expect(register).toHaveLength(1);
+    expect(register[0]!.purpose).toBe(fund.purpose);
+  });
+});
+
+describe("a wrong-role request to open a fund fails", () => {
+  it("refuses the Webmaster, which can publish and holds no financial scope", async () => {
+    // PUBLIC_CONTENT WRITE and FINANCIAL NONE. Publishing a page is not the
+    // same act as deciding the Foundation now holds money for a new purpose.
+    expect(canDefineFund(webmasterJsof, "JSOF")).toBe(false);
+    await expect(
+      saveFund(webmasterJsof, fundDraft(), emptyRepo()),
+    ).rejects.toThrow(AuthzError);
+  });
+
+  it("refuses the Scholarships Chair and the Secretary", async () => {
+    for (const who of [scholarshipsChairJsof, secretaryJsof]) {
+      expect(canDefineFund(who, "JSOF")).toBe(false);
+      await expect(saveFund(who, fundDraft(), emptyRepo())).rejects.toThrow(AuthzError);
+    }
+  });
+
+  it("refuses a role held on the other entity", async () => {
+    expect(canDefineFund(treasurerJsoa, "JSOF")).toBe(false);
+    await expect(
+      saveFund(treasurerJsoa, fundDraft({ entity: "JSOF" }), emptyRepo()),
+    ).rejects.toThrow(AuthzError);
+  });
+
+  it("refuses an unauthenticated visitor", async () => {
+    expect(canDefineFund(nobody, "JSOF")).toBe(false);
+    await expect(saveFund(nobody, fundDraft(), emptyRepo())).rejects.toThrow(AuthzError);
+  });
+});
+
+/* ================================================================== *
+ * Reference data: sponsorships
+ * ================================================================== */
+
+function sponsorshipDraft(
+  overrides: Partial<Omit<SponsorshipDraft, "createdById">> = {},
+): Omit<SponsorshipDraft, "createdById"> {
+  return {
+    entity: "JSOF",
+    sponsorName: "Ridgeline Contracting",
+    eventName: "Golf Tournament 2027",
+    tier: "Hole sponsor",
+    paymentCents: 250_000,
+    exclusivity: "NONE",
+    receivedAt: "2027-02-01T12:00:00Z",
+    contingentOnAttendanceOrImpressions: false,
+    ...overrides,
+  };
+}
+
+describe("a sponsorship can be recorded, and only by the office that holds the money", () => {
+  it("starts from an empty register", async () => {
+    expect(await readSponsorRegister(treasurerJsof, "JSOF", emptyRepo())).toEqual([]);
+  });
+
+  it("records one for the Treasurer, in integer cents, never contingent", async () => {
+    const store = emptyRepo();
+    const sponsorship = await recordSponsorship(treasurerJsof, sponsorshipDraft(), store);
+
+    expect(sponsorship.paymentCents).toBe(250_000);
+    expect(Number.isInteger(sponsorship.paymentCents)).toBe(true);
+    expect(sponsorship.currency).toBe("USD");
+    expect(sponsorship.contingentOnAttendanceOrImpressions).toBe(false);
+    expect(sponsorship.createdById).toBe(treasurerJsof.personId);
+    expect(sponsorship.placements).toEqual([]);
+
+    const register = await readSponsorRegister(treasurerJsof, "JSOF", store);
+    expect(register).toHaveLength(1);
+    // No placements, so no benefit value, so the whole payment qualifies.
+    expect(register[0]!.assessment.withinSafeHarbour).toBe(true);
+    expect(register[0]!.assessment.qualifiedSponsorshipPortionCents).toBe(250_000);
+  });
+
+  it("refuses the Fundraising Chair, who holds the money at aggregate only", async () => {
+    // Not a gap. The office that negotiates the sponsorship is deliberately
+    // not the office that records the cash, and letting the Chair write
+    // paymentCents would hand them the ledger through the content door.
+    expect(canRecordSponsorship(fundraisingChairJsof, "JSOF")).toBe(false);
+    await expect(
+      recordSponsorship(fundraisingChairJsof, sponsorshipDraft(), emptyRepo()),
+    ).rejects.toThrow(AuthzError);
+  });
+
+  it("refuses the read-only Finance Review Officer", async () => {
+    await expect(
+      recordSponsorship(financeReviewJsof, sponsorshipDraft(), emptyRepo()),
+    ).rejects.toThrow(AuthzError);
+  });
+
+  it("refuses a payment that is not a whole number of cents, and a zero one", async () => {
+    for (const paymentCents of [250_000.5, 0, -100]) {
+      await expect(
+        recordSponsorship(treasurerJsof, sponsorshipDraft({ paymentCents }), emptyRepo()),
+      ).rejects.toThrow(/whole number of cents/);
+    }
+  });
+
+  it("refuses a fee contingent on attendance or impressions", async () => {
+    // The type says `false`, so this can only arrive through a cast — off a
+    // form, or out of a row written by something else. It is refused rather
+    // than coerced, because coercing would file advertising income as a
+    // qualified sponsorship payment.
+    const contingent = {
+      ...sponsorshipDraft(),
+      contingentOnAttendanceOrImpressions: true,
+    } as unknown as Omit<SponsorshipDraft, "createdById">;
+    await expect(
+      recordSponsorship(treasurerJsof, contingent, emptyRepo()),
+    ).rejects.toThrow(/not a qualified sponsorship payment at all/);
+  });
+
+  it("refuses a row that does not say who or what it is for", async () => {
+    for (const overrides of [
+      { sponsorName: " " },
+      { eventName: "" },
+      { tier: "  " },
+    ]) {
+      await expect(
+        recordSponsorship(treasurerJsof, sponsorshipDraft(overrides), emptyRepo()),
+      ).rejects.toThrow(RepositoryError);
+    }
+  });
+
+  it("has no shape for exclusive provider", async () => {
+    const bad = {
+      ...sponsorshipDraft(),
+      exclusivity: "EXCLUSIVE_PROVIDER",
+    } as unknown as Omit<SponsorshipDraft, "createdById">;
+    await expect(recordSponsorship(treasurerJsof, bad, emptyRepo())).rejects.toThrow(
+      /exclusive provider is advertising/i,
+    );
+  });
+});
+
+/* ================================================================== *
+ * The receipt is handed to somebody
+ *
+ * `receipts.ts` rendered a statutory acknowledgment and gave it to nobody.
+ * What matters about wiring it to the outbox is the envelope: the entity
+ * decides the sending identity, and a 501(c)(19) receipt arriving as the
+ * Foundation is the board review's heaviest finding repeated in the one
+ * artifact a donor keeps and files.
+ * ================================================================== */
+
+describe("a receipt goes out in its own entity's envelope", () => {
+  it("queues a Foundation receipt as the Foundation, on the transactional stream", async () => {
+    const store = repo();
+    const { receipt, message } = await sendReceipt(
+      treasurerJsof,
+      "JSOF",
+      "d-jsof-001",
+      store,
+    );
+
+    expect(message.entity).toBe("JSOF");
+    expect(message.stream).toBe("TRANSACTIONAL");
+    expect(message.kind).toBe(RECEIPT_MESSAGE_KIND);
+    expect(message.state).toBe("QUEUED");
+    expect(message.subject).toContain("Joint Special Operations Foundation");
+    expect(message.subject).toContain(receipt.receiptNumber);
+    expect(receipt.templateId).toBe("JSOF_CONTRIBUTION_V1");
+  });
+
+  it("will not re-badge an Association receipt as the Foundation to get it out", async () => {
+    // thejsoa.org cannot send yet. The message queues and waits, carrying the
+    // reason, rather than borrowing the one verified domain. The tempting fix
+    // is the exact error the entity separation exists to prevent.
+    const store = repo();
+    const { receipt, message } = await sendReceipt(
+      treasurerJsoa,
+      "JSOA",
+      "d-jsoa-001",
+      store,
+    );
+
+    expect(message.entity).toBe("JSOA");
+    expect(message.state).toBe("QUEUED");
+    expect(message.stateReason).toMatch(/sending domain/);
+    expect(message.subject).toContain("Joint Special Operations Association");
+    expect(message.subject).not.toContain("Foundation");
+    expect(receipt.templateId).toBe("JSOA_PAYMENT_V1");
+    expect(message.bodyText).toContain("501(c)(19)");
+    expect(message.bodyText).not.toContain("501(c)(3)");
+  });
+
+  it("carries the Chapter 131F statement verbatim in the body that is sent", async () => {
+    const { message } = await sendReceipt(treasurerJsof, "JSOF", "d-jsof-001", repo());
+    expect(message.bodyText).toContain(NC_131F_DISCLOSURE);
+    expect(message.bodyText).toContain("license");
+    expect(message.bodyText).not.toContain("licence");
+  });
+
+  it("refuses to send a receipt for a gift whose benefits carry no value", async () => {
+    // And allocates no receipt number doing it. A number burned on a refusal
+    // is a gap in the numbering whose only explanation is "the send failed",
+    // which nobody can verify afterwards.
+    const store = repo();
+    let allocations = 0;
+    const next = store.nextReceiptSequence.bind(store);
+    store.nextReceiptSequence = async (entity) => {
+      allocations += 1;
+      return next(entity);
+    };
+
+    await expect(
+      sendReceipt(treasurerJsof, "JSOF", "d-jsof-004", store),
+    ).rejects.toThrow(ReceiptError);
+    expect(allocations).toBe(0);
+  });
+
+  it("refuses a gift that belongs to the other entity", async () => {
+    await expect(
+      sendReceipt(
+        subject("p-both-treas", [
+          { role: "TREASURER", entity: "JSOF" },
+          { role: "TREASURER", entity: "JSOA" },
+        ]),
+        "JSOF",
+        "d-jsoa-001",
+        repo(),
+      ),
+    ).rejects.toThrow(/belongs to JSOA, not JSOF/);
+  });
+
+  it("numbers two receipts differently, within one entity's own run", async () => {
+    const store = repo();
+    const first = await sendReceipt(treasurerJsof, "JSOF", "d-jsof-001", store);
+    const second = await sendReceipt(treasurerJsof, "JSOF", "d-jsof-002", store);
+    expect(first.receipt.receiptNumber).not.toBe(second.receipt.receiptNumber);
+    expect(first.receipt.receiptNumber).toMatch(/^JSOF-R-\d{5}$/);
+  });
+
+  it("passes a missing address through as null rather than throwing", async () => {
+    const store = repo();
+    const gift = (await store.getDonation("d-jsof-001"))!;
+    const draft = receiptDraft(
+      buildReceipt({
+        donation: gift,
+        funds: await store.listFunds("JSOF"),
+        sequence: 1,
+      }),
+      "   ",
+    );
+    expect(draft.toAddress).toBeNull();
+    expect(draft.entity).toBe("JSOF");
+  });
+});
+
+describe("a wrong-role request to send a receipt fails", () => {
+  it("refuses the Finance Review Officer, which can read every one of them", async () => {
+    // Independence is mechanical: the role holds FINANCIAL READ and the
+    // platform refuses it write scope anywhere. It can see each receipt on
+    // the register screen and issue none.
+    expect(canSendReceipt(financeReviewJsof, "JSOF")).toBe(false);
+    await expect(
+      issueReceipt(financeReviewJsof, "JSOF", "d-jsof-001", repo()),
+    ).resolves.toBeDefined();
+    await expect(
+      sendReceipt(financeReviewJsof, "JSOF", "d-jsof-001", repo()),
+    ).rejects.toThrow(AuthzError);
+  });
+
+  it("refuses the Fundraising Chair and the Secretary", async () => {
+    for (const who of [fundraisingChairJsof, secretaryJsof, nobody]) {
+      await expect(
+        sendReceipt(who, "JSOF", "d-jsof-001", repo()),
+      ).rejects.toThrow(AuthzError);
+    }
+  });
+});
+
+describe("the receipt actually lands in the outbox", () => {
+  beforeEach(() => {
+    openDatabase();
+  });
+
+  // Closed again afterwards, so no later test accidentally runs against a
+  // binding: `donationsRepository()` would then hand back the D1 repository
+  // pointed at an empty fixture rather than the seeded in-memory one.
+  afterEach(() => {
+    closeDatabase();
+  });
+
+  it("writes one outbound_message row, with the gift's entity on it", async () => {
+    const database = liveDatabase!;
+    // The repository is the in-memory one, passed explicitly: what is being
+    // tested here is the queue write, not the gift read.
+    const { receipt } = await sendReceipt(treasurerJsof, "JSOF", "d-jsof-001", repo());
+
+    const rows = database.raw
+      .prepare(
+        "SELECT entity, stream, kind, state, to_address, subject, body_text " +
+          "FROM outbound_message",
+      )
+      .all() as {
+      entity: string;
+      stream: string;
+      kind: string;
+      state: string;
+      to_address: string;
+      subject: string;
+      body_text: string;
+    }[];
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.entity).toBe("JSOF");
+    expect(rows[0]!.stream).toBe("TRANSACTIONAL");
+    expect(rows[0]!.kind).toBe(RECEIPT_MESSAGE_KIND);
+    expect(rows[0]!.state).toBe("QUEUED");
+    expect(rows[0]!.subject).toContain(receipt.receiptNumber);
+    expect(rows[0]!.body_text).toContain(NC_131F_DISCLOSURE);
+
+    // One delivery event, and it is append-only at the database.
+    expect(() =>
+      database.raw.exec("DELETE FROM delivery_event"),
+    ).toThrow(/append-only/);
+  });
+
+  it("still sends a receipt to somebody who unsubscribed from the newsletter", async () => {
+    const database = liveDatabase!;
+    const gift = (await repo().getDonation("d-jsof-001"))!;
+    database.raw
+      .prepare(
+        "INSERT INTO suppression (address, stream, reason, created_at) " +
+          "VALUES (?, 'BULK', 'UNSUBSCRIBED', '2027-01-01T00:00:00Z')",
+      )
+      .run(gift.donorEmail.toLowerCase());
+
+    const { message } = await sendReceipt(treasurerJsof, "JSOF", "d-jsof-001", repo());
+    expect(message.state).toBe("QUEUED");
+  });
+
+  it("does not send to an address suppressed on the transactional stream", async () => {
+    const database = liveDatabase!;
+    const gift = (await repo().getDonation("d-jsof-001"))!;
+    database.raw
+      .prepare(
+        "INSERT INTO suppression (address, stream, reason, created_at) " +
+          "VALUES (?, 'TRANSACTIONAL', 'HARD_BOUNCE', '2027-01-01T00:00:00Z')",
+      )
+      .run(gift.donorEmail.toLowerCase());
+
+    const { message } = await sendReceipt(treasurerJsof, "JSOF", "d-jsof-001", repo());
+    expect(message.state).toBe("SUPPRESSED");
+    // The receipt was still issued and numbered. A bounced address is not a
+    // reason to have no record of the acknowledgment.
+    expect(
+      database.raw
+        .prepare("SELECT COUNT(*) AS n FROM outbound_message")
+        .get() as { n: number },
+    ).toEqual({ n: 1 });
+  });
+});
+
+/* ================================================================== *
+ * The release gate around a placement
+ *
+ * `savePlacement` existed; the approve-and-publish path around it did not.
+ * Author and approver must be different people, and the approved wording is
+ * a stored string the board approved — never generated, because one
+ * adjective turns an acknowledgment into advertising and converts the whole
+ * payment.
+ * ================================================================== */
+
+async function draftPlacement(store: InMemoryDonationsRepository, author = seedAuthorChair) {
+  const sponsorship = await recordSponsorship(treasurerJsof, sponsorshipDraft(), store);
+  const { placement } = await saveAcknowledgmentString(
+    author,
+    "JSOF",
+    sponsorship.id,
+    {
+      kind: "SIGNAGE",
+      approvedAcknowledgmentString: "Ridgeline Contracting, Fayetteville, NC.",
+      benefitFairMarketValueCents: 2_500,
+    },
+    store,
+  );
+  return { sponsorshipId: sponsorship.id, placement };
+}
+
+describe("sponsor copy publishes on a second person's approval, or not at all", () => {
+  it("goes draft, then awaiting release, then approved by somebody else", async () => {
+    const store = emptyRepo();
+    const { sponsorshipId, placement } = await draftPlacement(store);
+    expect(placement.publicationState).toBe("DRAFT");
+    expect(placement.approvedById).toBeNull();
+    expect(placement.authoredById).toBe(seedAuthorChair.personId);
+
+    const sent = await sendPlacementForRelease(
+      seedAuthorChair,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+    expect(sent.placement.publicationState).toBe("AWAITING_RELEASE");
+
+    const approved = await approvePlacementForPublication(
+      vpOperationsJsof,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+    expect(approved.placement.publicationState).toBe("APPROVED");
+    expect(approved.placement.approvedById).toBe(vpOperationsJsof.personId);
+    expect(approved.placement.authoredById).toBe(seedAuthorChair.personId);
+  });
+
+  it("does not touch the wording when it approves it", async () => {
+    // The whole compliance surface is this string. Approval is a signature on
+    // words that already exist; nothing generates, rewrites or normalises it.
+    const store = emptyRepo();
+    const { sponsorshipId, placement } = await draftPlacement(store);
+    await sendPlacementForRelease(
+      seedAuthorChair,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+    const approved = await approvePlacementForPublication(
+      presidentJsof,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+    expect(approved.placement.approvedAcknowledgmentString).toBe(
+      placement.approvedAcknowledgmentString,
+    );
+  });
+
+  it("refuses the author's own approval", async () => {
+    const store = emptyRepo();
+    // An author who also holds release approval: the Memorial Chair writes
+    // and approves, which is the pair that makes this reachable at all.
+    const memorialChair = subject("p-memorial", [
+      { role: "MEMORIAL_CHAIR", entity: "JSOF" },
+    ]);
+    const { sponsorshipId, placement } = await draftPlacement(store, memorialChair);
+    await sendPlacementForRelease(
+      memorialChair,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+
+    expect(canApproveRelease(memorialChair, "JSOF")).toBe(true);
+    await expect(
+      approvePlacementForPublication(
+        memorialChair,
+        "JSOF",
+        sponsorshipId,
+        placement.id,
+        store,
+      ),
+    ).rejects.toThrow(AuthzError);
+
+    const after = (await store.getSponsorship(sponsorshipId))!.placements[0]!;
+    expect(after.publicationState).toBe("AWAITING_RELEASE");
+    expect(after.approvedById).toBeNull();
+  });
+
+  it("refuses an approver who does not hold release approval", async () => {
+    const store = emptyRepo();
+    const { sponsorshipId, placement } = await draftPlacement(store);
+    await sendPlacementForRelease(
+      seedAuthorChair,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+
+    // The Fundraising Chair can write the wording and cannot clear it to
+    // publish; the Webmaster can publish and cannot approve its own content.
+    for (const who of [fundraisingChairJsof, webmasterJsof]) {
+      expect(canAuthorWording(who, "JSOF")).toBe(true);
+      expect(canApproveRelease(who, "JSOF")).toBe(false);
+      await expect(
+        approvePlacementForPublication(who, "JSOF", sponsorshipId, placement.id, store),
+      ).rejects.toThrow(AuthzError);
+    }
+  });
+
+  it("will not approve something straight out of draft", async () => {
+    const store = emptyRepo();
+    const { sponsorshipId, placement } = await draftPlacement(store);
+    await expect(
+      approvePlacementForPublication(
+        vpOperationsJsof,
+        "JSOF",
+        sponsorshipId,
+        placement.id,
+        store,
+      ),
+    ).rejects.toThrow(/cannot be approved from there/);
+  });
+
+  it("will not send empty wording for release", async () => {
+    const store = emptyRepo();
+    const sponsorship = await recordSponsorship(treasurerJsof, sponsorshipDraft(), store);
+    const { placement } = await saveAcknowledgmentString(
+      seedAuthorChair,
+      "JSOF",
+      sponsorship.id,
+      {
+        kind: "SIGNAGE",
+        approvedAcknowledgmentString: "   ",
+        benefitFairMarketValueCents: 0,
+      },
+      store,
+    );
+    await expect(
+      sendPlacementForRelease(
+        seedAuthorChair,
+        "JSOF",
+        sponsorship.id,
+        placement.id,
+        store,
+      ),
+    ).rejects.toThrow(/nothing to approve/);
+  });
+
+  it("refuses an approver authorized on the other entity", async () => {
+    const store = emptyRepo();
+    const { sponsorshipId, placement } = await draftPlacement(store);
+    await sendPlacementForRelease(
+      seedAuthorChair,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+    const presidentBoth = subject("p-pres-both", [
+      { role: "PRESIDENT", entity: "JSOF" },
+      { role: "PRESIDENT", entity: "JSOA" },
+    ]);
+    await expect(
+      approvePlacementForPublication(
+        presidentBoth,
+        "JSOA",
+        sponsorshipId,
+        placement.id,
+        store,
+      ),
+    ).rejects.toThrow(/belongs to JSOF, not JSOA/);
+  });
+
+  it("sends changed wording back through the gate and moves authorship with it", async () => {
+    // The hole this closes: keeping the original author on an edit let the
+    // editor approve their own text as a "second" reader. Authorship follows
+    // the words.
+    const store = emptyRepo();
+    const { sponsorshipId, placement } = await draftPlacement(store);
+    // The Memorial Chair is the one role that both writes published content
+    // and holds release approval, which is what makes this reachable.
+    const memorialChair = subject("p-memorial", [
+      { role: "MEMORIAL_CHAIR", entity: "JSOF" },
+    ]);
+
+    await sendPlacementForRelease(
+      seedAuthorChair,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+    await approvePlacementForPublication(
+      memorialChair,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+
+    // The approver now rewrites the words. They are the author of the new
+    // ones, so they cannot be the second reader of them.
+    const { placement: edited } = await saveAcknowledgmentString(
+      memorialChair,
+      "JSOF",
+      sponsorshipId,
+      {
+        id: placement.id,
+        kind: placement.kind,
+        approvedAcknowledgmentString:
+          "Ridgeline Contracting, the region's finest roofer.",
+        benefitFairMarketValueCents: placement.benefitFairMarketValueCents,
+      },
+      store,
+    );
+
+    expect(edited.publicationState).toBe("AWAITING_RELEASE");
+    expect(edited.approvedById).toBeNull();
+    expect(edited.authoredById).toBe(memorialChair.personId);
+
+    await expect(
+      approvePlacementForPublication(
+        memorialChair,
+        "JSOF",
+        sponsorshipId,
+        placement.id,
+        store,
+      ),
+    ).rejects.toThrow(AuthzError);
+
+    // Somebody else can, and the validator's warning travels with it.
+    const approved = await approvePlacementForPublication(
+      presidentJsof,
+      "JSOF",
+      sponsorshipId,
+      placement.id,
+      store,
+    );
+    expect(approved.placement.publicationState).toBe("APPROVED");
+    expect(approved.review.clean).toBe(false);
+    expect(approved.review.findings.map((f) => f.match)).toContain("finest");
+  });
+});
+
+/* ================================================================== *
+ * The D1 implementation of all of the above
+ *
+ * docs/PHASE2-FINDINGS.md item 7: not one line of any D1 repository had run,
+ * and nothing in `npm test` would catch a broken `repository.d1.ts`. These
+ * run the new methods against the real migrations, applied from disk.
+ *
+ * It is SQLite and not D1, so what it proves is the SQL, the constraints and
+ * the row-to-domain mapping — not the Cloudflare driver, not `batch` under
+ * concurrency, and not the error shape D1 raises on a trigger abort.
+ * ================================================================== */
+
+describe("the D1 repository, against the real schema", () => {
+  let store: D1DonationsRepository;
+
+  beforeEach(() => {
+    store = new D1DonationsRepository(openDatabase().binding);
+  });
+
+  afterEach(() => {
+    closeDatabase();
+  });
+
+  it("creates a fund that reads back as a fund", async () => {
+    const fund = await store.saveFund(fundDraft());
+    expect(fund.entity).toBe("JSOF");
+    expect(fund.restriction).toBe("RESTRICTED");
+    expect(fund.openToGifts).toBe(true);
+    expect(fund.currency).toBe("USD");
+    expect(await store.listFunds("JSOF")).toHaveLength(1);
+    expect(await store.listFunds("JSOA")).toEqual([]);
+  });
+
+  it("closes a fund by writing the boolean as an integer", async () => {
+    // D1 refuses a boolean bind and so does the fixture, on purpose.
+    const fund = await store.saveFund(fundDraft());
+    const closed = await store.saveFund({
+      ...fundDraft(),
+      id: fund.id,
+      openToGifts: false,
+    });
+    expect(closed.openToGifts).toBe(false);
+    expect(
+      liveDatabase!.raw
+        .prepare("SELECT open_to_gifts AS v FROM fund WHERE id = ?")
+        .get(fund.id),
+    ).toEqual({ v: 0 });
+  });
+
+  it("records a sponsorship with contingent_on_attendance at zero", async () => {
+    const sponsorship = await store.saveSponsorship({
+      ...sponsorshipDraft(),
+      createdById: "p-treas-jsof",
+    });
+    expect(sponsorship.contingentOnAttendanceOrImpressions).toBe(false);
+    expect(
+      liveDatabase!.raw
+        .prepare("SELECT contingent_on_attendance AS v FROM sponsorship WHERE id = ?")
+        .get(sponsorship.id),
+    ).toEqual({ v: 0 });
+  });
+
+  it("has a CHECK that refuses a contingent payment even in raw SQL", async () => {
+    expect(() =>
+      liveDatabase!.raw.exec(
+        "INSERT INTO sponsorship (id, entity, sponsor_name, event_name, tier, " +
+          "payment_cents, currency, contingent_on_attendance, exclusivity, " +
+          "received_at, created_by_id) VALUES ('s-bad', 'JSOF', 'X', 'Y', 'Z', " +
+          "100, 'USD', 1, 'NONE', '2027-01-01T00:00:00Z', 'p')",
+      ),
+    ).toThrow();
+  });
+
+  it("runs the whole release gate through the database", async () => {
+    const sponsorship = await store.saveSponsorship({
+      ...sponsorshipDraft(),
+      createdById: "p-treas-jsof",
+    });
+    const placement = await store.savePlacement(sponsorship.id, {
+      kind: "EVENT_TSHIRT",
+      approvedAcknowledgmentString: "Ridgeline Contracting, Fayetteville, NC.",
+      benefitFairMarketValueCents: 1_200,
+      authoredById: "p-fundraising-chair",
+    });
+    expect(placement.publicationState).toBe("DRAFT");
+    expect(placement.entity).toBe("JSOF");
+
+    await store.submitPlacementForRelease(sponsorship.id, placement.id);
+    await expect(
+      store.approvePlacement(sponsorship.id, placement.id, "p-fundraising-chair"),
+    ).rejects.toThrow(/cannot also approve it/);
+
+    const approved = await store.approvePlacement(
+      sponsorship.id,
+      placement.id,
+      "p-vpops",
+    );
+    expect(approved.publicationState).toBe("APPROVED");
+    expect(approved.approvedById).toBe("p-vpops");
+    expect(approved.approvedAcknowledgmentString).toBe(
+      placement.approvedAcknowledgmentString,
+    );
+
+    // Changed wording loses the approval and the authorship.
+    const edited = await store.savePlacement(sponsorship.id, {
+      id: placement.id,
+      kind: placement.kind,
+      approvedAcknowledgmentString: "Ridgeline Contracting, the region's best roofer.",
+      benefitFairMarketValueCents: placement.benefitFairMarketValueCents,
+      authoredById: "p-vpops",
+    });
+    expect(edited.publicationState).toBe("AWAITING_RELEASE");
+    expect(edited.approvedById).toBeNull();
+    expect(edited.authoredById).toBe("p-vpops");
+  });
+
+  it("numbers receipts per entity through the counter, never by reading the highest", async () => {
+    const jsof = [
+      await store.nextReceiptSequence("JSOF"),
+      await store.nextReceiptSequence("JSOF"),
+      await store.nextReceiptSequence("JSOF"),
+    ];
+    const jsoa = await store.nextReceiptSequence("JSOA");
+
+    expect(jsof).toEqual([1, 2, 3]);
+    // Separate runs. The two entities never share a numbering sequence.
+    expect(jsoa).toBe(1);
+    expect(
+      liveDatabase!.raw
+        .prepare("SELECT name, value FROM counter ORDER BY name")
+        .all(),
+    ).toEqual([
+      { name: "donation-receipt-JSOA", value: 1 },
+      { name: "donation-receipt-JSOF", value: 3 },
+    ]);
+  });
+
+  it("records a gift, its allocations and its benefits in one transaction", async () => {
+    const fund = await store.saveFund(fundDraft({ restriction: "UNRESTRICTED" }));
+    const donation = await store.recordClearedDonation(
+      {
+        entity: "JSOF",
+        donorDisplayName: "A Donor",
+        donorEmail: "donor@example.org",
+        amountCents: 100_000,
+        currency: "USD",
+        allocations: [{ fundId: fund.id, amountCents: 100_000 }],
+        benefits: [
+          {
+            kind: "BANQUET_SEAT",
+            description: "Dinner seat",
+            quantity: 2,
+            unitFairMarketValueCents: 4_000,
+          },
+        ],
+        benefitFairMarketValueCents: 8_000,
+        sponsorshipId: null,
+      },
+      {
+        createdById: "p-treas-jsof",
+        checkoutSessionRef: "co_test",
+        receivedAt: "2027-03-01T12:00:00Z",
+      },
+    );
+
+    expect(donation.status).toBe("PAID");
+    expect(donation.allocations).toHaveLength(1);
+    expect(donation.benefits).toHaveLength(1);
+    expect(donation.benefitFairMarketValueCents).toBe(8_000);
+
+    const balances = await store.fundBalances("JSOF");
+    expect(balances[0]!.balanceCents).toBe(100_000);
+    expect(balances[0]!.giftCount).toBe(1);
+  });
+
+  it("refuses a gift allocated to the other entity's fund, before the trigger has to", async () => {
+    // The trigger `allocation_entity_must_match` is the backstop and a
+    // backstop that is never reached is the point of it: the arithmetic check
+    // refuses first, with a sentence naming both organizations. Either way
+    // nothing lands — there is no catch and no "put it in the general fund".
+    const associationFund = await store.saveFund(
+      fundDraft({ entity: "JSOA", restriction: "UNRESTRICTED" }),
+    );
+    await expect(
+      store.recordClearedDonation(
+        {
+          entity: "JSOF",
+          donorDisplayName: "A Donor",
+          donorEmail: "donor@example.org",
+          amountCents: 5_000,
+          currency: "USD",
+          allocations: [{ fundId: associationFund.id, amountCents: 5_000 }],
+          benefits: [],
+          benefitFairMarketValueCents: null,
+          sponsorshipId: null,
+        },
+        {
+          createdById: "p-treas-jsof",
+          checkoutSessionRef: "co_test",
+          receivedAt: "2027-03-01T12:00:00Z",
+        },
+      ),
+    ).rejects.toThrow(/never share a fund/);
+
+    expect(
+      liveDatabase!.raw.prepare("SELECT COUNT(*) AS n FROM donation").get(),
+    ).toEqual({ n: 0 });
+    expect(
+      liveDatabase!.raw.prepare("SELECT COUNT(*) AS n FROM donation_allocation").get(),
+    ).toEqual({ n: 0 });
+  });
+
+  it("refuses a gift with benefits and no fair market value, with the same words", async () => {
+    const fund = await store.saveFund(fundDraft({ restriction: "UNRESTRICTED" }));
+    await expect(
+      store.recordClearedDonation(
+        {
+          entity: "JSOF",
+          donorDisplayName: "A Donor",
+          donorEmail: "donor@example.org",
+          amountCents: 20_000,
+          currency: "USD",
+          allocations: [{ fundId: fund.id, amountCents: 20_000 }],
+          benefits: [
+            {
+              kind: "EVENT_TICKET",
+              description: "Ball ticket",
+              quantity: 1,
+              unitFairMarketValueCents: 9_000,
+            },
+          ],
+          benefitFairMarketValueCents: null,
+          sponsorshipId: null,
+        },
+        {
+          createdById: "p-treas-jsof",
+          checkoutSessionRef: "co_test",
+          receivedAt: "2027-03-01T12:00:00Z",
+        },
+      ),
+    ).rejects.toThrow(/cannot be issued without one/);
+  });
+
+  it("refuses to move a fund between entities at the repository, whatever the SQL allows", async () => {
+    const fund = await store.saveFund(fundDraft());
+    await expect(
+      store.saveFund({ ...fundDraft({ entity: "JSOA" }), id: fund.id }),
+    ).rejects.toThrow(/cannot be moved to JSOA/);
   });
 });

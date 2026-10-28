@@ -25,6 +25,7 @@
  */
 
 import type { Entity } from "../authz/model";
+import type { Draft } from "../comms/types";
 import { formatCents, sumCents } from "./money";
 import { validateAllocations } from "./allocation";
 import {
@@ -491,6 +492,77 @@ export function assertDisclosureConspicuous(html: string): void {
       "DISCLOSURE_NOT_CONSPICUOUS",
     );
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Handing the receipt to somebody
+ *
+ * This file used to render a statutory acknowledgment and hand it to nobody.
+ * The draft below is what goes to the outbox. It is a pure function so that
+ * it can be tested without a database and without a mail provider, and so
+ * that the one decision that matters here is visible in four lines.
+ * ------------------------------------------------------------------ */
+
+/** The outbox's `kind` for a donation receipt. The module's own name for it. */
+export const RECEIPT_MESSAGE_KIND = "DONATION_RECEIPT";
+
+/**
+ * The message a receipt becomes.
+ *
+ * Two things are load-bearing and neither is negotiable.
+ *
+ * **`entity` comes off the receipt, which came off the gift.** It is never a
+ * screen's current entity and never an argument a caller chooses. `enqueue`
+ * resolves the sending identity from it, so this single field decides whose
+ * envelope a donor finds in their inbox. A 501(c)(19) receipt arriving from
+ * the Foundation is the board review's heaviest finding — the two entities
+ * blurred — repeated in the one artifact a donor keeps and files. The
+ * Association's domain cannot send yet, so an Association receipt queues and
+ * waits; borrowing the Foundation's verified domain because that one works is
+ * exactly the shortcut being refused.
+ *
+ * **`stream` is TRANSACTIONAL.** A receipt is a consequence of something the
+ * donor did. A donor who unsubscribed from the newsletter still gets it.
+ *
+ * A null address is passed through rather than guarded: the queue writes an
+ * UNDELIVERABLE row for it, which is a recorded outcome and not an error.
+ *
+ * **What this cannot do, stated rather than hidden.** `outbound_message`
+ * carries `body_text` and no HTML column, so what leaves the queue is the
+ * plain-text rendering. The statute asks for nine-point type made conspicuous
+ * by underlining, a border or bold, and a plain-text body has none of the
+ * three: `renderReceiptText` sets the statement between two rules, which is
+ * as close as text gets. `renderReceiptHtml` produces the artifact that
+ * actually meets the formatting requirement and there is nowhere in the
+ * outbox to put it. That is a column this module needs and does not own —
+ * reported, not worked around.
+ */
+export function receiptDraft(receipt: Receipt, donorEmail: string | null): Draft {
+  const bodyText = renderReceiptText(receipt);
+
+  // The statutory sentence has to be in the thing that is actually sent, not
+  // only in the thing that was rendered for the screen. Checked here because
+  // this is the last point before the message is somebody else's problem.
+  if (!bodyText.includes(NC_131F_DISCLOSURE)) {
+    throw new ReceiptError(
+      "The receipt body does not carry the Chapter 131F disclosure verbatim, so " +
+        "it cannot be sent. The statement is required on every written " +
+        "confirmation or receipt of a contribution.",
+      "DISCLOSURE_NOT_CONSPICUOUS",
+    );
+  }
+
+  const address = donorEmail?.trim() ?? "";
+
+  return {
+    stream: "TRANSACTIONAL",
+    entity: receipt.entity,
+    kind: RECEIPT_MESSAGE_KIND,
+    toAddress: address.length > 0 ? address : null,
+    toName: receipt.donorDisplayName,
+    subject: `${receipt.identity.legalName} · receipt ${receipt.receiptNumber}`,
+    bodyText,
+  };
 }
 
 /** Phrases that must never appear on the other entity's receipt. */
